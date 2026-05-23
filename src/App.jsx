@@ -241,6 +241,7 @@ const AppContent = () => {
         }}
         label="Scroll to top"
       />
+      <MusicDockGate />
     </>
   );
 };
@@ -266,7 +267,6 @@ function App() {
                 />
                 <Route path="*" element={<NotFound />} />
               </Routes>
-              <MusicDockGate />
             </AuthProvider>
           </BurnerProvider>
         </ToastProvider>
