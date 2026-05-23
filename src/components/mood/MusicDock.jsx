@@ -4,7 +4,7 @@ import { useTheme } from '../../contexts/ThemeContext'; // Consuming your app's 
 
 const MusicDock = () => {
   // Theme state integration
-  const { theme, toggleTheme } = useTheme() || { theme: 'dark', toggleTheme: null }; 
+  const { theme = 'dark', cycle: toggleTheme = null } = useTheme() || {};
   const isDarkMode = theme === 'dark';
 
   const [track, setTrack] = useState(null);
