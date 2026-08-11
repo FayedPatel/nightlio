@@ -1,26 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import MoodPicker from '../components/mood/MoodPicker';
-import HistoryList from '../components/history/HistoryList';
+import TodayEntryCard from '../components/history/TodayEntryCard';
+import RecentEntries from '../components/history/RecentEntries';
+import GoalsSection from '../components/goals/GoalsSection';
 
-const HistoryView = ({ pastEntries, loading, error, onMoodSelect, onDelete, onEdit, renderOnlyHeader = false }) => {
-  const [filteredEntries, setFilteredEntries] = useState(pastEntries);
-  
-  // Update filtered entries when pastEntries changes (e.g. from global search)
-  useEffect(() => {
-    setFilteredEntries(pastEntries);
-  }, [pastEntries]);
-  
+// Home dashboard (Phase 7c mood-first, Phase 8c restore, dashboard polish
+// pass): mood picker + today's date/time as the hero, then today's entry
+// state as its own full-width row below it (existing entry with edit
+// access, or a prompt pointing back at the mood row), then compact "Active
+// Goals" and "Recent Entries" previews — both link out to their full pages
+// (Goals, History already have their own nav slots) rather than duplicating
+// the whole list here. Every section below the hero shares the
+// `dashboard-section` top-margin so the vertical rhythm stays consistent.
+const HistoryView = ({ pastEntries, onMoodSelect, onDelete, onEdit }) => {
+  const navigate = useNavigate();
   const currentDate = new Date();
-  const dateString = currentDate.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
+  const dateString = currentDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
   });
-  const timeString = currentDate.toLocaleTimeString('en-US', { 
-    hour: '2-digit', 
+  const timeString = currentDate.toLocaleTimeString('en-US', {
+    hour: '2-digit',
     minute: '2-digit',
-    hour12: true 
+    hour12: true
   });
 
   return (
@@ -36,15 +40,20 @@ const HistoryView = ({ pastEntries, loading, error, onMoodSelect, onDelete, onEd
         </div>
       </div>
 
-      {renderOnlyHeader ? null : (
-        <HistoryList 
-          entries={filteredEntries}
-          loading={loading} 
-          error={error} 
-          onDelete={onDelete}
-          onEdit={onEdit}
-        />
-      )}
+      <section className="dashboard-section" aria-label="Today's entry">
+        <TodayEntryCard pastEntries={pastEntries} onDelete={onDelete} onEdit={onEdit} />
+      </section>
+
+      <section className="dashboard-section" aria-label="Active goals">
+        <GoalsSection onNavigateToGoals={() => navigate('goals')} />
+      </section>
+
+      <RecentEntries
+        entries={pastEntries}
+        onDelete={onDelete}
+        onEdit={onEdit}
+        onViewAll={() => navigate('history')}
+      />
     </>
   );
 };

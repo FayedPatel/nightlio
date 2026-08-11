@@ -1,11 +1,14 @@
 {
   "name": "nightlio",
   "private": true,
-  "version": "0.1.7",
+  "version": "0.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "description": "A beautiful, self-hosted daily mood tracker and journal",
   "author": "shirsakm",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "homepage": "https://github.com/shirsakm/nightlio",
   "repository": {
     "type": "git",
@@ -34,7 +37,6 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "setup": "./setup.sh",
     "test": "./test.sh"
   },
   "dependencies": {
@@ -53,10 +55,12 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
     "eslint": "^9.32.0",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "rollup-plugin-visualizer": "^6.0.5",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }

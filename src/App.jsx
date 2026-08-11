@@ -12,8 +12,7 @@ import Sidebar from "./components/navigation/Sidebar";
 import BottomNav from "./components/navigation/BottomNav";
 import FAB from "./components/FAB";
 import HistoryView from "./views/HistoryView";
-import HistoryList from "./components/history/HistoryList";
-import GoalsSection from "./components/goals/GoalsSection";
+import HistoryPageView from "./views/HistoryPageView";
 import EntryView from "./views/EntryView";
 import StatisticsView from "./components/stats/StatisticsView";
 import SettingsView from "./views/SettingsView";
@@ -111,8 +110,10 @@ const AppContent = () => {
   const handleGlobalSearch = (results) => {
     setSearchResults(results);
     if (results !== null) {
-      if (location.pathname !== '/dashboard' && location.pathname !== '/dashboard/') {
-        navigate('/dashboard');
+      // Search results live on the History page (Phase 7c moved the full
+      // entry list off home), so route there instead of home.
+      if (location.pathname !== '/dashboard/history') {
+        navigate('/dashboard/history');
       }
       setTimeout(() => {
         const historySection = document.getElementById('history-section');
@@ -133,7 +134,12 @@ const AppContent = () => {
 
   useEffect(() => {
     const handler = () => {
-      if (!location.pathname.startsWith('/dashboard')) {
+      // The mood picker that actually starts an entry only lives on home
+      // (index route). "Add Entry" tiles can now be tapped from other pages
+      // too (e.g. the History page's empty state), so route to home itself
+      // — not just anywhere under /dashboard — before scrolling up to it.
+      const isHome = location.pathname === '/dashboard' || location.pathname === '/dashboard/';
+      if (!isHome) {
         navigate('/dashboard');
         return;
       }
@@ -165,13 +171,20 @@ const AppContent = () => {
               <Routes>
                 <Route index element={
                   <HistoryView
-                    pastEntries={displayEntries}
-                    loading={historyLoading}
-                    error={historyError}
+                    pastEntries={pastEntries}
                     onMoodSelect={handleMoodSelect}
                     onDelete={handleEntryDeleted}
                     onEdit={handleStartEdit}
-                    renderOnlyHeader={true}
+                  />
+                } />
+                <Route path="history" element={
+                  <HistoryPageView
+                    entries={displayEntries}
+                    loading={historyLoading}
+                    error={historyError}
+                    onDelete={handleEntryDeleted}
+                    onEdit={handleStartEdit}
+                    searchResults={searchResults}
                   />
                 } />
                 <Route path="entry" element={
@@ -201,28 +214,6 @@ const AppContent = () => {
                 <Route path="settings" element={<SettingsView />} />
               </Routes>
             </main>
-            
-            <Routes>
-              <Route index element={
-                <>
-                  <section className="app-wide" aria-label="Goals section">
-                    <GoalsSection onNavigateToGoals={() => navigate('goals')} />
-                  </section>
-                  <section className="app-wide" aria-label="History entries" id="history-section">
-                    <h2 style={{ margin: '0 0 var(--space-1) 0', paddingLeft: 'calc(var(--space-1) / 2)', paddingTop: 0, paddingBottom: 'calc(var(--space-1) / 2)', color: 'var(--text)' }}>
-                      {searchResults !== null ? `Search Results (${searchResults.length})` : 'History'}
-                    </h2>
-                    <HistoryList 
-                      entries={displayEntries}
-                      loading={historyLoading}
-                      error={historyError}
-                      onDelete={handleEntryDeleted}
-                      onEdit={handleStartEdit}
-                    />
-                  </section>
-                </>
-              } />
-            </Routes>
           </div>
         </div>
       </div>

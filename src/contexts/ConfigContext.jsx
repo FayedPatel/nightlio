@@ -11,7 +11,7 @@ export const useConfig = () => {
 
 export const ConfigProvider = ({ children }) => {
   const [config, setConfig] = useState({
-    enable_google_oauth: false,
+    enable_oidc: false,
     enable_mood_music: false,
   });
   const [loading, setLoading] = useState(true);
@@ -26,7 +26,12 @@ export const ConfigProvider = ({ children }) => {
           setConfig((prev) => ({ ...prev, ...data }));
         }
       } catch (e) {
-        if (isMounted) setError(e.message || 'Failed to load config');
+        if (isMounted) {
+          // Fall back to the defaults above (OIDC off → legacy login mode).
+          // Warn loudly so a silently unreachable /api/config is diagnosable.
+          console.warn('Failed to load /api/config, falling back to defaults (OIDC disabled):', e);
+          setError(e.message || 'Failed to load config');
+        }
       } finally {
         if (isMounted) setLoading(false);
       }

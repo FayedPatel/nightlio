@@ -19,6 +19,17 @@ const API_BASE_URL = normalizeBaseUrl(
     : '' // Use relative /api in both dev and prod; Vite proxy handles dev, nginx handles prod
 );
 
+// Sent on every mutating request. Its presence lets api/utils/auth_middleware.py
+// tell a same-site fetch() apart from a cross-site HTML form submission when
+// the request is cookie-authenticated: the header forces the browser to send
+// a CORS preflight, and our CORS config (explicit CORS_ORIGINS, never '*')
+// rejects that preflight from a foreign origin. Bearer-token requests don't
+// need it (see backend docstring), but sending it unconditionally on
+// mutations is simpler than tracking which auth mode is active client-side.
+const CSRF_HEADER_NAME = 'X-Requested-With';
+const CSRF_HEADER_VALUE = 'nightlio';
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
+
 class ApiService {
   constructor() {
     this.token = null;
@@ -28,32 +39,49 @@ class ApiService {
     this.token = token;
   }
 
-  async request(endpoint, options = {}) {
+  buildUrl(endpoint) {
     // Safe-join base + endpoint, honoring relative mode when base is empty
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     // If base is a relative prefix like '/api', and endpoint already starts with '/api',
     // avoid double-prefixing (i.e., '/api' + '/api/config' -> '/api/config').
     const base = API_BASE_URL;
-    let url;
     if (!base) {
-      url = path;
-    } else if (/^https?:\/\//i.test(base)) {
-      url = `${base}${path}`;
-    } else {
-      // Treat base as a path prefix
-      const baseNoTrail = base.replace(/\/+$/g, '');
-      if (path === baseNoTrail || path.startsWith(`${baseNoTrail}/`)) {
-        url = path; // endpoint already includes the base prefix
-      } else {
-        url = `${baseNoTrail}${path}`;
-      }
+      return path;
     }
+    if (/^https?:\/\//i.test(base)) {
+      return `${base}${path}`;
+    }
+    // Treat base as a path prefix
+    const baseNoTrail = base.replace(/\/+$/g, '');
+    if (path === baseNoTrail || path.startsWith(`${baseNoTrail}/`)) {
+      return path; // endpoint already includes the base prefix
+    }
+    return `${baseNoTrail}${path}`;
+  }
+
+  async request(endpoint, options = {}) {
+    const url = this.buildUrl(endpoint);
+    const method = (options.method || 'GET').toUpperCase();
+    const isMutation = !SAFE_METHODS.has(method);
+    // NOTE: `headers` is intentionally computed AFTER `...options` so it is
+    // the merge that wins. Spreading `...options` after `headers` would let
+    // a raw `options.headers` (if the caller passed one) silently replace
+    // this merged object outright, dropping Content-Type/credentials-related
+    // headers set here.
     const config = {
+      // Send the httpOnly session cookie (api/utils/auth_cookies.py) with
+      // every request, same-origin or cross-origin (the latter needs the
+      // backend's CORS supports_credentials=True, see api/app.py). Bearer
+      // requests are unaffected -- the cookie is simply extra, redundant
+      // credentials that the backend only consults when no Authorization
+      // header is present.
+      credentials: 'include',
+      ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...(isMutation ? { [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE } : {}),
         ...options.headers,
       },
-      ...options,
     };
 
     if (this.token) {
@@ -99,26 +127,46 @@ class ApiService {
   }
 
   // Authentication endpoints
-  async googleAuth(googleToken) {
-    return this.request('/api/auth/google', {
+  async localLogin(username, password) {
+    // With credentials: password login. Without: credential-free
+    // single-user self-host login (the backend rejects it when OIDC is
+    // configured).
+    const options = { method: 'POST' };
+    if (username != null || password != null) {
+      options.body = JSON.stringify({ username, password });
+    }
+    return this.request('/api/auth/local/login', options);
+  }
+
+  async register({ username, password, email, name } = {}) {
+    return this.request('/api/auth/local/register', {
       method: 'POST',
-      body: JSON.stringify({ token: googleToken }),
+      body: JSON.stringify({ username, password, email, name }),
     });
   }
 
-  async localLogin() {
-    return this.request('/api/auth/local/login', {
-      method: 'POST',
-    });
+  // URL for the OIDC single sign-on redirect flow (top-level navigation,
+  // not an XHR).
+  getOidcLoginUrl() {
+    return this.buildUrl('/api/auth/login/oidc');
   }
 
+  // token is optional: when omitted, auth relies solely on the httpOnly
+  // session cookie sent via credentials: 'include' (see request()) -- used
+  // to restore a session that only exists as a cookie, e.g. after
+  // localStorage was cleared.
   async verifyToken(token) {
-    return this.request('/api/auth/verify', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+    const options = { method: 'POST' };
+    if (token) {
+      options.headers = { Authorization: `Bearer ${token}` };
+    }
+    return this.request('/api/auth/verify', options);
+  }
+
+  // Clears the httpOnly session cookie server-side. Always safe to call,
+  // even with no active session (idempotent) or an already-expired token.
+  async logout() {
+    return this.request('/api/auth/logout', { method: 'POST' });
   }
 
   // Mood entries endpoints
@@ -154,6 +202,16 @@ class ApiService {
   // Streak endpoint
   async getCurrentStreak() {
     return this.request('/api/streak');
+  }
+
+  // Activity feed endpoint (keyset-paginated: pass the previous page's
+  // next_cursor as `before` to fetch older events)
+  async getActivity(before, limit) {
+    const params = new URLSearchParams();
+    if (before != null) params.set('before', String(before));
+    if (limit != null) params.set('limit', String(limit));
+    const q = params.toString();
+    return this.request(`/api/activity${q ? `?${q}` : ''}`);
   }
 
   // Mood music endpoint
@@ -260,17 +318,14 @@ class ApiService {
 
   // Export endpoint
   async exportPdf(content) {
-    const endpoint = '/api/export/pdf';
-    const base = API_BASE_URL;
-    let url;
-    if (!base) url = endpoint;
-    else if (/^https?:\/\//i.test(base)) url = `${base}${endpoint}`;
-    else url = `${base.replace(/\/+$/g, '')}${endpoint}`;
-    
+    const url = this.buildUrl('/api/export/pdf');
+
     const config = {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        [CSRF_HEADER_NAME]: CSRF_HEADER_VALUE,
       },
       body: JSON.stringify({ content }),
     };

@@ -34,10 +34,6 @@ class Config:
         "CORS_ORIGINS", "http://localhost:5173,https://nightlio.vercel.app"
     ).split(",")
 
-    # Google OAuth configuration
-    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
-
     # JWT configuration (legacy)
     JWT_SECRET_KEY = os.environ.get("JWT_SECRET_KEY") or SECRET_KEY
     JWT_ACCESS_TOKEN_EXPIRES = 3600  # 1 hour
@@ -93,6 +89,51 @@ except Exception:
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Secret/JWT keys sign every auth token this app issues (see
+# api/routes/auth_routes.py and api/utils/auth_middleware.py). A predictable
+# key lets an attacker forge a token for any user_id and bypass auth
+# entirely, so any of these known placeholder values -- or anything short
+# enough to brute-force/guess -- must never be accepted in production.
+# Kept in sync with the compose/env-example placeholders so a self-hoster
+# who copies an example file verbatim is still caught.
+_KNOWN_WEAK_SECRETS = {
+    "dev-secret-key-change-in-production",
+    "your-secret-key-change-this",
+    "your-jwt-secret-change-this",
+    "your-secret-key-change-this-to-something-random-and-secure",
+    "your-jwt-secret-change-this-to-something-different-and-secure",
+    "changeme",
+    "change-me",
+    "change_me",
+    "secret",
+    "password",
+    "nightlio",
+}
+
+# Below this many characters a value is rejected outright regardless of
+# content -- 16 bytes is a conservative floor for an HS256 signing key.
+_MIN_SECRET_LENGTH = 16
+
+
+def is_weak_secret(value: Optional[str]) -> bool:
+    """True if ``value`` is missing, a known placeholder, or too short to
+    be a real signing key.
+
+    Used to fail closed in production (see ``create_app`` in ``api/app.py``)
+    rather than silently signing tokens with a predictable key.
+    """
+    if not value:
+        return True
+    normalized = value.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _KNOWN_WEAK_SECRETS:
+        return True
+    if len(value.strip()) < _MIN_SECRET_LENGTH:
+        return True
+    return False
+
+
 @dataclass(frozen=True)
 class ConfigData:
     """Typed runtime configuration for optional features.
@@ -106,15 +147,15 @@ class ConfigData:
     PORT: int
 
     # Feature flags
-    ENABLE_GOOGLE_OAUTH: bool
     ENABLE_MOOD_MUSIC: bool
 
-    # Google OAuth
-    GOOGLE_CLIENT_ID: Optional[str]
-    GOOGLE_CLIENT_SECRET: Optional[str]
-    GOOGLE_CALLBACK_URL: Optional[str]
-
-    # Web3 removed
+    # OIDC single sign-on (any spec-compliant provider; Pocket ID recommended).
+    # Discovery document is derived as
+    # <OIDC_ISSUER_URL>/.well-known/openid-configuration
+    OIDC_ISSUER_URL: Optional[str]
+    OIDC_CLIENT_ID: Optional[str]
+    OIDC_CLIENT_SECRET: Optional[str]
+    OIDC_CALLBACK_URL: Optional[str]
 
     # Auth
     JWT_SECRET: str
@@ -122,6 +163,22 @@ class ConfigData:
     # Optional friendly defaults for the self-hosted user display
     SELFHOST_USER_NAME: Optional[str] = None
     SELFHOST_USER_EMAIL: Optional[str] = None
+
+    # Where the SPA lives, used for the post-SSO redirect back to the
+    # frontend. Empty/None means same origin as the API (the standard
+    # single-host deployment where nginx serves both).
+    FRONTEND_URL: Optional[str] = None
+
+    # Optional signup/registration URL at the identity provider (for
+    # Pocket ID: its signup or invite URL). When set and OIDC is enabled,
+    # the login page shows a "Create account" link pointing at it. The
+    # provider owns registration; Nightlio only renders the link.
+    OIDC_SIGNUP_URL: Optional[str] = None
+
+    @property
+    def oidc_enabled(self) -> bool:
+        """OIDC SSO is considered configured when an issuer URL is set."""
+        return bool(self.OIDC_ISSUER_URL and self.OIDC_ISSUER_URL.strip())
 
 
 _CONFIG_SINGLETON: Optional[ConfigData] = None
@@ -135,9 +192,7 @@ def _load_config_from_env() -> ConfigData:
     - JWT_SECRET falls back to JWT_SECRET_KEY/SECRET_KEY/dev default.
     """
 
-    enable_google = is_truthy(os.getenv("ENABLE_GOOGLE_OAUTH"))
     enable_mood_music = is_truthy(os.getenv("ENABLE_MOOD_MUSIC"))
-    # Web3 removed
 
     # Secrets pulled from env; don't default to empty string.
     jwt_secret = (
@@ -155,17 +210,18 @@ def _load_config_from_env() -> ConfigData:
 
     return ConfigData(
         PORT=port,
-        ENABLE_GOOGLE_OAUTH=enable_google,
         ENABLE_MOOD_MUSIC=enable_mood_music,
-        GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID"),
-        GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
-        GOOGLE_CALLBACK_URL=os.getenv("GOOGLE_CALLBACK_URL"),
-        # Web3 fields removed
+        OIDC_ISSUER_URL=os.getenv("OIDC_ISSUER_URL") or None,
+        OIDC_CLIENT_ID=os.getenv("OIDC_CLIENT_ID") or None,
+        OIDC_CLIENT_SECRET=os.getenv("OIDC_CLIENT_SECRET") or None,
+        OIDC_CALLBACK_URL=os.getenv("OIDC_CALLBACK_URL") or None,
         JWT_SECRET=jwt_secret,
         DEFAULT_SELF_HOST_ID=os.getenv("DEFAULT_SELF_HOST_ID")
         or "selfhost_default_user",
         SELFHOST_USER_NAME=os.getenv("SELFHOST_USER_NAME") or "Me",
         SELFHOST_USER_EMAIL=os.getenv("SELFHOST_USER_EMAIL") or None,
+        FRONTEND_URL=os.getenv("FRONTEND_URL") or None,
+        OIDC_SIGNUP_URL=(os.getenv("OIDC_SIGNUP_URL") or "").strip() or None,
     )
 
 
@@ -183,11 +239,12 @@ def get_config() -> ConfigData:
 def config_to_public_dict(cfg: ConfigData) -> Dict[str, Any]:
     """Return a safe public configuration for the frontend.
 
-    Only returns non-secret feature flags.
+    Only returns non-secret feature flags plus the optional signup link.
     """
     return {
-        "enable_google_oauth": bool(cfg.ENABLE_GOOGLE_OAUTH),
+        "enable_oidc": bool(cfg.oidc_enabled),
         "enable_mood_music": bool(cfg.ENABLE_MOOD_MUSIC),
-        # Expose the Google Client ID so the frontend can initialize GSI correctly
-        "google_client_id": cfg.GOOGLE_CLIENT_ID,
+        # The signup link only makes sense when SSO is on; null otherwise,
+        # even if the env var is set.
+        "signup_url": cfg.OIDC_SIGNUP_URL if cfg.oidc_enabled else None,
     }
