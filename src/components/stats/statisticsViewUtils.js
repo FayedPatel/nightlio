@@ -34,12 +34,18 @@ export const MOOD_SHORTHANDS = MOOD_LEGEND.reduce((acc, { value, shorthand }) =>
 
 export const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const ROLLING_LABELS = Object.freeze({
+  avg7: '7-day avg',
+  avg30: '30-day avg',
+});
+
 export const formatTrendTooltip = (value, _name, props) => {
-  if (props?.dataKey === 'ma') {
+  const rollingLabel = ROLLING_LABELS[props?.dataKey];
+  if (rollingLabel) {
     if (value == null || Number.isNaN(value)) {
-      return ['No data', 'Moving Avg'];
+      return ['No data', rollingLabel];
     }
-    return [Number(value).toFixed(2), 'Moving Avg'];
+    return [Number(value).toFixed(2), rollingLabel];
   }
 
   if (value == null) {

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   BarChart,
   Bar,
@@ -6,6 +6,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
   LineChart,
   Line,
@@ -14,6 +15,7 @@ import {
 import Skeleton from '../ui/Skeleton';
 import { exportSVGToPNG, exportDataToCSV } from '../../utils/exportUtils';
 import useStatisticsViewData from './useStatisticsViewData';
+import useExtendedStatistics from '../../hooks/useExtendedStatistics';
 import {
   RANGE_OPTIONS,
   TOOLTIP_STYLE,
@@ -22,6 +24,17 @@ import {
   WEEK_DAYS,
   formatTrendTooltip,
 } from './statisticsViewUtils';
+import {
+  buildVolatilityCard,
+  normalizeTagCorrelations,
+  normalizeGoalCorrelations,
+} from './extendedStatsUtils';
+import {
+  WeekdayPatternSection,
+  CorrelationSection,
+  HeatmapSection,
+  DigestSection,
+} from './ExtendedStatsSections';
 import './StatisticsView.css';
 
 const MoodLegend = () => (
@@ -77,7 +90,7 @@ const RangeSelector = ({ range, onChange }) => (
   </div>
 );
 
-const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExportCSV, containerRef }) => (
+const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExportCSV, containerRef, rollingNote }) => (
   <div ref={containerRef} className="statistics-view__card statistics-view__section" id="mood-trend">
     <SectionHeader title="Mood Trend">
       <RangeSelector range={range} onChange={onChangeRange} />
@@ -102,8 +115,10 @@ const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExpo
           tickFormatter={(value) => MOOD_SHORTHANDS[value] || ''}
         />
         <Tooltip contentStyle={TOOLTIP_STYLE} formatter={formatTrendTooltip} />
+        <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
         <Line
           type="monotone"
+          name="Mood"
           dataKey="mood"
           stroke="var(--accent-600)"
           strokeWidth={3}
@@ -112,9 +127,20 @@ const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExpo
         />
         <Line
           type="monotone"
-          dataKey="ma"
+          name="7-day avg"
+          dataKey="avg7"
           stroke="var(--danger)"
           strokeDasharray="6 6"
+          strokeWidth={2}
+          dot={false}
+          connectNulls
+        />
+        <Line
+          type="monotone"
+          name="30-day avg"
+          dataKey="avg30"
+          stroke="var(--text-muted)"
+          strokeDasharray="2 6"
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -122,6 +148,7 @@ const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExpo
       </LineChart>
     </ResponsiveContainer>
 
+    {rollingNote && <div className="statistics-view__tag-note">{rollingNote}</div>}
     <MoodLegend />
   </div>
 );
@@ -267,6 +294,17 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }) => {
   const distributionRef = useRef(null);
 
   const {
+    extended,
+    extendedLoading,
+    extendedError,
+    heatmap,
+    heatmapLoading,
+    heatmapError,
+    heatmapYear,
+    setHeatmapYear,
+  } = useExtendedStatistics();
+
+  const {
     hasStatistics,
     weeklyMoodData,
     trendChartData,
@@ -274,7 +312,27 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }) => {
     tagStats,
     calendarDays,
     overviewCards,
-  } = useStatisticsViewData(statistics, pastEntries, range);
+  } = useStatisticsViewData(
+    statistics,
+    pastEntries,
+    range,
+    extended?.rolling_averages?.series ?? null,
+  );
+
+  const overviewWithVolatility = useMemo(
+    () => [...overviewCards, buildVolatilityCard(extended?.mood_volatility, extendedLoading)],
+    [overviewCards, extended?.mood_volatility, extendedLoading],
+  );
+
+  const tagCorrelationRows = useMemo(
+    () => normalizeTagCorrelations(extended?.tag_correlations),
+    [extended?.tag_correlations],
+  );
+
+  const goalCorrelationRows = useMemo(
+    () => normalizeGoalCorrelations(extended?.goal_correlations),
+    [extended?.goal_correlations],
+  );
 
   const handleExportTrendPNG = useCallback(() => {
     const svg = trendRef.current?.querySelector('svg');
@@ -309,7 +367,12 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }) => {
 
   return (
     <div className="statistics-view">
-      <StatisticsOverviewGrid cards={overviewCards} />
+      <StatisticsOverviewGrid cards={overviewWithVolatility} />
+      <DigestSection
+        digest={extended?.monthly_digest}
+        loading={extendedLoading}
+        error={extendedError}
+      />
       <MoodTrendSection
         chartData={trendChartData}
         range={range}
@@ -317,6 +380,11 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }) => {
         onExportPNG={handleExportTrendPNG}
         onExportCSV={handleExportTrendCSV}
         containerRef={trendRef}
+        rollingNote={
+          extendedError
+            ? 'Rolling averages unavailable right now.'
+            : 'Rolling averages are trailing means over the preceding 7 / 30 logged days.'
+        }
       />
       <DistributionSection
         chartData={moodDistributionData}
@@ -324,7 +392,38 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }) => {
         onExportCSV={handleExportDistributionCSV}
         containerRef={distributionRef}
       />
+      <WeekdayPatternSection
+        weekdayAverages={extended?.weekday_averages}
+        loading={extendedLoading}
+        error={extendedError}
+      />
+      <CorrelationSection
+        title="Tag Impact"
+        rows={tagCorrelationRows}
+        withoutLabel="without"
+        emptyLabel="No tags selected yet — tag some entries to compare days with and without them."
+        note="Average mood on days a tag was used versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples."
+        loading={extendedLoading}
+        error={extendedError}
+      />
+      <CorrelationSection
+        title="Goal Impact"
+        rows={goalCorrelationRows}
+        withLabel="completed"
+        withoutLabel="without"
+        emptyLabel="No goals yet — add goals to compare mood on completion days."
+        note="Average mood on days a goal was completed versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples."
+        loading={extendedLoading}
+        error={extendedError}
+      />
       <TagCorrelationsSection tagStats={tagStats} onExportCSV={handleExportTagCSV} />
+      <HeatmapSection
+        heatmap={heatmap}
+        year={heatmapYear}
+        onYearChange={setHeatmapYear}
+        loading={heatmapLoading}
+        error={heatmapError}
+      />
       <MoodCalendarSection days={calendarDays} />
     </div>
   );

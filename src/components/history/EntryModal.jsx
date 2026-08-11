@@ -1,29 +1,10 @@
 import ReactMarkdown from 'react-markdown';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Pencil, Trash2, Download } from 'lucide-react';
 import apiService from '../../services/api';
 import { getMoodLabel } from '../../utils/moodUtils';
-
-const backdropStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.5)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 100,
-};
-
-const panelStyle = {
-  width: 'min(820px, 92vw)',
-  maxHeight: '85vh',
-  overflow: 'auto',
-  background: 'var(--surface)',
-  border: '1px solid var(--border)',
-  borderRadius: '14px',
-  boxShadow: 'var(--shadow-lg)',
-  padding: '20px',
-};
+import Modal from '../ui/Modal';
+import './EntryModal.css';
 
 const deriveTitleBody = (content = '') => {
   const text = (content || '').replace(/\r\n/g, '\n').trim();
@@ -48,26 +29,15 @@ const deriveTitleBody = (content = '') => {
   return { title: first, body: '' };
 };
 
+// Rebuilt on the shared Modal (Phase 9d) — was a bespoke fixed-position
+// dialog before (centered on every viewport, no bottom-sheet, no
+// safe-area, z-index: 100 outside the documented scale). Modal.jsx gives
+// this the same sheet-on-mobile / swipe-dismiss / safe-area / z-index
+// (var(--z-modal)) behavior every other dialog in the app already has.
 const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) => {
   const [isExporting, setIsExporting] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        if (typeof onClose === 'function') onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, onClose]);
-  
   if (!isOpen || !entry) return null;
-  
-  const onBackdrop = (e) => {
-    if (e.target === e.currentTarget) onClose();
-  };
 
   const handleExport = async (e) => {
     e.stopPropagation();
@@ -76,13 +46,13 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
     try {
       const timeStr = entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
       const dateStr = `${entry.date}${timeStr ? ` at ${timeStr}` : ''}`;
-      
+
       const moodLabel = entry.mood ? getMoodLabel(entry.mood) : '';
-      
-      const tagsStr = entry.selections?.length > 0 
-        ? entry.selections.map(s => s.name).join(', ') 
+
+      const tagsStr = entry.selections?.length > 0
+        ? entry.selections.map(s => s.name).join(', ')
         : '';
-    
+
       const headerLines = [];
       headerLines.push(`**Date:** ${dateStr}`);
       if (moodLabel) {
@@ -91,7 +61,7 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
       if (tagsStr) {
         headerLines.push(`**Tags:** ${tagsStr}`);
       }
-    
+
       const enhancedContent = headerLines.join('\n') + '\n\n---\n\n' + (entry.content || '');
 
       const blob = await apiService.exportPdf(enhancedContent);
@@ -112,104 +82,74 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
   };
 
   const { title, body } = deriveTitleBody(entry.content);
+  const timeStr = entry.created_at
+    ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  const modalTitle = (
+    <span className="entry-modal-title">
+      <span className="entry-modal-title__date">{entry.date}</span>
+      {timeStr && <span className="entry-modal-title__time">{timeStr}</span>}
+    </span>
+  );
+
+  const headerActions = (
+    <>
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={isExporting}
+        className="entry-modal-action-btn"
+        title="Export as PDF"
+        aria-label="Export as PDF"
+      >
+        <Download size={18} />
+      </button>
+      {onEdit && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onEdit(); }}
+          disabled={isDeleting}
+          className="entry-modal-action-btn entry-modal-action-btn--primary"
+          title="Edit entry"
+          aria-label="Edit entry"
+        >
+          <Pencil size={18} />
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          disabled={isDeleting}
+          className="entry-modal-action-btn entry-modal-action-btn--danger"
+          title="Delete entry"
+          aria-label="Delete entry"
+        >
+          {isDeleting ? <Trash2 size={18} opacity={0.5} /> : <Trash2 size={18} />}
+        </button>
+      )}
+    </>
+  );
+
   return (
-    <div style={backdropStyle} onClick={onBackdrop} role="dialog" aria-modal="true">
-      <div style={panelStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{entry.date}</div>
-            {entry.created_at && (
-              <div style={{ fontSize: '0.85rem', color: 'color-mix(in oklab, var(--text), transparent 30%)' }}>
-                {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              style={{
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: 10,
-                padding: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 600,
-                boxShadow: 'var(--shadow-sm)',
-                opacity: isExporting ? 0.5 : 1,
-                cursor: isExporting ? 'not-allowed' : 'pointer',
-              }}
-              title="Export as PDF"
-              aria-label="Export as PDF"
-            >
-              <Download size={18} />
-            </button>
-            {onEdit && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                disabled={isDeleting}
-                style={{
-                  background: 'var(--accent-bg)',
-                  color: '#fff',
-                  border: '1px solid var(--accent-bg)',
-                  borderRadius: 10,
-                  padding: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 600,
-                  boxShadow: 'var(--shadow-sm)'
-                }}
-                title="Edit entry"
-                aria-label="Edit entry"
-              >
-                <Pencil size={18} />
-              </button>
-            )}
-            {onDelete && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                disabled={isDeleting}
-                style={{
-                  background: 'var(--danger)',
-                  color: '#fff',
-                  border: '1px solid var(--danger)',
-                  borderRadius: 10,
-                  padding: '8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 600,
-                  boxShadow: 'var(--shadow-sm)'
-                }}
-                title="Delete entry"
-                aria-label="Delete entry"
-              >
-                {isDeleting ? <Trash2 size={18} opacity={0.5} /> : <Trash2 size={18} />}
-              </button>
-            )}
-          </div>
+    <Modal open={isOpen} onClose={onClose} title={modalTitle} headerActions={headerActions} maxWidth={720}>
+      {title && (
+        <div className="history-markdown entry-modal-heading">
+          <h1>{title}</h1>
         </div>
-        {title && (
-          <div className="history-markdown" style={{ marginBottom: 8 }}>
-            <h1 style={{ margin: 0 }}>{title}</h1>
-          </div>
-        )}
-        {entry.selections?.length > 0 && (
-          <div className="tag-list" style={{ marginBottom: 12 }}>
-            {entry.selections.map((s) => (
-              <span key={s.id} className="tag">{s.name}</span>
-            ))}
-          </div>
-        )}
-        <div className="history-markdown">
-          <ReactMarkdown>{body}</ReactMarkdown>
+      )}
+      {entry.selections?.length > 0 && (
+        <div className="tag-list entry-modal-tags">
+          {entry.selections.map((s) => (
+            <span key={s.id} className="tag">{s.name}</span>
+          ))}
         </div>
+      )}
+      <div className="history-markdown">
+        <ReactMarkdown>{body}</ReactMarkdown>
       </div>
-    </div>
+    </Modal>
   );
 };
 

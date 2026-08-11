@@ -39,7 +39,9 @@ export const ToastProvider = ({ children }) => {
           display: flex;
           flex-direction: column;
           gap: 8px;
-          z-index: 1000;
+          /* Above the modal/sheet layer (var(--z-modal): 1000) on purpose —
+             an error toast must stay legible even while a modal is open. */
+          z-index: var(--z-toast);
         }
         .toast {
           padding: 10px 14px;

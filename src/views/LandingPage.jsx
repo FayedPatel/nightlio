@@ -1,18 +1,21 @@
 import './LandingPage.css';
 import { Link } from 'react-router-dom';
+import { MOODS } from '../utils/moodUtils';
+
+const GITHUB_URL = 'https://github.com/FayedPatel/nightlio';
 
 const highlights = [
   {
     title: 'Rich Journaling',
-    description: 'Write detailed notes for every entry using Markdown for formatting, lists, and links.'
+    description: 'Markdown notes for every entry — formatting, lists, and links, no extra tools required.'
   },
   {
     title: 'Track & Analyze',
-    description: 'Log your daily mood on a simple 5-point scale and use customizable tags to discover what influences your mind.'
+    description: 'A simple 5-point mood scale plus customizable tags surface what actually influences your days.'
   },
   {
     title: 'Privacy First',
-    description: 'Your sensitive data is stored in a simple SQLite database file on your server. No third-party trackers or analytics.'
+    description: 'Your data lives in one SQLite file on your own server. No third-party trackers, no analytics.'
   }
 ];
 
@@ -20,25 +23,25 @@ const featureBlocks = [
   {
     title: 'Gamified Consistency',
     items: [
-      'Stay consistent with built-in achievements',
-      'Unlock badges as you build your journaling habit',
-      'Track your journaling streak to stay motivated'
+      'Earn achievements as you build the habit',
+      'Unlock badges for journaling milestones',
+      'Track your streak day to day'
     ]
   },
   {
     title: 'Effortless Logging',
     items: [
-      'Log your daily mood on a simple 5-point scale',
-      'Use customizable tags like "Sleep" or "Productivity"',
-      'Fast keyboard shortcuts to log moods in seconds'
+      'Log your mood in seconds on a 5-point scale',
+      'Tag entries with things like "Sleep" or "Work"',
+      'Keyboard shortcuts for fast entries'
     ]
   },
   {
     title: 'Insightful Analytics',
     items: [
-      'View your mood history on a calendar heatmap',
-      'See your average mood over time',
-      'Discover patterns in your state of mind'
+      'Calendar heatmap of your mood history',
+      'Rolling averages and trend lines',
+      'Spot the patterns behind your state of mind'
     ]
   }
 ];
@@ -57,12 +60,12 @@ const LandingPage = () => {
             <Link to="/about">About</Link>
           </div>
           <div className="landing__nav-actions">
-            <a className="landing__button landing__button--icon" href="https://github.com/shirsakm/nightlio" target="_blank" rel="noreferrer" aria-label="GitHub">
+            <a className="landing__button landing__button--icon" href={GITHUB_URL} target="_blank" rel="noreferrer" aria-label="GitHub">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405 1.02 0 2.04.135 3 .405 2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
               </svg>
             </a>
-            <Link className="landing__button landing__button--primary landing__button--circle" to="/dashboard" aria-label="Launch App">
+            <Link className="landing__button landing__button--primary landing__button--circle" to="/login" aria-label="Sign in">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
@@ -75,35 +78,38 @@ const LandingPage = () => {
             <span className="landing__tag">Your data, your rules</span>
             <h1>Privacy-first mood tracker and daily journal.</h1>
             <p>
-              Designed for effortless self-hosting. Your data, your server, your rules. 
+              Designed for effortless self-hosting. Your data, your server, your rules.
               No ads, no subscriptions, and absolutely no data mining.
             </p>
             <div className="landing__cta-group">
-              <Link className="landing__button landing__button--primary" to="/dashboard">Get started for free</Link>
-              <a className="landing__button landing__button--ghost" href="https://github.com/shirsakm/nightlio">View on GitHub</a>
+              <Link className="landing__button landing__button--primary" to="/login">Get started</Link>
+              <a className="landing__button landing__button--ghost" href={GITHUB_URL} target="_blank" rel="noreferrer">View on GitHub</a>
             </div>
           </div>
           <div className="landing__hero-visual">
+            {/* Product motif: the app's real 5-point mood scale (same
+                icons/colors as MoodPicker), not a fabricated journal excerpt
+                or user quote — see Phase 8d. */}
             <div className="landing__card">
               <div className="landing__card-header">
-                <span className="landing__card-label">Tonight</span>
-                <span className="landing__card-time">10:36 PM</span>
+                <span className="landing__card-label">The mood scale</span>
               </div>
-              <div className="landing__mood">
-                <span className="landing__mood-emoji" role="img" aria-label="Glowing moon">🌙</span>
-                <div>
-                  <p className="landing__mood-title">Feeling grounded</p>
-                  <p className="landing__mood-subtitle">2 day streak • Gratitude tag</p>
-                </div>
+              <div className="landing__mood-scale">
+                {MOODS.map(({ icon: Icon, value, color, label }) => (
+                  <div key={value} className="landing__mood-scale-item">
+                    <span
+                      className="landing__mood-scale-icon"
+                      style={{ color, background: `color-mix(in oklab, ${color} 20%, transparent)` }}
+                    >
+                      <Icon size={22} strokeWidth={1.8} aria-hidden="true" />
+                    </span>
+                    <span className="landing__mood-scale-label">{label}</span>
+                  </div>
+                ))}
               </div>
               <p className="landing__note">
-                Wrapped up the day with a quiet walk. Noticed how the cool air reset my headspace and made the lingering worries feel smaller.
+                Every entry starts with one tap on this scale, then as much or as little writing as you want.
               </p>
-              <div className="landing__timeline">
-                <span className="landing__dot landing__dot--active" aria-hidden="true"></span>
-                <span className="landing__dot" aria-hidden="true"></span>
-                <span className="landing__dot" aria-hidden="true"></span>
-              </div>
             </div>
           </div>
         </div>
@@ -146,8 +152,8 @@ const LandingPage = () => {
             <p>Get up and running in minutes with a single Docker command. Self-host with confidence.</p>
           </div>
           <div className="landing__cta-buttons">
-            <Link className="landing__button landing__button--primary" to="/dashboard">Open the app</Link>
-            <a className="landing__button landing__button--ghost" href="https://github.com/shirsakm/nightlio" target="_blank" rel="noreferrer">View on GitHub</a>
+            <Link className="landing__button landing__button--primary" to="/login">Get started</Link>
+            <a className="landing__button landing__button--ghost" href={GITHUB_URL} target="_blank" rel="noreferrer">View on GitHub</a>
           </div>
         </div>
       </section>

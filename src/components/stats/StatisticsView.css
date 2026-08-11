@@ -113,12 +113,17 @@
 }
 
 .statistics-view__ghost-button {
+  align-items: center;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
+  display: inline-flex;
   font-size: 12px;
   font-weight: 600;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
   padding: 6px 12px;
   transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
@@ -143,6 +148,10 @@
   display: flex;
   font-size: 0.8rem;
   gap: 0.3rem;
+  /* Tap-comfort padding around the label — text stays 0.8rem, the
+     surrounding hit area grows so adjacent legend chips don't crowd touch
+     input on mobile. */
+  padding: 6px 4px;
 }
 
 .statistics-view__tag-grid {
@@ -244,7 +253,183 @@
   transform: translateY(-2px);
 }
 
-@media (max-width: 768px) {
+.statistics-view__section-note {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 8px 0;
+}
+
+.statistics-view__section-note--error {
+  color: var(--danger);
+}
+
+/* With/without correlation lists (tags and goals) */
+.statistics-view__corr-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.statistics-view__corr-row {
+  align-items: baseline;
+  border-bottom: 1px dashed var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+  gap: 4px 16px;
+  justify-content: space-between;
+  padding: 8px 0;
+}
+
+.statistics-view__corr-name {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+}
+
+.statistics-view__corr-detail {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.statistics-view__corr-values {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+}
+
+.statistics-view__corr-diff {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 44px;
+  text-align: right;
+}
+
+.statistics-view__corr-breakdown {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Year-in-moods heatmap */
+.statistics-view__heatmap-scroll {
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.statistics-view__heatmap {
+  --stats-heatmap-cell: 12px;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+}
+
+/* Mobile: bigger cells for thumb precision on the horizontally-scrolled
+   heatmap; gap trimmed so the added width per cell doesn't compound too far
+   past what overflow-x: auto already handles at this viewport. */
+@media (max-width: 640px) {
+  .statistics-view__heatmap {
+    --stats-heatmap-cell: 14px;
+    gap: 2px;
+  }
+}
+
+.statistics-view__heatmap-cell {
+  background: color-mix(in oklab, var(--text-muted) 16%, transparent);
+  border-radius: 3px;
+  height: var(--stats-heatmap-cell);
+  width: var(--stats-heatmap-cell);
+}
+
+.statistics-view__heatmap-month {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.statistics-view__heatmap-day-label {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  line-height: 1;
+  padding-right: 4px;
+}
+
+.statistics-view__heatmap-year {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  min-width: 44px;
+  text-align: center;
+}
+
+.statistics-view__heatmap-legend {
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  gap: 12px;
+}
+
+.statistics-view__heatmap-legend-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  /* Same tap-comfort padding as .statistics-view__legend-item — swatch +
+     label stay their current size, the chip around them grows. */
+  padding: 6px 4px;
+}
+
+.statistics-view__heatmap-swatch {
+  background: color-mix(in oklab, var(--text-muted) 16%, transparent);
+  border-radius: 3px;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+/* Monthly digest */
+.statistics-view__digest-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.statistics-view__digest-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statistics-view__digest-value {
+  color: var(--text);
+  font-size: 1.5rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.statistics-view__digest-trend {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.statistics-view__digest-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.statistics-view__digest-chip {
+  background: var(--accent-chip-bg);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 10px;
+}
+
+@media (max-width: 900px) {
   .statistics-view {
     gap: 20px;
   }
@@ -255,5 +440,9 @@
 
   .statistics-view__section-title {
     font-size: 1.2rem;
+  }
+
+  .statistics-view__corr-values {
+    width: 100%;
   }
 }

@@ -1,16 +1,6 @@
 # 🐳 Docker Quick Start Guide for Nightlio
 
-This guide will help you get Nightlio running with Docker in just a f### Changing Ports
-Edit `docker-compose.yml` to change ports:
-```yaml
-services:
-  frontend:
-    ports:
-      - "8080:80"   # Frontend: localhost:8080 instead of 5173
-  api:
-    ports:
-      - "5001:5000" # API: localhost:5001 instead of 5000
-```
+This guide will help you get Nightlio running with Docker in just a few minutes.
 
 ## Prerequisites
 
@@ -21,7 +11,7 @@ services:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/shirsakm/nightlio.git
+   git clone https://github.com/FayedPatel/nightlio.git
    cd nightlio
    ```
 
@@ -41,7 +31,7 @@ services:
 
 4. **Start the application**
    ```bash
-   docker-compose up -d
+   docker compose up -d --build
    ```
 
 5. **Access your application**
@@ -60,25 +50,53 @@ services:
 - `JWT_SECRET`: JWT signing secret (change this!)
 
 ### Optional Features
-- `ENABLE_GOOGLE_OAUTH`: Set to `1` to enable Google login
+- `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`: set all three to enable OIDC single sign-on (leave empty for local-password/single-user auth)
 - `ENABLE_MOOD_MUSIC`: Set to `1` to enable mood-based music recommendations
-Web3-related variables have been removed.
 - `DEFAULT_SELF_HOST_ID`: User ID for self-hosted instances
+- `APP_ENV`: environment selector (`production`/`development`); replaces `RAILWAY_ENVIRONMENT`, which is still honored as a fallback
+- `FRONTEND_URL`: optional, only needed if the frontend is served from a different origin than the api
+- `TRUST_PROXY_HEADERS`: optional, set to `1` only if the api sits behind a trusted reverse proxy
 
-### Google OAuth Setup (Optional)
-If you want to enable Google OAuth:
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing one
-3. Enable Google+ API
-4. Create OAuth 2.0 credentials
-5. Set authorized redirect URI to: `http://localhost:3000/auth/callback`
-6. Update your `.env` file:
+### OIDC Setup (Optional)
+
+Nightlio speaks generic OpenID Connect -- any spec-compliant provider works.
+[Pocket ID](https://github.com/pocket-id/pocket-id) is the recommended
+self-host option and ships as a bundled, opt-in compose profile:
+
+```bash
+# Off by default -- starts Pocket ID alongside the app
+docker compose --profile oidc up -d
+```
+
+Pocket ID's own admin UI is published on host port `1411`, bound to
+localhost only — open `http://pocket-id.localhost:1411` (the dotted
+`*.localhost` name is required: Pocket ID is passkey-based and the hostname
+must be a valid WebAuthn RPID; browsers resolve `*.localhost` to 127.0.0.1
+on their own) to create clients/users before wiring
+`OIDC_*`. Its data lives in its own named volume (`pocket_id_data`),
+separate from `nightlio_data` -- enabling/disabling the profile never
+touches your Nightlio data.
+
+If you want to enable OIDC (with Pocket ID or any other provider):
+1. Create an OIDC client in your provider's admin UI.
+2. Set the client's redirect/callback URI to the **api's** callback
+   endpoint (this is a server-to-server-style redirect target, not a
+   frontend page):
+   `http://localhost:5173/api/auth/callback/oidc` (dev, via the frontend's
+   nginx `/api/` proxy) or `https://yourdomain.com/api/auth/callback/oidc`
+   (prod, same pattern).
+3. Update your `.env` file:
    ```bash
-   ENABLE_GOOGLE_OAUTH=1
-   GOOGLE_CLIENT_ID=your-client-id
-   GOOGLE_CLIENT_SECRET=your-client-secret
-   GOOGLE_CALLBACK_URL=http://localhost:3000/auth/callback
+   OIDC_ISSUER_URL=http://pocket-id.localhost:1411   # dev (compose network alias; browsers resolve *.localhost themselves)
+   OIDC_ISSUER_URL=https://id.yourdomain.com         # prod, public URL
+   OIDC_CLIENT_ID=your-client-id
+   OIDC_CLIENT_SECRET=your-client-secret
    ```
+4. Restart the api: `docker compose up -d`. Once `OIDC_ISSUER_URL` is set,
+   `GET /api/config` reports `enable_oidc: true` and credential-free
+   single-user login (`POST /api/auth/local/login` with no body) starts
+   failing closed with 403 -- local username/password accounts keep working
+   alongside OIDC.
 
 ### Mood Music Setup (Optional)
 If you want to enable mood-based music:
@@ -94,26 +112,26 @@ If you want to enable mood-based music:
 ### Basic Operations
 ```bash
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Stop services
-docker-compose down
+docker compose down
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # View logs for specific service
-docker-compose logs -f api
-docker-compose logs -f frontend
+docker compose logs -f api
+docker compose logs -f frontend
 
 # Restart services
-docker-compose restart
+docker compose restart
 
 # Update to latest version
 git pull
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ### Data Management
@@ -136,10 +154,10 @@ Edit `docker-compose.yml` to change ports:
 services:
   frontend:
     ports:
-      - "8080:80"  # Change 3000 to 8080
+      - "8080:8080"  # Frontend on localhost:8080 instead of 5173 (container listens on 8080)
   api:
     ports:
-      - "5001:5000"  # Change 5000 to 5001
+      - "5001:5000"  # API on localhost:5001 instead of 5000
 ```
 
 ### Using External Database
@@ -155,35 +173,36 @@ services:
 If running behind nginx, Traefik, or similar:
 1. Remove port mappings from `docker-compose.yml`
 2. Use the service names (`api`, `frontend`) for internal routing
-3. Update `GOOGLE_CALLBACK_URL` if using OAuth
+3. Update the OIDC client's registered callback URL to match your public domain if using OIDC
+4. Set `TRUST_PROXY_HEADERS=1` on the api if you want accurate client IPs in rate limiting and a correct `Secure` cookie flag behind the proxy
 
 ## Troubleshooting
 
 ### Services won't start
 ```bash
 # Check logs
-docker-compose logs
+docker compose logs
 
 # Check if ports are already in use
-netstat -tlnp | grep -E ':(3000|5000)'
+netstat -tlnp | grep -E ':(5173|5000)'
 
 # Clean restart
-docker-compose down
-docker-compose up --build
+docker compose down
+docker compose up --build
 ```
 
 ### Database issues
 ```bash
 # Reset database (WARNING: deletes all data)
-docker-compose down
+docker compose down
 docker volume rm nightlio_nightlio_data
-docker-compose up -d
+docker compose up -d
 ```
 
 ### Permission issues
 ```bash
 # Fix volume permissions
-docker-compose exec api chown -R 1000:1000 /app/data
+docker compose exec api chown -R 1000:1000 /app/data
 ```
 
 ## Production Deployment
@@ -194,7 +213,7 @@ For production use:
 2. **Enable HTTPS** with Let's Encrypt
 3. **Set strong secrets** in your `.env` file
 4. **Backup regularly** using the backup commands above
-5. **Monitor logs** with `docker-compose logs -f`
+5. **Monitor logs** with `docker compose logs -f`
 6. **Update regularly** for security patches
 
 ### Example nginx config
@@ -204,7 +223,7 @@ server {
     server_name your-domain.com;
     
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:5173;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
@@ -214,9 +233,9 @@ server {
 ## Support
 
 If you encounter issues:
-1. Check the logs: `docker-compose logs`
+1. Check the logs: `docker compose logs`
 2. Ensure your `.env` file is configured correctly
-3. Make sure ports 3000 and 5000 aren't in use
+3. Make sure ports 5173 and 5000 aren't in use
 4. Create an issue on GitHub with your logs
 
 Happy journaling! 🌙

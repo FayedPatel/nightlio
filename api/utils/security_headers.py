@@ -22,11 +22,11 @@ def add_security_headers(app: Flask):
         if not app.config.get("DEBUG"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' https://accounts.google.com; "
+                "script-src 'self' 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data: https:; "
-                "connect-src 'self' https://oauth2.googleapis.com; "
-                "frame-src https://accounts.google.com;"
+                "connect-src 'self'; "
+                "frame-src 'none';"
             )
 
         return response

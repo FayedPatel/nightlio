@@ -1,7 +1,30 @@
-from typing import Any, List, Optional
+from datetime import date as _date
+from typing import Any, List, Optional, Tuple
 from flask import Blueprint, request, jsonify
 from api.services.mood_service import MoodService
 from api.utils.auth_middleware import require_auth, get_current_user_id
+
+# Sanity bounds for statistics query params; requests outside them get a 400.
+MIN_STATS_YEAR = 1970
+MAX_STATS_YEAR = 2100
+
+
+def _parse_int_param(
+    name: str, raw: Optional[str], default: int, low: int, high: int
+) -> Tuple[Optional[int], Optional[str]]:
+    """Parse an optional integer query param with range validation.
+
+    Returns (value, None) on success or (None, error_message) on failure.
+    """
+    if raw is None:
+        return default, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, f"{name} must be an integer"
+    if not (low <= value <= high):
+        return None, f"{name} must be between {low} and {high}"
+    return value, None
 
 
 def _normalise_selected_options(
@@ -221,6 +244,72 @@ def create_mood_routes(mood_service: MoodService):
             stats = mood_service.get_statistics(user_id)
             return jsonify(stats)
 
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @mood_bp.route("/statistics/extended", methods=["GET"])
+    @require_auth
+    def get_extended_statistics():
+        try:
+            user_id = get_current_user_id()
+            if user_id is None:
+                return jsonify({"error": "Unauthorized"}), 401
+            return jsonify(mood_service.get_extended_statistics(user_id))
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @mood_bp.route("/statistics/heatmap", methods=["GET"])
+    @require_auth
+    def get_statistics_heatmap():
+        try:
+            user_id = get_current_user_id()
+            if user_id is None:
+                return jsonify({"error": "Unauthorized"}), 401
+
+            year, error = _parse_int_param(
+                "year",
+                request.args.get("year"),
+                _date.today().year,
+                MIN_STATS_YEAR,
+                MAX_STATS_YEAR,
+            )
+            if error:
+                return jsonify({"error": error}), 400
+
+            return jsonify(mood_service.get_heatmap(user_id, year))
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @mood_bp.route("/statistics/digest", methods=["GET"])
+    @require_auth
+    def get_statistics_digest():
+        try:
+            user_id = get_current_user_id()
+            if user_id is None:
+                return jsonify({"error": "Unauthorized"}), 401
+
+            today = _date.today()
+            year, error = _parse_int_param(
+                "year",
+                request.args.get("year"),
+                today.year,
+                MIN_STATS_YEAR,
+                MAX_STATS_YEAR,
+            )
+            if error:
+                return jsonify({"error": error}), 400
+            month, error = _parse_int_param(
+                "month", request.args.get("month"), today.month, 1, 12
+            )
+            if error:
+                return jsonify({"error": error}), 400
+
+            return jsonify(mood_service.get_monthly_digest(user_id, year, month))
+
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 

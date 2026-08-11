@@ -6,6 +6,7 @@ import {
   Clock3,
   CloudOff,
   Loader2,
+  Trash2,
 } from 'lucide-react';
 import MoodPicker from '../components/mood/MoodPicker';
 import MoodDisplay from '../components/mood/MoodDisplay';
@@ -421,21 +422,34 @@ const EntryView = ({
     };
   };
 
-  const handleCancel = async () => {
-    clearAutosaveTimer();
-
-    if (!isEditing && !isBurnerMode && saveInFlightRef.current && !activeEntryIdRef.current) {
-      show('Autosave is still finishing. Please tap Cancel again in a moment.', 'info');
-      return;
-    }
-
-    skipAutosaveFlushRef.current = true;
-
+  // Back/cancel KEEPS the entry. An earlier design deleted autosave-created
+  // rows here ("Draft discarded" on back), which silently destroyed work the
+  // status pill had just called "Saved" — the user-facing effect was entries
+  // vanishing. Leaving now flushes any pending change via the unmount
+  // flushPendingSave effect; destroying a draft is only ever the explicit
+  // handleDiscard below.
+  const handleCancel = () => {
     if (isBurnerMode && !isEditing) {
+      clearAutosaveTimer();
+      skipAutosaveFlushRef.current = true;
       resetDraftComposer();
     }
 
-    if (!isEditing && createdByAutosaveRef.current && activeEntryIdRef.current) {
+    if (typeof onBack === 'function') {
+      onBack();
+    }
+  };
+
+  const handleDiscard = async () => {
+    const confirmed = window.confirm(
+      'Discard this entry? Anything written here will be permanently deleted.'
+    );
+    if (!confirmed) return;
+
+    clearAutosaveTimer();
+    skipAutosaveFlushRef.current = true;
+
+    if (createdByAutosaveRef.current && activeEntryIdRef.current) {
       try {
         const draftId = activeEntryIdRef.current;
         await apiService.deleteMoodEntry(draftId);
@@ -446,7 +460,7 @@ const EntryView = ({
       } catch (error) {
         console.error('Failed to discard autosaved draft:', error);
         skipAutosaveFlushRef.current = false;
-        show('Could not discard the autosaved draft. Please try again.', 'error');
+        show('Could not discard the draft. Please try again.', 'error');
         return;
       }
     }
@@ -503,8 +517,8 @@ const EntryView = ({
 
   if (!selectedMood && !isEditing) {
     return (
-      <div style={{ marginTop: '1rem' }}>
-        <h3 style={{ marginTop: 0 }}>
+      <div className="entry-mood-prompt">
+        <h3>
           Pick your mood to start an entry
         </h3>
         <MoodPicker onMoodSelect={handleMoodSelection} />
@@ -513,32 +527,57 @@ const EntryView = ({
   }
 
   return (
-    <div className="entry-container" style={{ position: 'relative' }}>
+    <div className="entry-container">
       <div className="entry-grid">
         <div className="entry-left">
           {isEditing && editingEntry && (
-            <div style={{
-              marginBottom: '0.75rem',
-              fontSize: '0.85rem',
-              color: 'color-mix(in oklab, var(--text), transparent 40%)',
-            }}>
-              Editing entry from <strong style={{ color: 'var(--text)' }}>{editingEntry.date}</strong>
+            <div className="entry-editing-note">
+              Editing entry from <strong>{editingEntry.date}</strong>
             </div>
           )}
-          <div style={{ marginBottom: '1rem' }}>
+          <div className="entry-mood-section">
             <MoodDisplay moodValue={selectedMood} showLabel={false}>
               <div className="entry-mood-actions">
                 <button
                   type="button"
-                  className="entry-icon-button"
+                  className="entry-save-button entry-return-button"
                   onClick={handleCancel}
-                  aria-label="Cancel"
-                  title="Cancel"
+                  aria-label="Return to dashboard"
+                  title="Return to dashboard"
                 >
                   <ArrowLeft size={16} aria-hidden="true" />
+                  <span>Return to Dashboard</span>
                 </button>
 
-                <div className={`entry-autosave-status is-${saveState}`} role="status" aria-live="polite">
+                {!isEditing && !isBurnerMode && (
+                  <button
+                    type="button"
+                    className="entry-save-button"
+                    onClick={handleDiscard}
+                    aria-label="Discard this entry"
+                    title="Discard this entry"
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>Discard</span>
+                  </button>
+                )}
+
+                {/*
+                  INVARIANT: this status pill must always render whenever the
+                  entry editor is on screen (mood picked, or editing an
+                  existing entry) — never gate its presence behind a
+                  condition. Autosave now runs unattended with no manual Save
+                  button, so this passive pill is the only saved-state
+                  feedback the user gets; a prior refactor (commit da498b5)
+                  once left the editor with no save feedback at all when an
+                  explicit save bar was removed without keeping this in
+                  place. Do not remove the element.
+                */}
+                <div
+                  className={`entry-autosave-status is-${saveState}`}
+                  role="status"
+                  aria-live="polite"
+                >
                   <saveStatusMeta.Icon
                     size={16}
                     className={saveState === 'saving' ? 'is-spinning' : ''}
@@ -551,52 +590,24 @@ const EntryView = ({
             {isEditing && (
               <button
                 type="button"
+                className="entry-change-mood-btn"
                 onClick={() => setShowMoodPicker(true)}
-                style={{
-                  marginTop: '0.75rem',
-                  padding: '0.4rem 0.9rem',
-                  borderRadius: '999px',
-                  border: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                  color: 'var(--text)',
-                  cursor: 'pointer',
-                  fontSize: '0.85rem',
-                  fontWeight: 500,
-                  transition: 'all 0.2s ease',
-                }}
               >
                 Change mood
               </button>
             )}
           </div>
           {isEditing && showMoodPicker && (
-            <div
-              style={{
-                marginBottom: '1rem',
-                padding: '1rem',
-                borderRadius: '16px',
-                border: '1px solid var(--border)',
-                background: 'var(--surface)',
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              <p style={{ marginTop: 0, marginBottom: '0.75rem', fontWeight: 600, color: 'var(--text)' }}>
+            <div className="entry-mood-picker-panel">
+              <p className="entry-mood-picker-panel__intro">
                 Pick a new mood
               </p>
               <MoodPicker onMoodSelect={handleMoodSelection} />
-              <div style={{ marginTop: '0.75rem', textAlign: 'right' }}>
+              <div className="entry-mood-picker-panel__footer">
                 <button
                   type="button"
+                  className="entry-mood-picker-panel__cancel"
                   onClick={() => setShowMoodPicker(false)}
-                  style={{
-                    padding: '0.35rem 0.85rem',
-                    borderRadius: '999px',
-                    border: '1px solid var(--border)',
-                    background: 'transparent',
-                    cursor: 'pointer',
-                    fontSize: '0.85rem',
-                    color: 'color-mix(in oklab, var(--text), transparent 30%)',
-                  }}
                 >
                   Cancel
                 </button>
@@ -608,7 +619,7 @@ const EntryView = ({
             selectedOptions={selectedOptions}
             onOptionToggle={handleOptionToggle}
           />
-          <div style={{ marginTop: '1rem' }}>
+          <div className="entry-group-manager">
             <GroupManager
               groups={groups}
               onCreateGroup={onCreateGroup}

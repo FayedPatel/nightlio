@@ -1,0 +1,65 @@
+/* Phase 9b/9d fix: this used to be all inline styles with a fixed
+   (non-wrapping) flex row and `align-items: center` — fine while the
+   actions slot (children) was a single line, but once EntryView's button
+   row wraps to 2-3 lines on a narrow column (mobile, or the ~340px
+   entry-left column at any viewport), centering vertically against the
+   whole multi-line block made the mood icon float beside a middle line
+   instead of sitting at the top. align-items: flex-start anchors the icon
+   to the first line every time, independent of how many lines the actions
+   wrap to.
+
+   Stays nowrap on purpose: .mood-display__content can already shrink down
+   to its widest single action button (~200px, entry-save-button has
+   flex-shrink: 0 so that button itself never sub-wraps) via its own
+   internal flex-wrap, so the icon and the action stack always have room
+   to share one row down to a ~250px container — well under any width this
+   card actually renders at. */
+.mood-display {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+/* No actions slot in use (showLabel + no children) — a single-line row,
+   centered both axes like the original centered layout. */
+.mood-display--centered {
+  align-items: center;
+  justify-content: center;
+}
+
+.mood-display--icon-only {
+  gap: 0.85rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.mood-display__content {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.mood-display__icon {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+  /* Optically aligns with the first line of actions text instead of
+     hugging the card's very top edge. */
+  margin-top: 2px;
+}
+
+.mood-display__icon--compact {
+  gap: 0;
+  margin-top: 0;
+}
+
+.mood-display__label {
+  font-size: 1.2rem;
+  font-weight: 600;
+}

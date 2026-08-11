@@ -25,13 +25,23 @@ class SQLQueries:
     )
 
     GET_USER_BY_GOOGLE_ID = (
-        "SELECT id, google_id, email, name, avatar_url, created_at, last_login "
-        "FROM users WHERE google_id = ?"
+        "SELECT id, google_id, email, name, avatar_url, auth_provider, external_id, "
+        "created_at, last_login FROM users WHERE google_id = ?"
     )
 
     GET_USER_BY_ID = (
-        "SELECT id, google_id, email, name, avatar_url, created_at, last_login "
-        "FROM users WHERE id = ?"
+        "SELECT id, google_id, email, name, avatar_url, auth_provider, external_id, "
+        "created_at, last_login FROM users WHERE id = ?"
+    )
+
+    GET_USER_BY_PROVIDER = (
+        "SELECT id, google_id, email, name, avatar_url, auth_provider, external_id, "
+        "created_at, last_login FROM users WHERE auth_provider = ? AND external_id = ?"
+    )
+
+    CREATE_PROVIDER_USER = (
+        "INSERT INTO users (google_id, email, name, avatar_url, auth_provider, "
+        "external_id, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)"
     )
 
     UPSERT_USER = (
@@ -74,10 +84,46 @@ class SQLQueries:
     )
 
 
+def default_self_host_external_id() -> str:
+    """Return the configured DEFAULT_SELF_HOST_ID (seeded self-host user).
+
+    Falls back to the historical literal if the config module cannot be
+    imported (e.g. ad-hoc scripts running outside the app context).
+    """
+    try:
+        try:
+            from .config import get_config  # type: ignore
+        except ImportError:
+            from config import get_config  # type: ignore
+        return get_config().DEFAULT_SELF_HOST_ID
+    except Exception:
+        return "selfhost_default_user"
+
+
 class DatabaseConnectionMixin:
     """Provides connection helpers shared across database mixins."""
 
     db_path: str
+
+    def _get_default_user_id(self) -> Optional[int]:
+        """Return the id of the seeded self-host user, or None if absent."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM users WHERE google_id = ?",
+                (default_self_host_external_id(),),
+            ).fetchone()
+            return int(row[0]) if row else None
+
+    def _resolve_user_id(self, user_id: Optional[int]) -> Optional[int]:
+        """Backward-compat shim: None means the default self-host user.
+
+        Callers that predate per-user scoping (Phase 2a) may omit user_id;
+        those calls resolve to the seeded self-host user. The auth layer
+        (Phase 2b) should always pass an explicit user_id.
+        """
+        if user_id is not None:
+            return user_id
+        return self._get_default_user_id()
 
     def _connect(self) -> sqlite3.Connection:
         """Create a SQLite connection with safe defaults."""
@@ -128,5 +174,6 @@ __all__ = [
     "DatabaseConnectionMixin",
     "DatabaseError",
     "SQLQueries",
+    "default_self_host_external_id",
     "logger",
 ]

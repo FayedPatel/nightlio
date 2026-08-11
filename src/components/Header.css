@@ -1,7 +1,7 @@
 .header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: var(--z-header);
   background: color-mix(in oklab, var(--surface) 62%, transparent);
   border-bottom: 1px solid color-mix(in oklab, var(--border) 45%, transparent);
   backdrop-filter: blur(18px);
@@ -21,6 +21,14 @@ html[data-theme="dark"] .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Always allowed to wrap (Phase 9g): at desktop widths content fits on
+     one line so this has no visible effect, but in the ~640-850px tablet
+     band the streak badge + visible search bar + profile/logout cluster
+     don't all fit on one row beside the 64px icon rail (confirmed: header
+     content overflowed the viewport and clipped the Logout button at
+     700px before this). Wrapping keeps Logout reachable at every width
+     instead of only fixing the <=640px case. */
+  flex-wrap: wrap;
   gap: 1rem;
   margin-bottom: 0.25rem;
 }
@@ -46,6 +54,15 @@ html[data-theme="dark"] .header {
   letter-spacing: 0.005em;
   line-height: 1;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Phase 9f: at mobile widths (see the max-width: 640px block below) the
+   badge drops the "Day Streak" label and shows just the flame + count —
+   the number is the only part that changes day to day, and the full
+   meaning stays available via the badge's aria-label/title (Header.jsx). */
+.header__streakBadge-label {
+  display: inline;
 }
 
 .header__search {
@@ -68,14 +85,17 @@ html[data-theme="dark"] .header {
 .header__button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.3rem;
   padding: 0.4rem 0.8rem;
+  min-height: 44px;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 20px;
   cursor: pointer;
   font-size: 0.8rem;
   color: var(--text);
+  flex-shrink: 0;
   transition: background 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -87,6 +107,7 @@ html[data-theme="dark"] .header {
 
 .header__iconButton {
   justify-content: center;
+  min-width: 44px;
 }
 
 .header__iconButton--active {
@@ -115,13 +136,9 @@ html[data-theme="dark"] .header {
   font-weight: 500;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .header {
     padding: var(--space-2) var(--space-3);
-  }
-
-  .header__inner {
-    flex-wrap: wrap;
   }
 
   .header__search {
@@ -141,5 +158,22 @@ html[data-theme="dark"] .header {
 
   .header__left {
     order: 1;
+  }
+
+  /* Streak badge collapses to icon + number only — see the aria-label on
+     the badge itself (Header.jsx) for the full "N day streak" text. */
+  .header__streakBadge-label {
+    display: none;
+  }
+
+  /* A real display name (not the self-host default "Me") can be long
+     enough to wrap the header row onto a third line and crowd Logout off
+     the visible edge. Truncating keeps every control on one row and
+     Logout always fully visible/tappable, per the 9f requirement. */
+  .header__profileName {
+    max-width: 96px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 }

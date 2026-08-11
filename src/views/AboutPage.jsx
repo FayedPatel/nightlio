@@ -78,7 +78,7 @@ const AboutPage = () => {
           </div>
           <p>
             Despite balancing this project with academics, Nightlio has continued to grow. 
-            We've added Google OAuth support for self-hosted users (making it easier to host on public-facing servers), 
+            We've added single sign-on (OIDC) support for self-hosted users (making it easier to host on public-facing servers),
             implemented Daily Goals, and made significant quality-of-life improvements.
           </p>
         </section>

@@ -17,7 +17,7 @@ try:
 except ImportError:
     from app import create_app
 
-env = os.getenv("RAILWAY_ENVIRONMENT", "production")
+env = os.getenv("APP_ENV") or os.getenv("RAILWAY_ENVIRONMENT", "production")
 
 application = create_app(env)
 
@@ -47,9 +47,6 @@ if __name__ == "__main__":
         ]
         print(f"Starting Nightlio API with Gunicorn on port {port}")
         print(f"Environment: {env}")
-        print(
-            f"Google Client ID: {'Set' if app.config.get('GOOGLE_CLIENT_ID') else 'Missing'}"
-        )
 
         # print(f"Command: {' '.join(cmd)}")
         subprocess.run(cmd)
@@ -57,7 +54,4 @@ if __name__ == "__main__":
         # use Flask for development
         print(f"Starting Nightlio API (development) on port {port}")
         print(f"Environment: {env}")
-        print(
-            f"Google Client ID: {'Set' if app.config.get('GOOGLE_CLIENT_ID') else 'Missing'}"
-        )
         application.run(debug=True, host="127.0.0.1", port=port)

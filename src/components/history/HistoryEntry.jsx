@@ -1,14 +1,47 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { getMoodIcon } from '../../utils/moodUtils';
 import apiService from '../../services/api';
 import { useToast } from '../ui/ToastProvider';
 import EntryModal from './EntryModal';
+import './HistoryEntry.css';
 
-const HistoryEntry = ({ entry, onDelete, onEdit }) => {
+// How far the card slides to fully expose the edit/delete actions behind
+// it — matches the actions strip width in HistoryEntry.css.
+const REVEAL_WIDTH = 128;
+// Net horizontal movement below this is treated as a tap, not a swipe.
+const DRAG_THRESHOLD = 8;
+
+// Phase 9c: cap visible tags instead of letting a heavily-tagged entry wrap
+// across several rows — the featured (full-width) card gets a slightly
+// higher cap than the narrower grid cards. Overflow collapses into a
+// single "+n" chip (see .tag--overflow in App.css) rather than a truncated
+// mid-wrap list.
+const MAX_VISIBLE_TAGS_FEATURED = 6;
+const MAX_VISIBLE_TAGS_GRID = 4;
+
+const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
   const { icon: IconComponent, color } = getMoodIcon(entry.mood);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // Touch-only swipe-to-reveal state. Pointer Events (not a library) —
+  // same pattern as MusicDock's touch drag handling
+  // (src/components/mood/MusicDock.jsx), adapted so vertical page
+  // scrolling still passes through natively (touchAction: 'pan-y') while
+  // horizontal drags are tracked in JS.
+  const [swipeX, setSwipeX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const swipeState = useRef({
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    baseX: 0,
+    isHorizontal: null,
+    dragged: false,
+  });
 
   // helpers to split title/body and strip markdown for previews
   const stripMd = (s = '') => s
@@ -76,57 +109,165 @@ const HistoryEntry = ({ entry, onDelete, onEdit }) => {
     }
   };
 
+  // Desktop keeps the mouse-hover action toolbar (see HistoryEntry.css);
+  // swipe-to-reveal is a touch-only affordance.
+  const onCardPointerDown = (e) => {
+    if (e.pointerType === 'mouse') return;
+    swipeState.current = {
+      active: true,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: swipeX,
+      isHorizontal: null,
+      dragged: false,
+    };
+  };
+
+  const onCardPointerMove = (e) => {
+    const s = swipeState.current;
+    if (!s.active || e.pointerId !== s.pointerId) return;
+    const dx = e.clientX - s.startX;
+    const dy = e.clientY - s.startY;
+
+    if (s.isHorizontal === null) {
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      s.isHorizontal = Math.abs(dx) > Math.abs(dy);
+      if (s.isHorizontal && e.currentTarget.setPointerCapture) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+    }
+    // Not a horizontal gesture — let touchAction: pan-y hand it to native
+    // vertical scrolling instead of fighting it.
+    if (!s.isHorizontal) return;
+
+    s.dragged = true;
+    setIsSwiping(true);
+    const next = Math.max(-REVEAL_WIDTH, Math.min(0, s.baseX + dx));
+    setSwipeX(next);
+  };
+
+  const endCardSwipe = (e) => {
+    const s = swipeState.current;
+    if (!s.active || (e && e.pointerId !== s.pointerId)) return;
+    s.active = false;
+    setIsSwiping(false);
+    if (s.isHorizontal) {
+      setSwipeX((cur) => (cur < -REVEAL_WIDTH / 2 ? -REVEAL_WIDTH : 0));
+    }
+  };
+
+  const onCardClick = () => {
+    const wasDragged = swipeState.current.dragged;
+    swipeState.current.dragged = false;
+    if (wasDragged) return; // this click was the tail end of a swipe, not a tap
+    if (swipeX !== 0) {
+      // Tapping the card while the actions panel is open closes it first,
+      // matching common swipe-row UX, instead of opening the entry.
+      setSwipeX(0);
+      return;
+    }
+    openPreview();
+  };
+
+  const closeSwipeAndRun = (fn) => (e) => {
+    e.stopPropagation();
+    setSwipeX(0);
+    fn();
+  };
+
   return (
-    <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="entry-card"
-      role="button"
-      tabIndex={0}
-      onClick={openPreview}
-      onKeyDown={onKey}
-      aria-label={`Open entry from ${entry.date}`}
-      style={{
-        border: isHovered ? '1px solid color-mix(in oklab, var(--accent-600), transparent 55%)' : '1px solid var(--border)',
-        boxShadow: isHovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
-        cursor: 'pointer',
-        outline: 'none'
-      }}
-    >
-      {/* Header: mood icon + date • time */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-  <span style={{ color, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-bg-softer)', border: '1px solid var(--border)' }}>
-          <IconComponent size={18} strokeWidth={1.8} />
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, color: 'var(--text)' }}>{entry.date}</span>
-          {entry.created_at && (
-            <>
-              <span aria-hidden="true" style={{ color: 'color-mix(in oklab, var(--text), transparent 40%)' }}>•</span>
-              <span style={{ color: 'color-mix(in oklab, var(--text), transparent 20%)' }}>
-                {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-              </span>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Title + excerpt preview */}
-      <div className="entry-card__title">{title || 'Entry'}</div>
-      {excerpt && (
-        <div className="entry-card__excerpt">{excerpt}</div>
-      )}
-
-      {/* Tags at the bottom */}
-      {entry.selections && entry.selections.length > 0 && (
-        <div style={{ marginTop: '0.75rem' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {entry.selections.map(selection => (
-              <span key={selection.id} className="tag">{selection.name}</span>
-            ))}
+    <div className="entry-card-row">
+      <div
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        className={`entry-card${featured ? ' entry-card--featured' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={onCardClick}
+        onKeyDown={onKey}
+        onPointerDown={onCardPointerDown}
+        onPointerMove={onCardPointerMove}
+        onPointerUp={endCardSwipe}
+        onPointerCancel={endCardSwipe}
+        aria-label={`Open entry from ${entry.date}`}
+        style={{
+          border: isHovered ? '1px solid color-mix(in oklab, var(--accent-600), transparent 55%)' : '1px solid var(--border)',
+          boxShadow: isHovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
+          cursor: 'pointer',
+          outline: 'none',
+          transform: swipeX ? `translateX(${swipeX}px)` : undefined,
+          transition: isSwiping ? 'none' : 'transform 200ms cubic-bezier(.2,.6,.2,1)',
+          touchAction: 'pan-y',
+        }}
+      >
+        {/* Header: mood icon + date • time */}
+        <div className="entry-card__header">
+          <span style={{ color, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-bg-softer)', border: '1px solid var(--border)', flexShrink: 0 }}>
+            <IconComponent size={18} strokeWidth={1.8} />
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: 'var(--text)' }}>{entry.date}</span>
+            {entry.created_at && (
+              <>
+                <span aria-hidden="true" style={{ color: 'color-mix(in oklab, var(--text), transparent 40%)' }}>•</span>
+                <span style={{ color: 'color-mix(in oklab, var(--text), transparent 20%)' }}>
+                  {new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                </span>
+              </>
+            )}
           </div>
         </div>
-      )}
+
+        {/* Title + excerpt preview */}
+        <div className="entry-card__body">
+          <div className="entry-card__title">{title || 'Entry'}</div>
+          {excerpt && (
+            <div className="entry-card__excerpt">{excerpt}</div>
+          )}
+        </div>
+
+        {/* Tags: capped with a "+n" overflow chip instead of an unbounded
+            wrap (Phase 9c) — see MAX_VISIBLE_TAGS_* above. */}
+        {entry.selections && entry.selections.length > 0 && (() => {
+          const maxVisible = featured ? MAX_VISIBLE_TAGS_FEATURED : MAX_VISIBLE_TAGS_GRID;
+          const visible = entry.selections.slice(0, maxVisible);
+          const hiddenCount = entry.selections.length - visible.length;
+          return (
+            <div className="entry-card__tags">
+              {visible.map(selection => (
+                <span key={selection.id} className="tag">{selection.name}</span>
+              ))}
+              {hiddenCount > 0 && (
+                <span className="tag tag--overflow">+{hiddenCount}</span>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Edit/delete: revealed by swipe-left on touch, by hover/focus on
+          pointer-capable devices (see HistoryEntry.css). */}
+      <div className="entry-card-row__actions">
+        <button
+          type="button"
+          className="entry-card__swipe-btn entry-card__swipe-btn--edit"
+          onClick={closeSwipeAndRun(handleEdit)}
+          disabled={!onEdit}
+          aria-label={`Edit entry from ${entry.date}`}
+        >
+          <Pencil size={18} />
+        </button>
+        <button
+          type="button"
+          className="entry-card__swipe-btn entry-card__swipe-btn--delete"
+          onClick={closeSwipeAndRun(handleDelete)}
+          disabled={isDeleting}
+          aria-label={`Delete entry from ${entry.date}`}
+        >
+          <Trash2 size={18} />
+        </button>
+      </div>
 
       {/* Modal for full view */}
       <EntryModal
