@@ -115,37 +115,24 @@ const GoalsSection = ({ onNavigateToGoals }) => {
   return (
     <div style={{ textAlign: 'left', marginTop: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ 
-          margin: 0, 
-          paddingLeft: 'calc(var(--space-1) / 2)', 
-          paddingTop: 0, 
-          paddingBottom: 'calc(var(--space-1) / 2)', 
+        <h2 style={{
+          margin: 0,
+          paddingLeft: 'calc(var(--space-1) / 2)',
+          paddingTop: 0,
+          paddingBottom: 'calc(var(--space-1) / 2)',
           color: 'var(--text)',
-          fontWeight: '600'
+          fontWeight: '600',
+          fontSize: '1.1rem'
         }}>
-          Goals
+          Active Goals
         </h2>
         <button
+          type="button"
           onClick={onNavigateToGoals}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--accent-600)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '0.9rem',
-            fontWeight: '500',
-            padding: '6px 8px',
-            borderRadius: '6px',
-            transition: 'background-color 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.background = 'var(--accent-bg-softer)'}
-          onMouseLeave={(e) => e.target.style.background = 'none'}
+          className="dashboard-section__view-all"
         >
           View All
-          <ArrowRight size={14} />
+          <ArrowRight size={14} aria-hidden="true" />
         </button>
       </div>
 
@@ -180,11 +167,12 @@ const GoalsSection = ({ onNavigateToGoals }) => {
             <p style={{ margin: 0, fontSize: '1rem', opacity: 0.9 }}>No goals yet.</p>
           </div>
           <button
+            type="button"
             onClick={onNavigateToGoals}
             className="primary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: 44 }}
           >
-            <Plus size={16} />
+            <Plus size={16} aria-hidden="true" />
             Add First Goal
           </button>
         </div>
@@ -319,6 +307,7 @@ const GoalPreviewCard = ({ goal, onMarkComplete }) => {
         disabled={isDoneToday}
         style={{
           width: '100%',
+          minHeight: 44,
           padding: '8px 12px',
           borderRadius: '8px',
           border: 'none',
@@ -336,7 +325,7 @@ const GoalPreviewCard = ({ goal, onMarkComplete }) => {
           transition: 'background-color 0.2s'
         }}
       >
-        <CheckCircle size={14} />
+        <CheckCircle size={14} aria-hidden="true" />
         {isDoneToday ? 'Completed' : 'Mark as done'}
       </button>
     </div>

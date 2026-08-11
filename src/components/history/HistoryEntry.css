@@ -1,0 +1,100 @@
+/*
+ * Entry card edit/delete actions.
+ *
+ * Touch devices: the actions strip sits absolutely positioned behind the
+ * card, flush to the right edge. It's revealed by translating the card
+ * itself left via pointer-drag (see HistoryEntry.jsx) — a classic swipe-row
+ * pattern. No swipe library; plain Pointer Events, same approach as
+ * MusicDock's touch drag (src/components/mood/MusicDock.jsx).
+ *
+ * Pointer-capable devices (mouse/trackpad) can't swipe, so the same actions
+ * are surfaced instead as a small hover/focus toolbar pinned to the card's
+ * top-right corner — the hover affordance's focus-visible equivalent is
+ * `:focus-within` on the row, so keyboard users tabbing to the buttons see
+ * them appear too.
+ */
+
+.entry-card-row {
+  position: relative;
+}
+
+.entry-card-row__actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 128px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px;
+  z-index: 0;
+}
+
+.entry-card-row__actions .entry-card__swipe-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: #fff;
+}
+
+.entry-card__swipe-btn--edit {
+  background: var(--accent-bg);
+}
+
+.entry-card__swipe-btn--delete {
+  background: var(--danger, #dc2626);
+}
+
+.entry-card__swipe-btn:focus-visible {
+  outline: 2px solid var(--accent-600);
+  outline-offset: 2px;
+}
+
+.entry-card__swipe-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The card sits on top of the actions strip by default, hiding it — only
+   the JS-driven translateX drag (touch) exposes it. */
+.entry-card-row > .entry-card {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+}
+
+/* Pointer-capable devices: no swipe gesture exists, so present the same
+   actions as a floating corner toolbar shown on hover/focus instead of
+   behind the (never-translated) card. */
+@media (hover: hover) and (pointer: fine) {
+  .entry-card-row__actions {
+    top: 10px;
+    bottom: auto;
+    right: 10px;
+    width: auto;
+    padding: 0;
+    z-index: 2;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease;
+  }
+
+  .entry-card-row:hover .entry-card-row__actions,
+  .entry-card-row:focus-within .entry-card-row__actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .entry-card-row__actions .entry-card__swipe-btn {
+    box-shadow: var(--shadow-sm);
+  }
+}

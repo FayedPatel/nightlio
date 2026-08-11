@@ -2,34 +2,37 @@
 
 This guide covers deploying Nightlio in production environments with proper security, performance, and reliability.
 
-## Quick Production Setup
+Nightlio ships a single `docker-compose.yml` for every environment — local,
+LAN, and public production. There is no separate prod compose file; for
+public deployments you put your own TLS-terminating reverse proxy (Caddy,
+Traefik, or nginx) in front of the `frontend` service instead.
 
-### Option 1: Simple Production (Recommended for most users)
+## Quick Production Setup
 
 ```bash
 # Clone and configure
-git clone https://github.com/shirsakm/nightlio.git
+git clone https://github.com/FayedPatel/nightlio.git
 cd nightlio
 cp .env.docker .env
 
-# Generate secure secrets
-export SECRET_KEY=$(openssl rand -hex 32)
-export JWT_SECRET=$(openssl rand -hex 32)
+# Generate secure secrets and write them into .env (both start empty and
+# are required — compose refuses to start the api without them)
+sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$(openssl rand -hex 32)/" .env
+sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/" .env
 
-# Update .env file with your secrets and domain
-sed -i "s/your-secret-key-change-this.*/$SECRET_KEY/" .env
-sed -i "s/your-jwt-secret-change-this.*/$JWT_SECRET/" .env
-
-# Deploy
-docker-compose up -d
+# Deploy (builds from source; drop --build to use API_IMAGE/WEB_IMAGE instead)
+docker compose up -d --build
 ```
 
-### Option 2: Full Production with Reverse Proxy
+For a public deployment, also set in `.env`:
 
 ```bash
-# Use production compose file
-docker-compose -f docker-compose.prod.yml up -d
+TRUST_PROXY_HEADERS=1
+CORS_ORIGINS=https://yourdomain.com
 ```
+
+then put a reverse proxy in front of the `frontend` container's port
+(`5173` by default) to terminate TLS — see "Reverse Proxy Setup" below.
 
 ## Environment Configuration
 
@@ -45,16 +48,21 @@ JWT_SECRET=your-different-64-character-secret-here
 # Domain configuration
 CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 
+# Environment selector (D5: APP_ENV replaces RAILWAY_ENVIRONMENT; the old
+# name is still honored as a fallback if already set)
+APP_ENV=production
+
 # Optional features
-ENABLE_GOOGLE_OAUTH=0
 ENABLE_MOOD_MUSIC=0
 # Web3 removed
 DEFAULT_SELF_HOST_ID=selfhost_default_user
 
-# Google OAuth (if enabled)
-GOOGLE_CLIENT_ID=your-google-client-id
-GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_CALLBACK_URL=https://yourdomain.com/auth/callback
+# OIDC single sign-on (optional; any OIDC-compliant provider, Pocket ID
+# recommended -- see docs/DOCKER.md for the bundled compose profile).
+# Leave empty for local-password/single-user auth.
+OIDC_ISSUER_URL=
+OIDC_CLIENT_ID=
+OIDC_CLIENT_SECRET=
 
 # Mood music (if enabled)
 JAMENDO_CLIENT_ID=your-jamendo-client-id
@@ -86,7 +94,11 @@ openssl rand -hex 32
 
 ## SSL/HTTPS Setup
 
-### Option 1: Let's Encrypt with Certbot
+Nightlio's `frontend` container serves plain HTTP only — it does not bundle
+a TLS-terminating nginx config. Run an external reverse proxy in front of it
+and let that proxy handle certificates.
+
+### Option 1: Let's Encrypt with Certbot (behind your own nginx)
 
 ```bash
 # Install certbot
@@ -100,20 +112,15 @@ sudo certbot --nginx -d yourdomain.com
 echo "0 12 * * * /usr/bin/certbot renew --quiet" | sudo crontab -
 ```
 
-### Option 2: Manual SSL Certificate
+Point that external nginx's `proxy_pass` at the `frontend` container's
+published port (`http://localhost:5173` by default) — see "Reverse Proxy
+Setup" below for the site config.
 
-```bash
-# Create ssl directory
-mkdir ssl
+### Option 2: Caddy (automatic HTTPS, no separate certbot step)
 
-# Place your certificates
-cp fullchain.pem ssl/
-cp privkey.pem ssl/
-
-# Update nginx-prod.conf to enable HTTPS section
-# Then use production docker-compose
-docker-compose -f docker-compose.prod.yml up -d
-```
+Caddy obtains and renews Let's Encrypt certificates on its own — no `ssl/`
+directory or manual cert placement needed. See the Caddy example under
+"Reverse Proxy Setup" below.
 
 ## Reverse Proxy Setup
 
@@ -134,7 +141,7 @@ server {
     ssl_certificate_key /path/to/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:5173;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -146,7 +153,6 @@ server {
 ### Traefik
 
 ```yaml
-version: '3.8'
 services:
   nightlio-api:
     # ... your api config
@@ -167,7 +173,7 @@ services:
 
 ```
 yourdomain.com {
-    reverse_proxy localhost:3000
+    reverse_proxy localhost:5173
 }
 ```
 
@@ -177,10 +183,10 @@ yourdomain.com {
 
 ```bash
 # Check service status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Check resource usage
 docker stats
@@ -234,17 +240,16 @@ Add to `/etc/logrotate.d/docker-nightlio`:
 
 ### Docker Security
 
-```bash
-# Run with non-root user
-echo "USER 1000:1000" >> api/Dockerfile
+Both images already run as non-root users out of the box: the api as
+`appuser` (uid 1000, see `api/Dockerfile`) and the frontend on the
+`nginxinc/nginx-unprivileged` base (uid 101, listening on 8080). No
+Dockerfile edits needed.
 
-# Use security options
-# Add to docker-compose.yml:
+Optional extra hardening in `docker-compose.yml`:
+
+```yaml
 security_opt:
   - no-new-privileges:true
-read_only: true
-tmpfs:
-  - /tmp
 ```
 
 ### Firewall Configuration
@@ -277,9 +282,9 @@ sudo apt update && sudo apt upgrade -y
 # Update Docker images
 cd /path/to/nightlio
 git pull
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+docker compose down
+docker compose build --no-cache
+docker compose up -d
 
 # Cleanup old images
 docker image prune -f
@@ -291,7 +296,7 @@ docker image prune -f
 
 ```bash
 # Enable WAL mode for better concurrency
-docker-compose exec api python -c "
+docker compose exec api python -c "
 import sqlite3
 conn = sqlite3.connect('/app/data/nightlio.db')
 conn.execute('PRAGMA journal_mode=WAL;')
@@ -321,17 +326,17 @@ gzip_types text/plain text/css application/json application/javascript text/xml 
 
 1. **Services won't start**
    ```bash
-   docker-compose logs
+   docker compose logs
    # Check port conflicts
-   netstat -tlnp | grep -E ':(80|443|3000|5000)'
+   netstat -tlnp | grep -E ':(80|443|5173|5000)'
    ```
 
 2. **Database corruption**
    ```bash
    # Restore from backup
-   docker-compose down
+   docker compose down
    docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup alpine tar xzf /backup/nightlio-backup.tar.gz -C /data
-   docker-compose up -d
+   docker compose up -d
    ```
 
 3. **High memory usage**
@@ -345,9 +350,9 @@ gzip_types text/plain text/css application/json application/javascript text/xml 
 
 ### Getting Help
 
-1. Check logs: `docker-compose logs -f`
-2. Verify configuration: `docker-compose config`
-3. Test connectivity: `curl -f http://localhost:3000`
+1. Check logs: `docker compose logs -f`
+2. Verify configuration: `docker compose config`
+3. Test connectivity: `curl -f http://localhost:5173`
 4. Create GitHub issue with logs and configuration
 
 ## Scaling

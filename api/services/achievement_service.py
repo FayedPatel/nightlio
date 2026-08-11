@@ -67,6 +67,16 @@ class AchievementService:
             achievement_info["achievement_type"] = achievement_type
             new_achievements.append(achievement_info)
 
+            # Best-effort activity write; must never break the award itself.
+            try:
+                self.db.add_activity(
+                    user_id,
+                    "achievement_unlocked",
+                    {"achievement_type": achievement_type},
+                )
+            except Exception:
+                pass
+
         return new_achievements
 
     # Web3/NFT functionality removed; no-op retained intentionally

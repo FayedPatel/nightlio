@@ -1,0 +1,74 @@
+/* EntryModal (Phase 9d): built on the shared ui-modal (Modal.jsx) — sheet on
+   mobile, centered dialog on desktop, safe-area + swipe-dismiss all come
+   from there for free. This file only styles the entry-specific header
+   (date/time + export/edit/delete) and body pieces. */
+
+.entry-modal-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  min-width: 0;
+}
+
+.entry-modal-title__date {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 1.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-modal-title__time {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: color-mix(in oklab, var(--text), transparent 30%);
+}
+
+/* Export/Edit/Delete: icon-only, so the 44x44 floor is the whole hit area,
+   not just padding around a smaller visible glyph. */
+.entry-modal-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.entry-modal-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.entry-modal-action-btn--primary {
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  color: #fff;
+}
+
+.entry-modal-action-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.entry-modal-heading {
+  margin-bottom: 8px;
+}
+
+.entry-modal-heading h1 {
+  margin: 0;
+}
+
+.entry-modal-tags {
+  margin-bottom: 12px;
+}

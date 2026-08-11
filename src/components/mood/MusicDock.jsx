@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, Square, Disc, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext'; // Consuming your app's global Theme context
+import useMediaQuery from '../../hooks/useMediaQuery';
 
 const MusicDock = () => {
   // Theme state integration
   const { theme = 'dark', cycle: toggleTheme = null } = useTheme() || {};
   const isDarkMode = theme === 'dark';
+  // Shares the 640px mobile breakpoint convention (src/index.css) instead of
+  // an ad-hoc window.innerWidth check, so JS and CSS agree.
+  const isMobile = useMediaQuery('(max-width: 640px)');
 
   const [track, setTrack] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -53,8 +57,7 @@ const MusicDock = () => {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
 
-    const isMobile = windowWidth <= 640;
-    const defaultBottom = isMobile ? 90 : 24; 
+    const defaultBottom = isMobile ? 90 : 24;
     const defaultRight = isMobile ? 16 : 24;
 
     const initialRightBoundary = windowWidth - rect.width - defaultRight;
@@ -203,13 +206,16 @@ const MusicDock = () => {
         /* Desktop Base layout dynamic container specifications */
         .music-dock {
           position: fixed;
-          bottom: 24px;
-          right: 24px;
+          bottom: calc(24px + env(safe-area-inset-bottom));
+          right: calc(24px + env(safe-area-inset-right));
           width: 320px; /* Slightly widened to gracefully host the toggle control button */
           backdrop-filter: blur(12px);
           border-radius: 20px;
           padding: 16px;
-          z-index: 99999;
+          /* Sits above the FAB (var(--z-fab)) but below Modal and Toast
+             (var(--z-modal) / var(--z-toast)) so dialogs/toasts always win.
+             See src/index.css for the full z-index scale. */
+          z-index: var(--z-music-dock);
           display: flex;
           align-items: center;
           gap: 12px;
@@ -248,7 +254,7 @@ const MusicDock = () => {
         }
 
         .music-dock__artist {
-          font-size: 11px;
+          font-size: 12px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -282,13 +288,14 @@ const MusicDock = () => {
           to { transform: rotate(360deg); }
         }
 
-        /* Mobile Portrait Adaptations */
+        /* Mobile Portrait Adaptations — matches the 640px mobile breakpoint
+           convention documented in src/index.css */
         @media (max-width: 640px) {
           .music-dock {
             width: 245px; /* Scaled fractionally to secure layout container bounds with the toggle */
             padding: 10px 12px;
-            bottom: 90px;
-            right: 16px;
+            bottom: calc(90px + env(safe-area-inset-bottom));
+            right: calc(16px + env(safe-area-inset-right));
             border-radius: 16px;
             gap: 10px;
           }
@@ -298,11 +305,11 @@ const MusicDock = () => {
           }
 
           .music-dock__track-name {
-            font-size: 11px;
+            font-size: 12px;
           }
 
           .music-dock__artist {
-            font-size: 10px;
+            font-size: 12px;
           }
           
           .music-dock__disc svg {

@@ -1,19 +1,32 @@
 services:
   api:
-    image: ${API_IMAGE:-ghcr.io/shirsakm/nightlio-api:latest}
+    build:
+      context: ./api
+    image: ${API_IMAGE:-nightlio-api:local}
     container_name: nightlio-api
     restart: unless-stopped
     environment:
+      - APP_ENV=production
       - RAILWAY_ENVIRONMENT=production
-      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-this}
-      - JWT_SECRET=${JWT_SECRET:-your-jwt-secret-change-this}
-      - CORS_ORIGINS=http://localhost:5173,http://localhost:5000
-      - ENABLE_GOOGLE_OAUTH=${ENABLE_GOOGLE_OAUTH:-0}
+      # Required, no insecure fallback: a predictable key lets an attacker
+      # forge auth tokens for any user (see SECURITY.md). Generate with:
+      #   openssl rand -hex 32
+      - SECRET_KEY=${SECRET_KEY:?set SECRET_KEY in .env (openssl rand -hex 32)}
+      - JWT_SECRET=${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -hex 32)}
+      # Overridable from .env: set CORS_ORIGINS to your public origin(s) for
+      # a public deployment (see README "Public deployment").
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:5000}
       - DEFAULT_SELF_HOST_ID=${DEFAULT_SELF_HOST_ID:-selfhost_default_user}
       - DATABASE_PATH=/app/data/nightlio.db
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_CALLBACK_URL=${GOOGLE_CALLBACK_URL:-}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_CALLBACK_URL=${OIDC_CALLBACK_URL:-}
+      - OIDC_SIGNUP_URL=${OIDC_SIGNUP_URL:-}
+      - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-0}
+      - FRONTEND_URL=${FRONTEND_URL:-}
+      - ENABLE_MOOD_MUSIC=${ENABLE_MOOD_MUSIC:-0}
+      - JAMENDO_CLIENT_ID=${JAMENDO_CLIENT_ID:-}
       - PORT=5000
     volumes:
       - nightlio_data:/app/data
@@ -22,24 +35,89 @@ services:
     ports:
       - "5000:5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/api/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/')"]
       interval: 30s
       timeout: 10s
       retries: 3
 
   frontend:
-    image: ${WEB_IMAGE:-ghcr.io/shirsakm/nightlio-frontend:latest}
+    build:
+      context: .
+    image: ${WEB_IMAGE:-nightlio-frontend:local}
     container_name: nightlio-frontend
     restart: unless-stopped
     ports:
-      - "5173:80"
+      # Host 5173 is unchanged; the container-internal port moved from 80
+      # to 8080 because the frontend image now runs nginx as a non-root
+      # user (nginxinc/nginx-unprivileged base -- see root Dockerfile),
+      # and binding a port below 1024 requires root.
+      - "5173:8080"
     depends_on:
       api:
         condition: service_healthy
     networks:
       - nightlio-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET / HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # Pocket ID: optional self-hosted OIDC provider for OIDC_* login.
+  # Disabled by default; enable with:
+  #   docker compose --profile oidc up -d
+  #
+  # Wiring (dev/local):
+  # The issuer URL must be reachable by BOTH the api container (discovery +
+  # token exchange) and your browser (login redirect), AND its hostname must
+  # be a valid WebAuthn RPID domain (Pocket ID is passkey-based). The name
+  # "pocket-id.localhost" satisfies all three: browsers resolve *.localhost
+  # to 127.0.0.1 on their own, the compose network alias below covers the
+  # api container, and the dotted name is a valid RPID. No hosts-file edits.
+  # 1. Start it: docker compose --profile oidc up -d
+  # 2. Open http://pocket-id.localhost:1411, finish Pocket ID admin setup,
+  #    create an OIDC client with callback URL:
+  #      http://localhost:5173/api/auth/callback/oidc
+  # 3. Put the resulting values in .env:
+  #      OIDC_ISSUER_URL=http://pocket-id.localhost:1411
+  #      OIDC_CLIENT_ID=<from Pocket ID admin>
+  #      OIDC_CLIENT_SECRET=<from Pocket ID admin>
+  # 4. docker compose --profile oidc up -d   (restarts api with SSO enabled;
+  #    the login page shows "Sign in with SSO")
+  # Prod: replace both URLs with your real domains (e.g. https://id.yourdomain.com)
+  # — public DNS then serves browser and api alike
+  pocket-id:
+    # Gates this service out of a plain `docker compose up` (no profile
+    # means it never starts) -- without this key the comment above claiming
+    # "disabled by default" was false: the service had no gate at all and
+    # started on every `up`, forcing every fresh clone to also set
+    # POCKET_ID_ENCRYPTION_KEY (below) just to bring up the base stack, and
+    # exposing Pocket ID's admin/setup flow to anyone who didn't opt in.
+    profiles: ["oidc"]
+    image: ghcr.io/pocket-id/pocket-id:latest
+    container_name: nightlio-pocket-id
+    restart: unless-stopped
+    environment:
+      - APP_URL=${POCKET_ID_APP_URL:-http://pocket-id.localhost:1411}
+      - TRUST_PROXY=${POCKET_ID_TRUST_PROXY:-false}
+      # Pocket ID encrypts its stored keys with this; required, >= 16 bytes.
+      # Generate one: openssl rand -hex 32
+      - ENCRYPTION_KEY=${POCKET_ID_ENCRYPTION_KEY:?set POCKET_ID_ENCRYPTION_KEY in .env (openssl rand -hex 32)}
+    volumes:
+      - pocket_id_data:/app/data
+    networks:
+      nightlio-network:
+        aliases:
+          - pocket-id.localhost
+    ports:
+      # localhost-only: *.localhost hostnames (including pocket-id.localhost
+      # above) resolve to 127.0.0.1 in the browser regardless, so this does
+      # not change the documented local-login flow -- it just stops
+      # Pocket ID's pre-passkey /setup endpoint (and the rest of /admin)
+      # from being reachable by anything else on the network/LAN.
+      - "127.0.0.1:1411:1411"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:1411/healthz"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -50,4 +128,6 @@ networks:
 
 volumes:
   nightlio_data:
+    driver: local
+  pocket_id_data:
     driver: local

@@ -4,7 +4,62 @@
   Global design system — calming, modern palette and 8px spacing grid.
   We keep some legacy tokens for compatibility (e.g. --shadow-1, --bg-card).
 */
+
+/*
+  Breakpoint convention (Phase 6a, bumped Phase 6 follow-up)
+  ------------------------------------------------------------
+  Two breakpoints only: 640px (mobile) and 900px (tablet). Anything above
+  900px is desktop. `--bp-mobile` / `--bp-tablet` / `--content-max` below are
+  documentation, NOT functional — `@media` queries cannot read CSS custom
+  properties, so every media query in this codebase must hardcode the raw
+  640px / 900px value that matches these tokens. Treat any other max-width
+  value showing up in a media query as a bug (the Gate 6 grep checks for
+  this). `src/hooks/useMediaQuery.js` is the JS-side equivalent so
+  matchMedia-based logic agrees with the CSS breakpoints.
+
+  Mobile threshold was 600px originally; bumped to 640px because large
+  phones (e.g. Galaxy S25 Ultra) report a ~600-620px CSS viewport width and
+  were landing in the 600-900 tablet band (64px icon rail + wrapped header)
+  instead of the intended phone UI (BottomNav + FAB). 640px keeps every
+  large phone on the phone layout while tablets (768px+ in practice) still
+  get the rail.
+
+  - mobile:  max-width: 640px  (sidebar hidden, BottomNav + FAB shown)
+  - tablet:  640px–900px       (sidebar collapses to a 64px icon-only rail)
+  - desktop: min-width: 900px  (full 280px sidebar, two-column layouts)
+
+  `src/views/LandingPage.css` is the pre-auth marketing page and is exempt:
+  it ships its own breakpoints (640px/960px) tuned to marketing content
+  widths, independent of the authenticated app shell.
+*/
+/*
+  Z-index scale (Phase 9d)
+  ------------------------
+  Single source of truth for stacking order. Every fixed/sticky element
+  must consume one of these tokens (var(--z-*)) instead of a hardcoded
+  number, so the order below is provable by grepping this file rather than
+  reverse-engineering it from scattered numbers:
+
+    header (40) < nav / sidebar+bottom-nav (50) < FAB (60) <
+    MusicDock (70) < dropdown/popover (100) < modal/sheet (1000) <
+    toast (1100)
+
+  Toast sits above modal on purpose — a save-error toast must still be
+  readable while a modal is open.
+*/
 :root {
+  --z-header: 40;
+  --z-nav: 50;
+  --z-fab: 60;
+  --z-music-dock: 70;
+  --z-dropdown: 100;
+  --z-modal: 1000;
+  --z-toast: 1100;
+
+  --bp-mobile: 640px; /* convention only, see comment above */
+  --bp-tablet: 900px; /* convention only, see comment above */
+  --content-max: 1400px;
+
   /* Colors */
   --bg: #F7F8FB;              /* app background */
   --surface: #FFFFFF;          /* cards, panels */

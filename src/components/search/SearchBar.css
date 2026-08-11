@@ -48,7 +48,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  /* icon is 18px; 13px padding on all sides brings the effective hit area
+     to 44x44 without changing the visible glyph size. */
+  padding: 13px;
   transition: color 0.2s;
 }
 
@@ -68,7 +70,7 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   max-height: 400px;
   overflow-y: auto;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   animation: slideDown 0.2s ease;
 }
 
@@ -101,9 +103,11 @@
 
 .search-bar-result-item {
   padding: 12px;
+  min-height: 44px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background-color 0.2s;
+  box-sizing: border-box;
 }
 
 .search-bar-result-item:hover {

@@ -45,9 +45,9 @@ docker-compose up -d
 ## Next Steps
 
 1. **Create your first mood entry** at http://localhost:5173
-2. **Set up backups** (see [DEPLOYMENT.md](DEPLOYMENT.md))
-3. **Enable HTTPS** for production (see [DEPLOYMENT.md](DEPLOYMENT.md))
-4. **Configure Google OAuth** (optional, see [DOCKER.md](DOCKER.md))
+2. **Set up backups** (see [DEPLOYMENT.md](docs/DEPLOYMENT.md))
+3. **Enable HTTPS** for production (see [DEPLOYMENT.md](docs/DEPLOYMENT.md))
+4. **Configure OIDC single sign-on** (optional, see [DOCKER.md](DOCKER.md))
 
 ## Troubleshooting
 
@@ -70,8 +70,8 @@ docker-compose up -d --build
 ```
 
 ### Need help?
-- 📖 [Full Docker Guide](DOCKER.md)
-- 🚀 [Production Guide](DEPLOYMENT.md)
+- 📖 [Full Docker Guide](docs/DOCKER.md)
+- 🚀 [Production Guide](docs/DEPLOYMENT.md)
 - 🐛 [Create an Issue](https://github.com/shirsakm/nightlio/issues)
 
 ---

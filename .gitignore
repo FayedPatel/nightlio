@@ -42,3 +42,18 @@ data/
 
 # Pytest
 *.pytest_cache/
+
+# Prod Test
+docker-compose.prod.yml
+Caddyfile
+
+api/.env
+old/
+
+# Claude Code working files — keep local only
+.claude/
+CLAUDE.md
+PLAN.md
+BASELINE.md
+# Local carrier archive — never commit
+project.zip
