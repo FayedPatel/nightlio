@@ -1,0 +1,69 @@
+import { useState, useEffect, useCallback } from 'react';
+import statsApi from '../services/statsApi';
+
+const CURRENT_YEAR = new Date().getFullYear();
+
+// Loads the Phase 3 extended statistics: one fetch for the aggregate bundle
+// (rolling averages, weekday pattern, volatility, correlations, monthly
+// digest) and one, keyed on the selected year, for the calendar heatmap.
+// Each fetch keeps its own loading/error state so a failing section renders
+// an inline error instead of blanking the whole statistics view.
+export const useExtendedStatistics = () => {
+  const [extended, setExtended] = useState(null);
+  const [extendedLoading, setExtendedLoading] = useState(true);
+  const [extendedError, setExtendedError] = useState(null);
+
+  const [heatmap, setHeatmap] = useState(null);
+  const [heatmapLoading, setHeatmapLoading] = useState(true);
+  const [heatmapError, setHeatmapError] = useState(null);
+  const [heatmapYear, setHeatmapYear] = useState(CURRENT_YEAR);
+
+  const loadExtended = useCallback(async () => {
+    setExtendedLoading(true);
+    setExtendedError(null);
+    try {
+      const data = await statsApi.getExtendedStatistics();
+      setExtended(data);
+    } catch (error) {
+      console.error('Failed to load extended statistics:', error);
+      setExtendedError('Failed to load extended statistics');
+    } finally {
+      setExtendedLoading(false);
+    }
+  }, []);
+
+  const loadHeatmap = useCallback(async (year) => {
+    setHeatmapLoading(true);
+    setHeatmapError(null);
+    try {
+      const data = await statsApi.getHeatmap(year);
+      setHeatmap(data);
+    } catch (error) {
+      console.error('Failed to load mood heatmap:', error);
+      setHeatmapError('Failed to load mood heatmap');
+    } finally {
+      setHeatmapLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadExtended();
+  }, [loadExtended]);
+
+  useEffect(() => {
+    loadHeatmap(heatmapYear);
+  }, [loadHeatmap, heatmapYear]);
+
+  return {
+    extended,
+    extendedLoading,
+    extendedError,
+    heatmap,
+    heatmapLoading,
+    heatmapError,
+    heatmapYear,
+    setHeatmapYear,
+  };
+};
+
+export default useExtendedStatistics;

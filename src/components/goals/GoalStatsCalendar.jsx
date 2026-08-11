@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import apiService from '../../services/api';
+import useMediaQuery from '../../hooks/useMediaQuery';
 
 // Simple monthly calendar that highlights completion days
 const MonthCalendar = ({ year, month, dates = new Set() }) => {
+  // Fixed 28px cells didn't reflow with the grid column width and were well
+  // under the 44px touch-target rule on phones. Cells now scale with their
+  // 1fr grid column via aspect-ratio (square, matches the 7-wide layout at
+  // any container width) with a mobile floor so they can't shrink below a
+  // thumb-safe size on narrow screens.
+  const isMobile = useMediaQuery('(max-width: 640px)');
   const firstDay = new Date(year, month, 1);
   const startWeekday = firstDay.getDay(); // 0-6 Sun..Sat
   const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -24,7 +31,8 @@ const MonthCalendar = ({ year, month, dates = new Set() }) => {
           const isHit = iso && dates.has(iso);
           return (
             <div key={i} style={{
-              height: 28,
+              aspectRatio: '1',
+              minHeight: isMobile ? 40 : 28,
               borderRadius: 6,
       border: '1px solid var(--border)',
       background: isHit ? 'var(--accent-bg)' : 'var(--accent-bg-soft)',

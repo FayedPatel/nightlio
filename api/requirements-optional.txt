@@ -1,12 +1,5 @@
 # Optional dependencies for Nightlio features
-# Install only when enabling Google OAuth or Web3
-
-# Google OAuth
-authlib
-google-auth
-google-auth-oauthlib
+# (authlib, the OIDC client, is a core dependency in requirements.txt)
 
 # Image processing tools for scripts
 Pillow
-
-# Web3 removed

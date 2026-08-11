@@ -112,9 +112,16 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }) => 
       <div className="header__inner">
         <div className="header__left">
           {currentStreak > 0 && (
-            <div className="header__streakBadge">
-              <Flame size={14} strokeWidth={2} />
-              <span>{currentStreak} Day Streak</span>
+            <div
+              className="header__streakBadge"
+              title={`${currentStreak} day streak`}
+              aria-label={`${currentStreak} day streak`}
+            >
+              <Flame size={14} strokeWidth={2} aria-hidden="true" />
+              <span aria-hidden="true">
+                {currentStreak}
+                <span className="header__streakBadge-label"> Day Streak</span>
+              </span>
             </div>
           )}
         </div>

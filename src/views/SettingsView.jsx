@@ -1,13 +1,83 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useConfig } from '../contexts/ConfigContext';
+import apiService from '../services/api';
+
+const ACTIVITY_PAGE_SIZE = 20;
+
+const humanize = (value) =>
+  String(value || '')
+    .replace(/_/g, ' ')
+    .replace(/^./, (c) => c.toUpperCase());
+
+const describeActivity = (activity) => {
+  const meta = activity.metadata || {};
+  switch (activity.event_type) {
+    case 'login':
+      if (meta.method === 'oidc') return 'Signed in with SSO';
+      if (meta.method === 'local') return 'Signed in with username and password';
+      if (meta.method === 'selfhost') return 'Signed in (self-host)';
+      return 'Signed in';
+    case 'entry_created':
+      return meta.date ? `Created a journal entry for ${meta.date}` : 'Created a journal entry';
+    case 'entry_edited':
+      return 'Edited a journal entry';
+    case 'entry_deleted':
+      return 'Deleted a journal entry';
+    case 'achievement_unlocked':
+      return meta.achievement_type
+        ? `Unlocked achievement: ${humanize(meta.achievement_type)}`
+        : 'Unlocked an achievement';
+    case 'goal_completed':
+      return meta.title ? `Completed goal “${meta.title}”` : 'Completed a goal';
+    default:
+      return humanize(activity.event_type) || 'Activity';
+  }
+};
+
+const formatTimestamp = (value) => {
+  if (!value) return '';
+  // SQLite stores UTC "YYYY-MM-DD HH:MM:SS"; normalize to ISO so the
+  // browser renders it in local time.
+  const iso = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
 
 const SettingsView = () => {
   const { config, loading } = useConfig();
+  const [activities, setActivities] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [activityError, setActivityError] = useState(null);
+
+  const loadActivity = useCallback(async (before) => {
+    try {
+      if (before != null) setLoadingMore(true);
+      const data = await apiService.getActivity(before, ACTIVITY_PAGE_SIZE);
+      setActivities((prev) =>
+        before != null ? [...prev, ...(data.activities || [])] : data.activities || [],
+      );
+      setNextCursor(data.next_cursor ?? null);
+      setActivityError(null);
+    } catch {
+      setActivityError('Failed to load activity.');
+    } finally {
+      setActivityLoading(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadActivity();
+  }, [loadActivity]);
 
   const featureFlags = [
     {
-      key: 'enable_google_oauth',
-      label: 'Google Login',
-      description: 'Enable Google OAuth-based authentication.',
+      key: 'enable_oidc',
+      label: 'Single Sign-On (OIDC)',
+      description: 'Enable login through a configured OpenID Connect provider.',
     },
     {
       key: 'enable_mood_music',
@@ -66,6 +136,76 @@ const SettingsView = () => {
             </label>
           );
         })}
+      </section>
+
+      <section
+        style={{
+          marginTop: '1rem',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '1rem',
+          background: 'var(--surface)',
+        }}
+        aria-label="Recent activity"
+      >
+        <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--text)' }}>Recent activity</h3>
+        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          A log of recent logins, entries, goals, and achievements on this account.
+        </p>
+
+        {activityLoading ? (
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>Loading activity...</p>
+        ) : activityError ? (
+          <p style={{ margin: 0, color: 'var(--danger)', fontSize: '0.9rem' }}>{activityError}</p>
+        ) : activities.length === 0 ? (
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            No activity yet. Logins, journal entries, goals, and achievements will show up here.
+          </p>
+        ) : (
+          <>
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {activities.map((activity) => (
+                <li
+                  key={activity.id}
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    justifyContent: 'space-between',
+                    gap: '0.25rem 0.75rem',
+                    padding: '0.5rem 0',
+                    borderTop: '1px solid var(--border)',
+                  }}
+                >
+                  <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>
+                    {describeActivity(activity)}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                    {formatTimestamp(activity.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {nextCursor != null && (
+              <button
+                type="button"
+                onClick={() => loadActivity(nextCursor)}
+                disabled={loadingMore}
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  fontSize: '0.9rem',
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loadingMore ? 'Loading...' : 'Load more'}
+              </button>
+            )}
+          </>
+        )}
       </section>
     </div>
   );

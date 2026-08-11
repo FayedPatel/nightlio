@@ -53,36 +53,107 @@
 .app-main section + section { margin-top: var(--space-5); }
 
 /* Entry two-column layout (desktop) */
-.entry-container { margin-top: 1rem; width: 100%; max-width: 1400px; margin-inline: auto; }
-.entry-mood-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.entry-container { position: relative; margin-top: 1rem; width: 100%; max-width: 1400px; margin-inline: auto; }
+.entry-mood-prompt { margin-top: 1rem; }
+/* Phase 9b: EntryView.jsx inline-style extraction. Everything below was a
+   `style={{...}}` object on the corresponding element; centralized here so
+   the responsive rules (900px block layout, mobile spacing) apply
+   uniformly without fighting inline specificity. */
+.entry-editing-note {
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: color-mix(in oklab, var(--text), transparent 40%);
 }
-.entry-icon-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border-radius: var(--radius-pill);
+.entry-editing-note strong { color: var(--text); }
+.entry-mood-section { margin-bottom: 1rem; }
+.entry-change-mood-btn {
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  min-height: 44px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  box-shadow: var(--shadow-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
   transition: all 0.2s ease;
+}
+.entry-mood-picker-panel {
+  margin-bottom: 1rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.entry-mood-picker-panel__intro {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.entry-mood-picker-panel__footer { margin-top: 0.75rem; text-align: right; }
+.entry-mood-picker-panel__cancel {
+  padding: 0.35rem 0.85rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: color-mix(in oklab, var(--text), transparent 30%);
+}
+.entry-group-manager { margin-top: 1rem; }
+.entry-mood-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.entry-save-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.85rem;
   flex-shrink: 0;
 }
-.entry-icon-button:hover {
-  border-color: color-mix(in oklab, var(--accent-600), transparent 45%);
+/* Primary action in the entry editor — keeps the entry (autosave already
+   covers persistence) and returns to the dashboard. Same accent gradient as
+   other primary surfaces (sidebar active item, header streak badge). */
+.entry-return-button {
+  background: linear-gradient(135deg, var(--accent-bg), var(--accent-bg-2));
+  border: 1px solid transparent;
+  color: #fff;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.entry-return-button:hover {
+  transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
-.entry-grid { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.entry-return-button:active {
+  transform: translateY(0) scale(0.99);
+}
+.entry-return-button:focus-visible {
+  outline: 2px solid var(--accent-600);
+  outline-offset: 2px;
+}
+/* Right column keeps a 320px floor so MDXEditor stays usable immediately
+   above the 900px breakpoint where the two-column layout first turns on
+   beside the full 280px sidebar (the 600-900px tablet band never reaches
+   this rule at all — .entry-grid is display:block there, see the
+   max-width:900 override below). If the floor can't be met, app-main's
+   overflow:auto lets the row scroll horizontally instead of squeezing the
+   editor illegibly. */
+.entry-grid { display: grid; grid-template-columns: minmax(280px, 360px) minmax(320px, 1fr); gap: var(--space-4); align-items: start; }
 .entry-left { position: sticky; top: 0; align-self: start; max-height: calc(100vh - 120px); overflow-y: auto; overflow-x: hidden; padding-right: var(--space-2); }
 .entry-right { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; align-self: start; }
-.entry-savebar { position: sticky; bottom: 0; padding-top: var(--space-2); background: linear-gradient(180deg, rgba(255,255,255,0), var(--surface) 40%); display: flex; justify-content: flex-end; }
 .entry-autosave-status {
   display: inline-flex;
   align-items: center;
@@ -124,17 +195,16 @@
 @media (max-width: 900px) {
   .entry-grid { display: block; }
   .entry-left { position: static; max-height: none; overflow: visible; padding-right: 0; margin-bottom: var(--space-5); }
-  .entry-savebar { position: static; background: transparent; justify-content: stretch; }
 }
 
 /* Sidebar - Full height left rail */
-.sidebar { 
-  position: fixed; 
-  left: 0; 
-  top: 0; 
-  width: 280px; 
-  height: 100vh; 
-  z-index: 50; 
+.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 280px;
+  height: 100vh;
+  z-index: var(--z-nav);
   background: color-mix(in oklab, var(--surface) 60%, var(--bg));
   backdrop-filter: blur(24px); 
   border-right: 1px solid var(--border); 
@@ -219,14 +289,55 @@
   color: #fff;
 }
 
+/* Tablet band (640–900px): collapse the sidebar to a 64px icon-only rail
+   instead of squeezing the full 280px desktop layout. Labels hide, icons
+   center, tooltips fall back to the existing `title` attr on each NavLink.
+   Lower bound bumped from 600 to 640 (Phase 6 follow-up) — large phones
+   (e.g. Galaxy S25 Ultra) report a ~600-620px CSS viewport and were landing
+   in this tablet rail instead of the phone BottomNav UI. */
+@media (min-width: 640px) and (max-width: 900px) {
+  .app-shell { margin-left: 64px; }
+  .app-page.no-sidebar .app-shell { margin-left: 0; }
+
+  .sidebar { width: 64px; }
+  .sidebar__inner { padding: var(--space-3) 8px; align-items: center; }
+
+  .sidebar__brand {
+    /* alignItems is set inline on this element; !important is the only way
+       to re-center it for the icon rail without touching the component. */
+    align-items: center !important;
+    justify-content: center;
+    padding: 0 0 var(--space-2) 0;
+  }
+  .sidebar__brand > div:first-child { justify-content: center; }
+  .sidebar__brand strong,
+  .sidebar__brand > span { display: none; }
+
+  .sidebar__sections,
+  .sidebar__footer { align-items: center; padding: 0; }
+
+  .sidebar__item {
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    gap: 0;
+  }
+  .sidebar__item span { display: none; }
+}
+
 /* Bottom navigation (mobile) */
-.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; justify-content: space-around; padding: 8px 12px calc(env(safe-area-inset-bottom) + 8px); background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--border); z-index: 50; }
-.bottom-nav__item { display: flex; flex-direction: column; align-items: center; gap: 4px; background: transparent; border: none; color: var(--text); }
+.bottom-nav { position: fixed; left: 0; right: 0; bottom: 0; display: none; justify-content: space-around; padding: 8px 12px calc(env(safe-area-inset-bottom) + 8px); background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(12px); border-top: 1px solid var(--border); z-index: var(--z-nav); }
+/* min-width/min-height give each item a >=44x44 effective hit area even
+   though the icon+label content is visually smaller; padding is absorbed
+   by the flex row's justify-content: space-around instead of changing the
+   compact look. */
+.bottom-nav__item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 44px; min-height: 44px; padding: 4px 8px; background: transparent; border: none; color: var(--text); }
 .bottom-nav__item.is-active { color: var(--accent-600); }
-.bottom-nav__label { font-size: 11px; }
+.bottom-nav__label { font-size: 12px; }
 
 /* Floating action button */
-.fab { position: fixed; right: 18px; bottom: 78px; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: #fff; border: none; box-shadow: var(--shadow-md); z-index: 60; }
+.fab { position: fixed; right: calc(18px + env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: #fff; border: none; box-shadow: var(--shadow-md); z-index: var(--z-fab); }
 .fab { display: none; }
 
 /* Mood selector */
@@ -235,7 +346,7 @@
 .mood-button:hover { transform: scale(1.04); border-color: var(--accent-200); box-shadow: var(--shadow-md); }
 .mood-button.selected { transform: scale(1.06); border-color: var(--accent-600); background: var(--accent-bg-soft); }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   #root { margin: 0; border-radius: 0; min-height: 100vh; padding: 0; }
   .app-layout { display: block; }
   .app-shell { margin-left: 0; }
@@ -243,7 +354,11 @@
   .bottom-nav { display: flex; }
   .fab { display: grid; }
 
-  .mood-button { font-size: 2rem; width: 56px; height: 56px; }
+  /* 5 * 52px + 4 * 0.75rem gaps = 308px, comfortably under the 359px budget
+     (375px viewport minus the app-main 16px edge padding on each side) —
+     leaves room even inside the narrower "change mood" panel nested one
+     level deeper (panel padding stacks on top of app-main's). */
+  .mood-button { font-size: 1.85rem; width: 52px; height: 52px; }
 
   /* Tighter spacing for mobile portrait */
   .app-main {
@@ -269,8 +384,11 @@
   }
 }
 
-/* Mobile tweaks for limited vertical space (Landscape OR Portrait with Keyboard) */
-@media (max-height: 600px) {
+/* Mobile tweaks for limited vertical space (Landscape OR Portrait with Keyboard).
+   Height axis, bumped alongside the 600->640 width sweep for convention
+   consistency only — this is not the S25 Ultra width bug, just keeping every
+   ad-hoc 600 out of the stylesheet. */
+@media (max-height: 640px) {
   .bottom-nav, .fab { display: none !important; }
   .app-main { padding-bottom: var(--space-4) !important; }
   
@@ -289,6 +407,11 @@
 .tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-pill); font-size: 0.875rem; line-height: 1; background: var(--accent-chip-bg); color: var(--accent-700); border: 1px solid color-mix(in oklab, var(--accent-600), transparent 45%); }
 html[data-theme="dark"] .tag { color: #fff; }
 .tag--neutral { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+/* Phase 9c: "+n" overflow indicator for capped tag lists (HistoryEntry
+   caps entry.selections before rendering; see MAX_VISIBLE_TAGS there).
+   Same pill shape as .tag so it reads as "one more chip", styled neutral
+   since it isn't a real tag. */
+.tag--overflow { background: transparent; color: color-mix(in oklab, var(--text), transparent 30%); border: 1px dashed var(--border); font-weight: 600; }
 
 /* MDXEditor Custom Styles (condensed) */
 .mdx-editor { min-height: 400px; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -377,7 +500,7 @@ html[data-theme="dark"] .tag { color: #fff; }
   background: color-mix(in oklab, var(--text) 12%, transparent) !important;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .mdx-editor .mdxeditor-toolbar { padding: 6px 8px; flex-wrap: wrap; }
   .mdx-editor .mdxeditor-toolbar button { margin: 2px; }
   .mdx-editor .mdxeditor-rich-text-editor { padding: 15px; min-height: 300px; }
@@ -407,7 +530,7 @@ html[data-theme="dark"] .tag { color: #fff; }
 .search-placeholder__input::placeholder { color: color-mix(in oklab, var(--text), transparent 40%); }
 .search-placeholder__hint { background: color-mix(in oklab, var(--text), transparent 90%); border: 1px solid var(--border); padding: 2px 6px; border-radius: 6px; font-size: 0.8rem; color: color-mix(in oklab, var(--text), transparent 20%); }
 
-@media (max-width: 700px) {
+@media (max-width: 640px) {
   .search-placeholder { height: 36px; }
 }
 
@@ -417,9 +540,55 @@ html[data-theme="dark"] .tag { color: #fff; }
   .card-grid { grid-template-columns: 1fr; }
 }
 
+/* Phase 6c: the history list is the app's main scrollable feed — keep
+   momentum scroll (and any nested scroll such as a swiped card) from
+   chaining into page-level bounce/pull-to-refresh once it hits its bounds. */
+.card-grid { overscroll-behavior: contain; }
+
 /* History entry card preview pieces */
+.entry-card__header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.entry-card__body { min-width: 0; }
 .entry-card__title { margin: 8px 2px 4px; font-weight: 600; color: var(--text); font-size: 1.02rem; }
 .entry-card__excerpt { color: color-mix(in oklab, var(--text), transparent 20%); font-size: 0.95rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; line-clamp: 4; overflow: hidden; }
+.entry-card__tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+
+/* Dashboard "today" card (TodayEntryCard): the same entry-card, laid out as
+   a full-width horizontal row (header | preview | tags) instead of the
+   stacked layout the grid cards (Recent Entries, History list) use — it's
+   the only card on its row, so it has the width to spare, and the task was
+   specifically to stop it reading as squished under the mood row. */
+.entry-card--featured {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+}
+.entry-card--featured .entry-card__header {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  min-width: 180px;
+}
+.entry-card--featured .entry-card__body {
+  flex: 1 1 auto;
+}
+.entry-card--featured .entry-card__title { margin-top: 0; }
+.entry-card--featured .entry-card__excerpt { -webkit-line-clamp: 2; line-clamp: 2; }
+.entry-card--featured .entry-card__tags {
+  flex: 0 0 auto;
+  max-width: 260px;
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .entry-card--featured {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-2);
+  }
+  .entry-card--featured .entry-card__header { min-width: 0; }
+  .entry-card--featured .entry-card__tags { max-width: none; justify-content: flex-start; }
+}
 
 /* Wide section under the panel to host the grid on base background */
 .app-wide { margin: var(--space-3) var(--gutter-page) var(--gutter-page) var(--gutter-page); padding: 0; background: transparent; }
@@ -471,7 +640,7 @@ html[data-theme="dark"] .tag { color: #fff; }
   line-height: 1.2;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .history-header {
     flex-direction: column;
     gap: 1rem;
@@ -515,4 +684,90 @@ html[data-theme="dark"] .tag { color: #fff; }
   .history-header .mood-grid {
     justify-content: center;
   }
+}
+
+/* Dashboard restore (Phase 8c): "Active Goals" / "Recent Entries" preview
+   sections under the home mood picker. Tighter than the pre-Phase-7 layout
+   (32px) rather than the framework's default section+section gap (40px). */
+.app-main .dashboard-section {
+  margin-top: var(--space-4);
+}
+.dashboard-section__view-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: none;
+  color: var(--accent-600);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+.dashboard-section__view-all:hover,
+.dashboard-section__view-all:focus-visible {
+  background: var(--accent-bg-softer);
+}
+.dashboard-section__view-all:focus-visible {
+  outline: 2px solid var(--accent-600);
+  outline-offset: 2px;
+}
+
+/* Today's-entry empty state (dashboard polish pass): replaces the old
+   "Add Entry" tile, whose click handler was a no-op on this route (see
+   TodayEntryPrompt.jsx) — this instead points back at the mood row above,
+   which is the entries' actual starting point. */
+.today-entry-prompt {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-bg-softer);
+  border: 1px dashed color-mix(in oklab, var(--accent-600), transparent 40%);
+  border-radius: var(--radius);
+}
+.today-entry-prompt__icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-bg);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.today-entry-prompt__title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 1rem;
+}
+.today-entry-prompt__subtitle {
+  display: flex;
+  align-items: center;
+  margin: 4px 0 0;
+  color: color-mix(in oklab, var(--text), transparent 25%);
+  font-size: 0.9rem;
+}
+.today-entry-prompt__nudge {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--accent-600);
+  animation: today-entry-prompt-bounce 1.6s ease-in-out infinite;
+}
+@keyframes today-entry-prompt-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-entry-prompt__nudge { animation: none; }
+}
+@media (max-width: 640px) {
+  .today-entry-prompt { flex-direction: column; align-items: flex-start; text-align: left; }
 }

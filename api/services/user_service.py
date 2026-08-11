@@ -1,3 +1,4 @@
+import sqlite3
 from typing import Optional, Dict
 from api.database import MoodDatabase
 
@@ -5,22 +6,6 @@ from api.database import MoodDatabase
 class UserService:
     def __init__(self, db: MoodDatabase):
         self.db = db
-
-    def get_or_create_user(
-        self, google_id: str, email: str, name: str, avatar_url: str = None
-    ) -> Dict:
-        """Get existing user or create new one from Google OAuth data"""
-        # Try to find existing user
-        user = self.db.get_user_by_google_id(google_id)
-
-        if user:
-            # Update last login
-            self.db.update_user_last_login(user["id"])
-            return user
-        else:
-            # Create new user
-            user_id = self.db.create_user(google_id, email, name, avatar_url)
-            return self.db.get_user_by_id(user_id)
 
     def get_user_by_id(self, user_id: int) -> Optional[Dict]:
         """Get user by ID"""
@@ -30,33 +15,70 @@ class UserService:
         """Update user's last login timestamp"""
         self.db.update_user_last_login(user_id)
 
-    # New OAuth handler with idempotent upsert
-    def handle_oauth_login(
+    # --- OIDC ---------------------------------------------------------------
+    def handle_oidc_login(
         self,
-        provider: str,
-        provider_user_id: str,
+        subject: str,
         email: Optional[str],
         name: Optional[str],
         avatar_url: Optional[str] = None,
-    ) -> Dict:
-        """Insert/update a user based on OAuth identity and return the user dict.
+    ) -> Optional[Dict]:
+        """Upsert a user from a validated OIDC identity and return the user.
 
-        For now, this repo stores google identities in a google_id column.
-        We upsert by google_id to remain backward-compatible.
-
-        Returns a dict with at least: id, email, name, avatar_url.
+        Keyed by (provider="oidc", external_id=subject). On the user's first
+        login the default tag groups are seeded and a login activity event is
+        recorded; on every login last_login is refreshed by the upsert.
         """
-        if provider != "google":
-            # Future-proof: only google supported in current schema
-            raise ValueError("Unsupported provider")
-
-        user = self.db.upsert_user_by_google_id(
-            google_id=provider_user_id,
+        first_login = self.db.get_user_by_provider("oidc", subject) is None
+        user = self.db.upsert_oidc_user(
+            external_id=subject,
             email=email,
             name=name,
             avatar_url=avatar_url,
+            provider="oidc",
         )
+        if user and first_login:
+            self.db.ensure_default_groups_for_user(user["id"])
+        if user:
+            self.record_login_activity(user["id"], method="oidc")
         return user
+
+    # --- Local password auth ------------------------------------------------
+    def get_local_user(self, username: str) -> Optional[Dict]:
+        """Return the local-auth user for a username, or None."""
+        return self.db.get_user_by_provider("local", username)
+
+    def get_password_hash(self, user_id: int) -> Optional[str]:
+        """Return the stored password hash for a user, or None."""
+        return self.db.get_user_password_hash(user_id)
+
+    def register_local_user(
+        self,
+        username: str,
+        password_hash: str,
+        email: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Optional[Dict]:
+        """Create a local user (with default groups) and return it.
+
+        Returns None when the username is already taken.
+        """
+        try:
+            user_id = self.db.create_local_user(
+                username, password_hash, email=email, name=name
+            )
+        except sqlite3.IntegrityError:
+            return None
+        self.db.ensure_default_groups_for_user(user_id)
+        return self.db.get_user_by_id(user_id)
+
+    # --- Activity -----------------------------------------------------------
+    def record_login_activity(self, user_id: int, method: str) -> None:
+        """Best-effort login event; never allowed to break the login itself."""
+        try:
+            self.db.add_activity(user_id, "login", {"method": method})
+        except Exception:
+            pass
 
     # Self-host local user provisioning
     def ensure_local_user(

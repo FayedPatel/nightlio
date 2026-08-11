@@ -19,7 +19,7 @@ except Exception:
 
 if __name__ == "__main__":
     # Get environment
-    env = os.getenv("RAILWAY_ENVIRONMENT", "production")
+    env = os.getenv("APP_ENV") or os.getenv("RAILWAY_ENVIRONMENT", "production")
 
     # Create app
     app = create_app(env)
@@ -27,9 +27,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     print(f"Starting Nightlio API on port {port}")
     print(f"Environment: {env}")
-    print(
-        f"Google Client ID: {'Set' if app.config.get('GOOGLE_CLIENT_ID') else 'Missing'}"
-    )
 
     if env == "production":
         cmd = [

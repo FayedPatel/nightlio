@@ -31,12 +31,16 @@ def test_update_mood_entry_returns_updated_payload(client):
     headers = _auth_headers(client)
 
     # Seed two group options to exercise selection replacement logic
-    group_resp = client.post("/api/groups", json={"name": "Energy"})
+    group_resp = client.post("/api/groups", json={"name": "Energy"}, headers=headers)
     assert group_resp.status_code == 201
     group_id = group_resp.get_json()["group_id"]
 
-    option_a = client.post(f"/api/groups/{group_id}/options", json={"name": "Focused"})
-    option_b = client.post(f"/api/groups/{group_id}/options", json={"name": "Relaxed"})
+    option_a = client.post(
+        f"/api/groups/{group_id}/options", json={"name": "Focused"}, headers=headers
+    )
+    option_b = client.post(
+        f"/api/groups/{group_id}/options", json={"name": "Relaxed"}, headers=headers
+    )
     assert option_a.status_code == 201
     assert option_b.status_code == 201
     option_a_id = option_a.get_json()["option_id"]

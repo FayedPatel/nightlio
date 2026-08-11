@@ -1,10 +1,11 @@
-import { Home, BarChart3, Trophy, Settings, Target } from 'lucide-react';
+import { Home, History, BarChart3, Trophy, Settings, Target } from 'lucide-react';
 import { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
 const Sidebar = ({ onLoadStatistics }) => {
   const items = [
     { key: '/dashboard', label: 'Home', icon: Home, end: true },
+    { key: '/dashboard/history', label: 'History', icon: History },
     { key: '/dashboard/goals', label: 'Goals', icon: Target },
     { key: '/dashboard/stats', label: 'Statistics', icon: BarChart3 },
     { key: '/dashboard/achievements', label: 'Achievements', icon: Trophy },

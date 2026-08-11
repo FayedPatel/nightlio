@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { getWeeklyMoodData, movingAverage } from '../../utils/moodUtils';
+import { getWeeklyMoodData } from '../../utils/moodUtils';
 import {
   DEFAULT_METRICS,
   EMPTY_OBJECT,
@@ -8,8 +8,12 @@ import {
   aggregateTagStats,
   buildOverviewCards,
 } from './statisticsViewUtils';
+import { buildRollingOverlay } from './extendedStatsUtils';
 
-const useStatisticsViewData = (statistics, pastEntries, range) => {
+// rollingSeries is the server-computed rolling_averages.series from
+// /api/statistics/extended; null while loading or on error, in which case
+// the trend chart simply renders without the overlay lines.
+const useStatisticsViewData = (statistics, pastEntries, range, rollingSeries = null) => {
   const hasStatistics = Boolean(statistics);
   const metrics = statistics?.statistics ?? DEFAULT_METRICS;
   const currentStreak = statistics?.current_streak ?? 0;
@@ -21,14 +25,14 @@ const useStatisticsViewData = (statistics, pastEntries, range) => {
 
   const weeklyMoodData = useMemo(() => getWeeklyMoodData(pastEntries, range), [pastEntries, range]);
 
-  const movingAverageSeries = useMemo(
-    () => movingAverage(weeklyMoodData.map((d) => d.mood), 7),
-    [weeklyMoodData],
+  const rollingOverlay = useMemo(
+    () => buildRollingOverlay(rollingSeries, range),
+    [rollingSeries, range],
   );
 
   const trendChartData = useMemo(
-    () => weeklyMoodData.map((point, index) => ({ ...point, ma: movingAverageSeries[index] })),
-    [weeklyMoodData, movingAverageSeries],
+    () => weeklyMoodData.map((point, index) => ({ ...point, ...rollingOverlay[index] })),
+    [weeklyMoodData, rollingOverlay],
   );
 
   const moodDistributionData = useMemo(

@@ -29,6 +29,7 @@ import {
   Separator
 } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
+import useMediaQuery from '../hooks/useMediaQuery';
 
 const DEFAULT_MARKDOWN = `# How was your day?
 
@@ -36,6 +37,9 @@ Write about your thoughts, feelings, and experiences...`;
 
 const MyComponent = forwardRef(({ initialMarkdown, onChange }, ref) => {
   const editorRef = useRef(null);
+  // Full toolbar wraps into a messy multi-row mess at 640px. Mobile keeps
+  // only the essentials (bold/italic, lists, link); desktop keeps everything.
+  const isMobile = useMediaQuery('(max-width: 640px)');
 
   useImperativeHandle(ref, () => ({
     getMarkdown: () => {
@@ -100,23 +104,32 @@ const MyComponent = forwardRef(({ initialMarkdown, onChange }, ref) => {
           frontmatterPlugin(),
           diffSourcePlugin({ viewMode: 'rich-text', diffMarkdown: '' }),
           toolbarPlugin({
-            toolbarContents: () => (
-              <>
-                <UndoRedo />
-                <Separator />
-                <BoldItalicUnderlineToggles />
-                <CodeToggle />
-                <Separator />
-                <BlockTypeSelect />
-                <Separator />
-                <CreateLink />
-                <InsertImage />
-                <Separator />
-                <ListsToggle />
-                <InsertTable />
-                <InsertThematicBreak />
-              </>
-            )
+            toolbarContents: () =>
+              isMobile ? (
+                <>
+                  <BoldItalicUnderlineToggles />
+                  <Separator />
+                  <ListsToggle />
+                  <Separator />
+                  <CreateLink />
+                </>
+              ) : (
+                <>
+                  <UndoRedo />
+                  <Separator />
+                  <BoldItalicUnderlineToggles />
+                  <CodeToggle />
+                  <Separator />
+                  <BlockTypeSelect />
+                  <Separator />
+                  <CreateLink />
+                  <InsertImage />
+                  <Separator />
+                  <ListsToggle />
+                  <InsertTable />
+                  <InsertThematicBreak />
+                </>
+              )
           })
         ]}
         className="mdx-editor"
