@@ -26,8 +26,36 @@
   gap: clamp(1.5rem, 4vw, 2.5rem);
 }
 
+/* The auth card is narrower than the base card (Phase 9 inline-style
+   extraction — these were style={{...}} props on the JSX). */
+.login-page__card--auth {
+  max-width: 420px;
+  padding: 3rem 2rem;
+}
+
+.login-page__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.login-page__header {
+  margin-bottom: 0.5rem;
+}
+
+.login-page__body {
+  margin-top: 0.5rem;
+}
+
 .login-page__brand-title {
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.75rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   font-size: clamp(2.25rem, 6vw, 3rem);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -37,8 +65,15 @@
   color: transparent;
 }
 
+.login-page__brand-logo {
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+  display: block;
+}
+
 .login-page__brand-subtitle {
-  margin: 0 0 0.5rem 0;
+  margin: 0;
   color: var(--text);
   opacity: 0.9;
   font-size: clamp(1rem, 3vw, 1.1rem);
@@ -58,9 +93,9 @@
 }
 
 .login-page__description {
-  margin: 0;
+  margin: 0 0 1.5rem 0;
   color: var(--text-muted);
-  font-size: clamp(0.9rem, 2.7vw, 0.95rem);
+  font-size: 0.925rem;
   line-height: 1.5;
 }
 
@@ -70,7 +105,24 @@
   padding: 0.75rem;
   border-radius: 8px;
   font-size: 0.9rem;
-  margin: 0;
+  margin: 0 0 1rem 0;
+}
+
+.login-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.login-page__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.95rem;
 }
 
 .login-page__button {
@@ -137,7 +189,12 @@
   text-decoration: underline;
 }
 
+.login-page__button--secondary {
+  margin-top: 0.75rem;
+}
+
 .login-page__footer {
+  margin-top: 1.75rem;
   font-size: 0.8rem;
   color: var(--text-muted);
   display: flex;
@@ -149,6 +206,7 @@
 
 .login-page__footer svg {
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 @keyframes login-spin {

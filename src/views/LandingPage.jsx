@@ -143,7 +143,21 @@ const LandingPage = () => {
         </div>
       </section>
 
-
+      <section id="self-host" className="landing__section landing__section--alt">
+        <h2>Self-host it in minutes</h2>
+        <div className="landing__quickstart">
+          <pre className="landing__code"><code>{`git clone ${GITHUB_URL}.git
+cd nightlio
+cp .env.docker .env   # set SECRET_KEY + JWT_SECRET
+docker-compose up -d`}</code></pre>
+          <p className="landing__quickstart-note">
+            Two containers, one SQLite file, no external services. Full walkthrough in the{' '}
+            <a href={`${GITHUB_URL}/blob/main/QUICKSTART.md`} target="_blank" rel="noreferrer">
+              quick start guide
+            </a>.
+          </p>
+        </div>
+      </section>
 
       <section id="cta" className="landing__section landing__section--cta">
         <div className="landing__cta">
@@ -161,9 +175,9 @@ const LandingPage = () => {
       <footer className="landing__footer">
         <p className="landing__footer-note">© 2025 Nightlio. Open source and privacy-first.</p>
         <div className="landing__footer-links">
-          <Link to="/privacy">Privacy</Link>
-          <Link to="/terms">Terms</Link>
-          <a href="mailto:hello@nightlio.com">Contact</a>
+          <Link to="/about">About</Link>
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
+          <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer">Contact</a>
         </div>
       </footer>
     </div>

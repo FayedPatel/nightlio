@@ -28,9 +28,8 @@
   - tablet:  640px–900px       (sidebar collapses to a 64px icon-only rail)
   - desktop: min-width: 900px  (full 280px sidebar, two-column layouts)
 
-  `src/views/LandingPage.css` is the pre-auth marketing page and is exempt:
-  it ships its own breakpoints (640px/960px) tuned to marketing content
-  widths, independent of the authenticated app shell.
+  `src/views/LandingPage.css` is the pre-auth marketing page; it ships its
+  own media queries but uses the same 640px/900px values as the app shell.
 */
 /*
   Z-index scale (Phase 9d)

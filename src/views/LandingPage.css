@@ -3,15 +3,15 @@
   background: var(--gradient-background);
   color: var(--text);
   font-family: var(--font-sans, 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
-
-  /* This page keeps its own always-dark surfaces regardless of the visitor's
-     app theme preference (pre-login, there is no theme toggle here) — see
-     the hardcoded slate rgba() surfaces below. The accent is likewise fixed
-     to the app's Dracula purple brand color (ThemeContext.jsx dark palette)
-     rather than following --accent-600, which is teal in the light theme. */
-  --landing-accent: #bd93f9;
-  --landing-accent-2: #a97cf3;
 }
+
+/*
+  Theme-aware (Phase E redesign): every surface and accent below consumes the
+  app tokens from src/index.css instead of the previous hardcoded slate
+  rgba() surfaces and fixed Dracula purple — the page now follows
+  html[data-theme] like the rest of the app (purple in dark, teal in light).
+  Breakpoints align with the app shell's 640px/900px convention.
+*/
 
 .landing__hero {
   padding: clamp(0.5rem, 4vw, 1.0rem) clamp(1.5rem, 8vw, 6rem) clamp(3rem, 8vw, 6rem) clamp(1.5rem, 8vw, 6rem);
@@ -45,7 +45,7 @@
   width: 32px;
   height: 32px;
   border-radius: 0.75rem;
-  box-shadow: 0 10px 20px rgba(30, 41, 59, 0.35);
+  box-shadow: var(--shadow-md);
 }
 
 .landing__brand-name {
@@ -77,7 +77,7 @@
 }
 
 .landing__link {
-  color: var(--accent-500, var(--accent-600));
+  color: var(--accent-600);
   text-decoration: none;
   font-weight: 500;
 }
@@ -102,14 +102,14 @@
 }
 
 .landing .landing__button--primary {
-  background: linear-gradient(135deg, var(--landing-accent), var(--landing-accent-2));
+  background: linear-gradient(135deg, var(--accent-bg), var(--accent-bg-2));
   color: #ffffff;
-  box-shadow: 0 18px 32px rgba(189, 147, 249, 0.3);
+  box-shadow: 0 18px 32px color-mix(in oklab, var(--accent-600) 30%, transparent);
 }
 
 .landing__button--ghost {
   background: transparent;
-  border-color: rgba(148, 163, 184, 0.35);
+  border-color: var(--border);
   color: var(--text);
 }
 
@@ -128,7 +128,7 @@
 
 .landing__button--icon:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--accent-bg-softer);
 }
 
 .landing__button--circle {
@@ -169,10 +169,10 @@
   display: inline-flex;
   padding: 0.4rem 0.85rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(6px);
-  color: var(--accent-100, #f8fafc);
+  background: var(--accent-chip-bg);
+  color: var(--accent-600);
   font-size: 0.8rem;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   margin-bottom: 1.25rem;
@@ -185,8 +185,6 @@
   margin-bottom: 2rem;
 }
 
-
-
 .landing__hero-visual {
   display: flex;
   justify-content: center;
@@ -195,10 +193,10 @@
 .landing__card {
   width: min(360px, 100%);
   padding: 1.75rem;
-  background: rgba(15, 23, 42, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 1.5rem;
-  box-shadow: 0 30px 60px rgba(15, 23, 42, 0.45);
+  box-shadow: var(--shadow-lg);
   backdrop-filter: blur(12px);
 }
 
@@ -251,7 +249,7 @@
 
 .landing__note {
   margin: 0;
-  color: rgba(226, 232, 240, 0.9);
+  color: var(--text-muted);
   line-height: 1.55;
   font-size: 0.95rem;
 }
@@ -268,7 +266,9 @@
 }
 
 .landing__section--alt {
-  background: rgba(15, 23, 42, 0.6);
+  background: color-mix(in oklab, var(--surface) 65%, transparent);
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .landing__grid {
@@ -284,8 +284,8 @@
 .landing__tile {
   padding: 1.75rem;
   border-radius: 1.25rem;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.08);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -314,8 +314,8 @@
 .landing__feature {
   padding: 2rem;
   border-radius: 1.25rem;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
 }
 
@@ -334,8 +334,51 @@
   line-height: 1.55;
 }
 
+/* Self-hosting quickstart strip */
+.landing__quickstart {
+  max-width: 720px;
+  margin: 0 auto;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.landing__code {
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+
+.landing__code code {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.landing__quickstart-note {
+  margin: 0;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.landing__quickstart-note a {
+  color: var(--accent-600);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.landing__quickstart-note a:hover,
+.landing__quickstart-note a:focus-visible {
+  text-decoration: underline;
+}
+
 .landing__section--cta {
-  background: linear-gradient(135deg, rgba(189, 147, 249, 0.32), rgba(169, 124, 243, 0.18));
+  background: linear-gradient(135deg, var(--accent-bg-soft), var(--accent-bg-softer));
 }
 
 .landing__cta {
@@ -354,7 +397,7 @@
 
 .landing__cta p {
   margin: 0;
-  color: rgba(241, 245, 249, 0.8);
+  color: var(--text-muted);
   line-height: 1.6;
 }
 
@@ -371,10 +414,9 @@
   justify-content: space-between;
   align-items: center;
   gap: 1.25rem;
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
 }
-
-
 
 .landing__footer-links {
   display: flex;
@@ -395,12 +437,12 @@
 
 .landing__footer-note {
   margin: 0;
-  color: rgba(148, 163, 184, 0.7);
+  color: var(--text-muted);
   font-size: 0.85rem;
   text-align: left;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 900px) {
   .landing__nav {
     flex-wrap: wrap;
   }
@@ -437,8 +479,6 @@
   .landing__hero-copy p {
     font-size: 1rem;
   }
-
-
 
   .landing__section {
     padding: 3rem 1.5rem;
