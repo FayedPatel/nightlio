@@ -38,8 +38,19 @@ const LoginPage = () => {
   const [message, setMessage] = useState('');
 
   const enableOidc = Boolean(config.enable_oidc);
+  // Server-supplied value that lands in an <a href> — only ever render
+  // absolute http(s) URLs, even if a misconfigured backend passes something
+  // else (file:, javascript:, ...) through.
+  const isSafeHttpUrl = (value) => {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === 'http:' || protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
   const signupUrl =
-    enableOidc && typeof config.signup_url === 'string' && config.signup_url
+    enableOidc && typeof config.signup_url === 'string' && isSafeHttpUrl(config.signup_url)
       ? config.signup_url
       : null;
 

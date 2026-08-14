@@ -10,6 +10,14 @@ function normalizeBaseUrl(raw) {
   v = v.replace(/["']/g, '');
   // Remove trailing slashes
   v = v.replace(/\/+$/g, '');
+  // Reject bases with a non-http(s) scheme (file:, javascript:, ...): a
+  // value like 'file:///x' would otherwise be treated as a path prefix and
+  // resolve to an absolute file: URL in the browser. Fall back to the
+  // relative /api mode instead.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^https?:\/\//i.test(v)) {
+    console.warn(`Ignoring VITE_API_URL with unsupported scheme: ${v}`);
+    return '';
+  }
   return v;
 }
 

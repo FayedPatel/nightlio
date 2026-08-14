@@ -1,3 +1,5 @@
+import pytest
+
 import api.config as config_module
 from api.app import create_app
 
@@ -39,6 +41,29 @@ def test_config_endpoint_signup_url_returned_when_oidc_enabled(monkeypatch):
         assert data["signup_url"] == "https://id.example.com/signup"
     finally:
         # Force a reload for subsequent tests once monkeypatch restores env.
+        monkeypatch.setattr(config_module, "_CONFIG_SINGLETON", None)
+
+
+@pytest.mark.parametrize(
+    "bad_url",
+    [
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "data:text/html,hi",
+        "id.example.com/signup",  # scheme-less
+        "https://",  # no host
+    ],
+)
+def test_config_endpoint_signup_url_null_for_unsafe_values(monkeypatch, bad_url):
+    # The value lands in an <a href> on the login page; anything that is not
+    # an absolute http(s) URL must be dropped server-side.
+    monkeypatch.setenv("OIDC_ISSUER_URL", "https://id.example.com")
+    monkeypatch.setenv("OIDC_SIGNUP_URL", bad_url)
+    monkeypatch.setattr(config_module, "_CONFIG_SINGLETON", None)
+    try:
+        data = _client().get("/api/config").get_json()
+        assert data["signup_url"] is None
+    finally:
         monkeypatch.setattr(config_module, "_CONFIG_SINGLETON", None)
 
 
