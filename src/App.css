@@ -434,7 +434,10 @@
   /* Tighter spacing for mobile portrait */
   .app-main {
     padding: 16px;
-    padding-bottom: 16px; /* Reset to standard padding */
+    /* Clear the fixed bottom nav (8px pad + 44px items + 8px pad + border
+       + safe-area) so the last card scrolls fully above it and stays
+       tappable. */
+    padding-bottom: calc(77px + env(safe-area-inset-bottom));
     margin: 0; /* Remove margin */
     border-radius: 0; /* Full width look */
     border-left: none;
