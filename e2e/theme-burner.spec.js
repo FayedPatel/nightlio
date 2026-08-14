@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, listEntries } from './support/api';
 
 test('header button cycles through all four themes and persists', async ({ page }) => {
@@ -21,7 +21,7 @@ test('header button cycles through all four themes and persists', async ({ page 
   await expect(html).toHaveAttribute('data-theme', 'default');
 });
 
-test('settings theme picker saves the choice to the account', async ({ page, request }) => {
+test('settings theme picker saves the choice to the account', async ({ page, request, apiPort }) => {
   await page.goto('/dashboard/settings');
   const picker = page.getByRole('radiogroup', { name: 'Theme' });
   await expect(picker.getByRole('radio')).toHaveCount(4);
@@ -34,9 +34,9 @@ test('settings theme picker saves the choice to the account', async ({ page, req
   );
 
   // The preference is stored server-side, not just in this browser.
-  const login = await request.post('http://localhost:5000/api/auth/local/login');
+  const login = await request.post(`http://localhost:${apiPort}/api/auth/local/login`);
   const { token } = await login.json();
-  const prefs = await request.get('http://localhost:5000/api/preferences', {
+  const prefs = await request.get(`http://localhost:${apiPort}/api/preferences`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   expect((await prefs.json()).theme).toBe('synthwave');

@@ -1,6 +1,6 @@
 // Regression: new entries used to hardcode today's date; the entry-date row
 // must let the user file an entry under a past day.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, listEntries, isoDaysAgo } from './support/api';
 
 test.beforeEach(async () => {

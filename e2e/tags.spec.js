@@ -1,6 +1,6 @@
 // Categories (groups) + tag selection on entries. The category manager
 // lives inside the entry editor, not Settings.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, listEntries } from './support/api';
 
 test.beforeEach(async () => {

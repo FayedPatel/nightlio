@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, listEntries } from './support/api';
 
 test.beforeEach(async () => {

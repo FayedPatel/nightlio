@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { seedEntry, isoDaysAgo } from './support/api';
 
 test('settings has the appearance picker with all four themes', async ({ page }) => {

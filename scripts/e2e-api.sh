@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Boots the Flask API for Playwright e2e runs: throwaway SQLite DB, OIDC
 # blanked so /api/config reports enable_oidc=false and the frontend
-# auto-logs-in (credential-free self-host mode). Launched by the webServer
-# block in playwright.config.js; not meant for manual use.
+# auto-logs-in (credential-free self-host mode). Launched once per Playwright
+# worker by e2e/support/fixtures.js with E2E_API_PORT set, so parallel
+# workers each get an isolated server + database; not meant for manual use.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+export E2E_API_PORT="${E2E_API_PORT:-5000}"
 export APP_ENV=development
-export DATABASE_PATH="${E2E_DATABASE_PATH:-/tmp/nightlio_e2e.db}"
+export DATABASE_PATH="${E2E_DATABASE_PATH:-/tmp/nightlio_e2e_${E2E_API_PORT}.db}"
 # Fresh rate-limiter DB too: login attempts accumulate there across runs
 # (30/min on /api/auth/local/login) and back-to-back runs would 429.
 export RATE_LIMIT_DB_PATH="${DATABASE_PATH%.db}_rate_limit.db"
@@ -32,6 +34,7 @@ fi
 # Plain app.run without debug: the Werkzeug reloader would fork a child
 # process that can outlive Playwright's teardown.
 exec "$PY" -c "
+import os
 from api.app import create_app
-create_app('development').run(host='127.0.0.1', port=5000)
+create_app('development').run(host='127.0.0.1', port=int(os.environ['E2E_API_PORT']))
 "

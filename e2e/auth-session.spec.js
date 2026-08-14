@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 
 test('logout returns to login and the session can be re-entered', async ({ page }) => {
   await page.goto('/dashboard');

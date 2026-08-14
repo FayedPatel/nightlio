@@ -1,15 +1,19 @@
 import { request } from '@playwright/test';
 
-const API_BASE = 'http://localhost:5000';
+// Each Playwright worker runs its own API instance; the worker fixture in
+// fixtures.js exports its port via E2E_API_PORT (workers are separate
+// processes, so this is naturally per-worker). Read lazily — the fixture
+// sets it after this module is imported.
+const apiBase = () => `http://localhost:${process.env.E2E_API_PORT || 5000}`;
 
 // Bearer-token API context against the e2e backend (credential-free local
 // login; the e2e API always runs with OIDC disabled). The token is cached
-// for the whole run — /api/auth/local/login is rate-limited to 30/min and
+// per worker — /api/auth/local/login is rate-limited to 30/min and
 // every browser page load performs its own auto-login on top of these.
 let cachedToken = null;
 
 export const apiContext = async () => {
-  const ctx = await request.newContext({ baseURL: API_BASE });
+  const ctx = await request.newContext({ baseURL: apiBase() });
   if (!cachedToken) {
     const login = await ctx.post('/api/auth/local/login');
     if (!login.ok()) {

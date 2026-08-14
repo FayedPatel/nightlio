@@ -1,6 +1,6 @@
 // iPhone-viewport checks: bottom nav is the mobile navigation, and the old
 // purple scroll-to-top FAB must stay gone.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries } from './support/api';
 
 test.beforeEach(async () => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 
 test('landing hero, sections, and sign-in CTA', async ({ page }) => {
   await page.goto('/');

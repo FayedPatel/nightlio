@@ -1,7 +1,42 @@
 import { readFileSync } from 'node:fs'
+import http from 'node:http'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+
+// Parallel e2e: each Playwright worker runs its own API instance and stamps
+// its port on every browser request via an x-e2e-api-port header (see
+// e2e/support/fixtures.js), so one dev server can front N isolated
+// backends. Plain requests (normal dev) skip this middleware and use the
+// standard /api proxy below. Implemented as a middleware because vite's
+// proxy is raw http-proxy, which has no per-request router option.
+const e2eApiRouter = () => ({
+  name: 'nightlio-e2e-api-router',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      const port = req.headers['x-e2e-api-port']
+      if (!port || !req.url.startsWith('/api')) return next()
+      const upstream = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: Number(port),
+          path: req.url,
+          method: req.method,
+          headers: { ...req.headers, host: `127.0.0.1:${port}` },
+        },
+        (upstreamRes) => {
+          res.writeHead(upstreamRes.statusCode, upstreamRes.headers)
+          upstreamRes.pipe(res)
+        },
+      )
+      upstream.on('error', () => {
+        res.statusCode = 502
+        res.end('e2e api unreachable')
+      })
+      req.pipe(upstream)
+    })
+  },
+})
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
 
@@ -13,6 +48,7 @@ const THEME_DARK_BG = '#282a36'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    e2eApiRouter(),
     react(),
     VitePWA({
       // We write the service worker by hand (src/sw.js) so navigation requests can

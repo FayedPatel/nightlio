@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 
 test('landing page renders the marketing shell', async ({ page }) => {
   await page.goto('/');

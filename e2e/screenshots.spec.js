@@ -3,7 +3,7 @@
 // Walks the app's main screens at three viewport widths (desktop, Pixel-7
 // class, S25-Ultra class) and saves PNGs under screenshots/ (gitignored).
 // Skipped entirely in normal runs and CI.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, seedEntry, isoDaysAgo } from './support/api';
 
 test.skip(!process.env.SCREENSHOTS, 'set SCREENSHOTS=1 to capture');

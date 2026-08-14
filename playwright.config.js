@@ -1,17 +1,20 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// E2E harness: Playwright boots both servers itself.
-// - API: scripts/e2e-api.sh (fresh SQLite DB, OIDC off -> auto-login).
-//   Health-checked via the unauthenticated GET /api/config.
-// - Frontend: the Vite dev server, because it has the /api proxy (preview
-//   does not) and registers no service worker in dev (devOptions.enabled is
-//   false), so the SW controllerchange reload can't disturb tests.
-//   serviceWorkers: 'block' is belt and braces on top of that.
+// E2E harness.
+// - API: one instance PER WORKER, booted by the worker fixture in
+//   e2e/support/fixtures.js (scripts/e2e-api.sh with E2E_API_PORT set):
+//   own port, own throwaway SQLite file, so workers can run in parallel
+//   without trampling each other's data.
+// - Frontend: one shared Vite dev server. Its /api proxy routes each
+//   request to the right worker's backend via the x-e2e-api-port header
+//   (see vite.config.js). Dev server registers no service worker in dev
+//   (devOptions.enabled is false); serviceWorkers: 'block' is belt and
+//   braces on top of that.
 export default defineConfig({
   testDir: 'e2e',
-  // Single shared API database — parallel specs would trample each other.
+  // Spec files fan out across workers; tests inside a file stay ordered.
   fullyParallel: false,
-  workers: 1,
+  workers: process.env.CI ? 2 : 4,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
@@ -22,15 +25,9 @@ export default defineConfig({
   },
   webServer: [
     // reuseExistingServer stays false: specs wipe entries/goals through the
-    // API, so silently attaching to whatever already listens on these ports
+    // API, so silently attaching to whatever already listens on this port
     // (docker compose, a dev server) would destroy real data. A busy port
     // must fail the run loudly instead.
-    {
-      command: './scripts/e2e-api.sh',
-      url: 'http://localhost:5000/api/config',
-      reuseExistingServer: false,
-      timeout: 60_000,
-    },
     {
       command: 'yarn dev --port 5173 --strictPort',
       url: 'http://localhost:5173',

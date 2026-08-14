@@ -1,7 +1,7 @@
 // Header search is desktop-only: Header.css hides .header__search at
 // max-width 640px, so this spec is excluded from mobile projects in
 // playwright.config.js. Search is client-side over loaded entries.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 import { wipeEntries, seedEntry, isoDaysAgo } from './support/api';
 
 test.beforeEach(async () => {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 
 test('unknown top-level routes render NotFound', async ({ page }) => {
   await page.goto('/definitely-not-a-page');

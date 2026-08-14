@@ -1,7 +1,7 @@
 // Navigation chrome differs by layout: sidebar on desktop, bottom nav on
 // phones (≤640px). Labels differ too (Statistics/Achievements vs
 // Stats/Awards), so the spec branches on viewport width.
-import { test, expect } from '@playwright/test';
+import { test, expect } from './support/fixtures';
 
 const DESKTOP_ITEMS = [
   ['History', /\/dashboard\/history$/],
