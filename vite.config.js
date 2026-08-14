@@ -14,8 +14,21 @@ const e2eApiRouter = () => ({
   name: 'nightlio-e2e-api-router',
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
+      if (!req.url.startsWith('/api')) return next()
       const port = req.headers['x-e2e-api-port']
-      if (!port || !req.url.startsWith('/api')) return next()
+      if (!port) {
+        // Under the e2e harness (E2E=1) nothing listens on the default
+        // proxy target, and stray un-stamped requests exist (Chromium
+        // fires an internal headerless GET after a fetch()-driven PDF
+        // download). Answer them here instead of letting the internal
+        // proxy error with ECONNREFUSED noise. Normal dev falls through.
+        if (process.env.E2E) {
+          res.statusCode = 404
+          res.end('no x-e2e-api-port header')
+          return
+        }
+        return next()
+      }
       const upstream = http.request(
         {
           hostname: '127.0.0.1',

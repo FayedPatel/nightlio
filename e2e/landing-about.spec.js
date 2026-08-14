@@ -14,12 +14,14 @@ test('landing hero, sections, and sign-in CTA', async ({ page }) => {
   await expect(page.locator('#features')).toBeInViewport();
   await expect(page.locator('#self-host')).toBeAttached();
 
-  // The Sign in button routes to the login page.
+  // The Sign in button routes into the login flow. In the credential-free
+  // harness /login auto-logs-in and bounces to /dashboard, so either URL
+  // proves the click worked — asserting only /login races the auto-login.
   await page
     .getByRole('navigation')
     .getByRole('link', { name: 'Sign in' })
     .click();
-  await expect(page).toHaveURL(/\/login$/);
+  await expect(page).toHaveURL(/\/(login|dashboard)$/);
 });
 
 test('landing credits the original project and links the fork', async ({ page }) => {

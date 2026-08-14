@@ -33,7 +33,9 @@ export default defineConfig({
     // (docker compose, a dev server) would destroy real data. A busy port
     // must fail the run loudly instead.
     {
-      command: 'yarn dev --port 5173 --strictPort',
+      // E2E=1 lets the vite e2e router answer un-stamped /api requests
+      // itself instead of proxying them to the (dead) default target.
+      command: 'E2E=1 yarn dev --port 5173 --strictPort',
       url: 'http://localhost:5173',
       reuseExistingServer: false,
       timeout: 60_000,
