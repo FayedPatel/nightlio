@@ -33,6 +33,8 @@ export const createMockApiService = (overrides = {}) => ({
   getUserAchievements: vi.fn().mockResolvedValue([]),
   getAchievementsProgress: vi.fn().mockResolvedValue({}),
   getActivity: vi.fn().mockResolvedValue([]),
+  getPreferences: vi.fn().mockResolvedValue({ theme: null }),
+  updateThemePreference: vi.fn().mockResolvedValue({ status: 'success' }),
   getGoals: vi.fn().mockResolvedValue([]),
   createGoal: vi.fn().mockResolvedValue({}),
   deleteGoal: vi.fn().mockResolvedValue({}),

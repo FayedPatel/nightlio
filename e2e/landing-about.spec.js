@@ -1,37 +1,66 @@
 import { test, expect } from '@playwright/test';
 
-test('landing nav, sections, and CTAs', async ({ page }) => {
+test('landing hero, sections, and sign-in CTA', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.getByRole('heading', { name: /privacy-first mood tracker/i }),
+    page.getByRole('heading', { name: /your moods/i }),
   ).toBeVisible();
 
   // Section anchors exist and the features link scrolls to them.
-  await page.getByRole('link', { name: 'Features', exact: true }).click();
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: 'Features', exact: true })
+    .click();
   await expect(page.locator('#features')).toBeInViewport();
   await expect(page.locator('#self-host')).toBeAttached();
 
-  // Hero CTA routes to login.
-  await page.getByRole('link', { name: 'Get started' }).first().click();
+  // The Sign in button routes to the login page.
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: 'Sign in' })
+    .click();
   await expect(page).toHaveURL(/\/login$/);
 });
 
-test('about page renders and is reachable from landing', async ({ page }) => {
+test('landing credits the original project and links the fork', async ({ page }) => {
+  await page.goto('/');
+  const footer = page.locator('.landing__footer');
+  await expect(footer.getByText(/maintained by Fayed Patel/)).toBeVisible();
+  await expect(
+    footer.getByRole('link', { name: 'original Nightlio' }),
+  ).toHaveAttribute('href', 'https://github.com/shirsakm/nightlio');
+  await expect(footer.getByRole('link', { name: 'GitHub' })).toHaveAttribute(
+    'href',
+    'https://github.com/FayedPatel/nightlio',
+  );
+});
+
+test('about page tells the fork story', async ({ page }) => {
   await page.goto('/');
   await page
     .getByRole('navigation')
     .getByRole('link', { name: 'About', exact: true })
     .click();
   await expect(page).toHaveURL(/\/about$/);
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /why i forked nightlio/i }),
+  ).toBeVisible();
+  await expect(page.getByText(/originally created by/i)).toBeVisible();
 });
 
-test('about page privacy/terms links fall through to 404 (known gap)', async ({
-  page,
-}) => {
-  // Documents current behavior: /privacy and /terms are linked from the
-  // About page but have no routes. If this test starts failing, the links
-  // gained real pages — update it.
+test('features link works from the about page', async ({ page }) => {
+  // Regression: the nav used a bare #features anchor, which was dead when
+  // browsing /about. It now routes to /#features and scrolls there.
+  await page.goto('/about');
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: 'Features', exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/#features$/);
+  await expect(page.locator('#features')).toBeInViewport();
+});
+
+test('unrouted marketing paths render the 404 page', async ({ page }) => {
   await page.goto('/privacy');
   await expect(page.getByText(/404|not found/i).first()).toBeVisible();
 });

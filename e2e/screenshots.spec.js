@@ -34,7 +34,7 @@ for (const vp of VIEWPORTS) {
 
     await page.goto('/');
     await expect(
-      page.getByRole('heading', { name: /privacy-first mood tracker/i }),
+      page.getByRole('heading', { name: /your moods/i }),
     ).toBeVisible();
     await shot('1-landing', { fullPage: true });
 

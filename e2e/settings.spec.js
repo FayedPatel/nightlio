@@ -1,6 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { seedEntry, isoDaysAgo } from './support/api';
 
+test('settings has the appearance picker with all four themes', async ({ page }) => {
+  await page.goto('/dashboard/settings');
+  await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+  const picker = page.getByRole('radiogroup', { name: 'Theme' });
+  for (const label of ['Default', 'Light', 'Dark', 'Synthwave']) {
+    await expect(picker.getByRole('radio', { name: label })).toBeVisible();
+  }
+});
+
 test('settings shows server-managed feature flags read-only', async ({ page }) => {
   await page.goto('/dashboard/settings');
   await expect(page.getByRole('heading', { name: 'Feature flags' })).toBeVisible();

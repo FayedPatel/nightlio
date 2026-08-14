@@ -1,18 +1,49 @@
 import { test, expect } from '@playwright/test';
 import { wipeEntries, listEntries } from './support/api';
 
-test('theme toggle flips data-theme and persists across reload', async ({ page }) => {
+test('header button cycles through all four themes and persists', async ({ page }) => {
   await page.goto('/dashboard');
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-theme', 'default');
 
-  await page.getByLabel('Toggle theme').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  const toggle = page.getByLabel('Toggle theme');
+  await toggle.click();
+  await expect(html).toHaveAttribute('data-theme', 'light');
+  await toggle.click();
+  await expect(html).toHaveAttribute('data-theme', 'dark');
+  await toggle.click();
+  await expect(html).toHaveAttribute('data-theme', 'synthwave');
 
   await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  await expect(html).toHaveAttribute('data-theme', 'synthwave');
 
   await page.getByLabel('Toggle theme').click();
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(html).toHaveAttribute('data-theme', 'default');
+});
+
+test('settings theme picker saves the choice to the account', async ({ page, request }) => {
+  await page.goto('/dashboard/settings');
+  const picker = page.getByRole('radiogroup', { name: 'Theme' });
+  await expect(picker.getByRole('radio')).toHaveCount(4);
+
+  await picker.getByRole('radio', { name: 'Synthwave' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'synthwave');
+  await expect(picker.getByRole('radio', { name: 'Synthwave' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+
+  // The preference is stored server-side, not just in this browser.
+  const login = await request.post('http://localhost:5000/api/auth/local/login');
+  const { token } = await login.json();
+  const prefs = await request.get('http://localhost:5000/api/preferences', {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  expect((await prefs.json()).theme).toBe('synthwave');
+
+  // Leave the account on the default theme for later specs.
+  await picker.getByRole('radio', { name: 'Default' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'default');
 });
 
 test('burner mode disables saving in the editor', async ({ page }) => {
