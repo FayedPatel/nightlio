@@ -7,10 +7,12 @@ def test_public_config_shape():
     assert set(public.keys()) == {
         "enable_oidc",
         "enable_mood_music",
+        "enable_local_login",
         "signup_url",
     }
     assert isinstance(public["enable_oidc"], bool)
     assert isinstance(public["enable_mood_music"], bool)
+    assert isinstance(public["enable_local_login"], bool)
     assert public["signup_url"] is None or isinstance(public["signup_url"], str)
 
 

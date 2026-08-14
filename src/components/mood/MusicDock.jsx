@@ -212,9 +212,9 @@ const MusicDock = () => {
           backdrop-filter: blur(12px);
           border-radius: 20px;
           padding: 16px;
-          /* Sits above the FAB (var(--z-fab)) but below Modal and Toast
-             (var(--z-modal) / var(--z-toast)) so dialogs/toasts always win.
-             See src/index.css for the full z-index scale. */
+          /* Below Modal and Toast (var(--z-modal) / var(--z-toast)) so
+             dialogs/toasts always win. See src/index.css for the full
+             z-index scale. */
           z-index: var(--z-music-dock);
           display: flex;
           align-items: center;

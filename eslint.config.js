@@ -6,7 +6,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'node_modules', 'api/venv/**', '**/site-packages/**', '.claude/**']),
+  globalIgnores(['dist', 'node_modules', 'api/venv/**', '**/site-packages/**', '.claude/**', 'coverage', 'playwright-report', 'test-results', 'screenshots']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -47,9 +47,15 @@ export default defineConfig([
     },
   },
   {
-    files: ['vite.config.js'],
+    files: ['vite.config.js', 'vitest.config.js', 'playwright.config.js'],
     languageOptions: {
       globals: { ...globals.node },
+    },
+  },
+  {
+    files: ['src/**/*.test.{js,jsx}', 'src/test/**', 'e2e/**'],
+    languageOptions: {
+      globals: { ...globals.browser, ...globals.node, ...globals.vitest },
     },
   },
 ])

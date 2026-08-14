@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from api.services.goal_service import GoalService
 from api.utils.auth_middleware import require_auth, get_current_user_id
+from api.utils.validators import validate_completion_date
 
 
 def create_goal_routes(goal_service: GoalService):
@@ -106,7 +107,16 @@ def create_goal_routes(goal_service: GoalService):
             user_id = get_current_user_id()
             if not isinstance(user_id, int):
                 return jsonify({"error": "Unauthorized"}), 401
-            updated = goal_service.increment_progress(user_id, goal_id)
+            # Optional body {date}: log a completion for a past day the user
+            # forgot to record. No body keeps the classic mark-done-today.
+            data = request.get_json(silent=True) or {}
+            date_str = None
+            if data.get("date"):
+                try:
+                    date_str = validate_completion_date(data["date"])
+                except ValueError as e:
+                    return jsonify({"error": str(e)}), 400
+            updated = goal_service.increment_progress(user_id, goal_id, date_str)
             if not updated:
                 return jsonify({"error": "Not found"}), 404
             return jsonify(updated)

@@ -1,7 +1,11 @@
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from pathlib import Path
+from urllib.parse import urlsplit
+
+logger = logging.getLogger(__name__)
 
 # Optional .env loader: only if python-dotenv is installed.
 try:
@@ -175,6 +179,13 @@ class ConfigData:
     # provider owns registration; Nightlio only renders the link.
     OIDC_SIGNUP_URL: Optional[str] = None
 
+    # Hard-disable POST /api/auth/local/login entirely (both the
+    # username/password form and credential-free self-host mode). For
+    # SSO-only deployments that want a single door: even a pre-existing
+    # password account can no longer authenticate. With OIDC unconfigured
+    # AND this set, nobody can log in at all — deliberate admin choice.
+    DISABLE_LOCAL_LOGIN: bool = False
+
     @property
     def oidc_enabled(self) -> bool:
         """OIDC SSO is considered configured when an issuer URL is set."""
@@ -182,6 +193,25 @@ class ConfigData:
 
 
 _CONFIG_SINGLETON: Optional[ConfigData] = None
+
+
+def _safe_http_url(raw: Optional[str]) -> Optional[str]:
+    """Return the value only if it is an absolute http(s) URL, else None.
+
+    Values from env flow into <a href> on the login page; anything with
+    another scheme (file:, javascript:, ...) must never reach the browser.
+    """
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        parts = None
+    if parts and parts.scheme in ("http", "https") and parts.netloc:
+        return value
+    logger.warning("Ignoring configured URL with unsupported scheme: %r", value)
+    return None
 
 
 def _load_config_from_env() -> ConfigData:
@@ -221,7 +251,8 @@ def _load_config_from_env() -> ConfigData:
         SELFHOST_USER_NAME=os.getenv("SELFHOST_USER_NAME") or "Me",
         SELFHOST_USER_EMAIL=os.getenv("SELFHOST_USER_EMAIL") or None,
         FRONTEND_URL=os.getenv("FRONTEND_URL") or None,
-        OIDC_SIGNUP_URL=(os.getenv("OIDC_SIGNUP_URL") or "").strip() or None,
+        OIDC_SIGNUP_URL=_safe_http_url(os.getenv("OIDC_SIGNUP_URL")),
+        DISABLE_LOCAL_LOGIN=is_truthy(os.getenv("DISABLE_LOCAL_LOGIN")),
     )
 
 
@@ -244,6 +275,9 @@ def config_to_public_dict(cfg: ConfigData) -> Dict[str, Any]:
     return {
         "enable_oidc": bool(cfg.oidc_enabled),
         "enable_mood_music": bool(cfg.ENABLE_MOOD_MUSIC),
+        # Lets the login page hide the local form / credential-free entry
+        # when the endpoint would hard-refuse them anyway.
+        "enable_local_login": not cfg.DISABLE_LOCAL_LOGIN,
         # The signup link only makes sense when SSO is on; null otherwise,
         # even if the env var is set.
         "signup_url": cfg.OIDC_SIGNUP_URL if cfg.oidc_enabled else None,

@@ -107,7 +107,10 @@ class AchievementsMixin(DatabaseConnectionMixin):
                     continue
             else:
                 logger.debug("Could not parse date: %s", date_str)
-        return sorted(parsed_dates, reverse=True)
+        # Dedupe: the DISTINCT in the SQL is on the raw string, so the same
+        # day stored once as ISO and once as M/D/YYYY parses to two equal
+        # dates, which would break the consecutive-day streak loop early.
+        return sorted(set(parsed_dates), reverse=True)
 
     def _calculate_streak_from_dates(self, parsed_dates: List[date]) -> int:
         if not parsed_dates:

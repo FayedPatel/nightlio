@@ -95,6 +95,17 @@ def create_auth_routes(user_service: UserService):
         provider exists, anonymous token issuance must fail closed.
         """
         try:
+            # DISABLE_LOCAL_LOGIN hard-refuses the whole endpoint — both the
+            # credentialed form and credential-free self-host mode — so an
+            # SSO-only deployment has exactly one door. Fail closed if the
+            # config cannot be read.
+            try:
+                local_login_disabled = bool(get_config().DISABLE_LOCAL_LOGIN)
+            except Exception:
+                local_login_disabled = True
+            if local_login_disabled:
+                return jsonify({"error": "Local login is disabled"}), 403
+
             data = request.get_json(silent=True) or {}
             username = data.get("username")
             password = data.get("password")

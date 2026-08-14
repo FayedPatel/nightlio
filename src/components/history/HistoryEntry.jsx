@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { getMoodIcon } from '../../utils/moodUtils';
+import { formatEntryDate } from '../../utils/dateUtils';
 import apiService from '../../services/api';
 import { useToast } from '../ui/ToastProvider';
 import EntryModal from './EntryModal';
@@ -22,6 +23,7 @@ const MAX_VISIBLE_TAGS_GRID = 4;
 
 const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
   const { icon: IconComponent, color } = getMoodIcon(entry.mood);
+  const displayDate = formatEntryDate(entry.date);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [open, setOpen] = useState(false);
@@ -190,7 +192,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
         onPointerMove={onCardPointerMove}
         onPointerUp={endCardSwipe}
         onPointerCancel={endCardSwipe}
-        aria-label={`Open entry from ${entry.date}`}
+        aria-label={`Open entry from ${displayDate}`}
         style={{
           border: isHovered ? '1px solid color-mix(in oklab, var(--accent-600), transparent 55%)' : '1px solid var(--border)',
           boxShadow: isHovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
@@ -207,7 +209,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
             <IconComponent size={18} strokeWidth={1.8} />
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, color: 'var(--text)' }}>{entry.date}</span>
+            <span style={{ fontWeight: 700, color: 'var(--text)' }}>{displayDate}</span>
             {entry.created_at && (
               <>
                 <span aria-hidden="true" style={{ color: 'color-mix(in oklab, var(--text), transparent 40%)' }}>•</span>
@@ -254,7 +256,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
           className="entry-card__swipe-btn entry-card__swipe-btn--edit"
           onClick={closeSwipeAndRun(handleEdit)}
           disabled={!onEdit}
-          aria-label={`Edit entry from ${entry.date}`}
+          aria-label={`Edit entry from ${displayDate}`}
         >
           <Pencil size={18} />
         </button>
@@ -263,7 +265,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }) => {
           className="entry-card__swipe-btn entry-card__swipe-btn--delete"
           onClick={closeSwipeAndRun(handleDelete)}
           disabled={isDeleting}
-          aria-label={`Delete entry from ${entry.date}`}
+          aria-label={`Delete entry from ${displayDate}`}
         >
           <Trash2 size={18} />
         </button>

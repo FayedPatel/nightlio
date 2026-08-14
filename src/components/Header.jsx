@@ -10,6 +10,11 @@ import { useToast } from './ui/ToastProvider';
 import './Header.css';
 import SearchBar from './search/SearchBar';
 
+// Module-level so the array identity is stable across renders — an inline
+// array here was part of an unstable SearchBar effect dependency chain that
+// looped renders (see SearchBar.jsx).
+const SEARCH_FIELDS = ['content', 'date'];
+
 const resolveShortcutElement = (target) => {
   if (!target || typeof target !== 'object') {
     return null;
@@ -132,7 +137,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }) => 
               entries={pastEntries}
               onSearch={onSearch}
               placeholder="Search..."
-              searchFields={['content', 'date']}
+              searchFields={SEARCH_FIELDS}
             />
           </div>
         )}
@@ -146,7 +151,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }) => 
               title={`Theme: ${theme}`}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? <Sun size={14} strokeWidth={2} /> : <Moon size={14} strokeWidth={2} />}
+              {theme === 'light' ? <Moon size={14} strokeWidth={2} /> : <Sun size={14} strokeWidth={2} />}
             </button>
 
             <button

@@ -11,6 +11,12 @@ class UserService:
         """Get user by ID"""
         return self.db.get_user_by_id(user_id)
 
+    def get_theme_preference(self, user_id: int) -> Optional[str]:
+        return self.db.get_user_theme(user_id)
+
+    def set_theme_preference(self, user_id: int, theme: str) -> None:
+        self.db.set_user_theme(user_id, theme)
+
     def update_last_login(self, user_id: int):
         """Update user's last login timestamp"""
         self.db.update_user_last_login(user_id)

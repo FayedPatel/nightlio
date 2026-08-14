@@ -1,4 +1,5 @@
 import { Frown, Meh, Smile, Heart } from 'lucide-react';
+import { entryDateKey, formatEntryDate, toISODateKey } from './dateUtils';
 
 // Resolve a CSS variable to its computed value (fallback to provided value)
 const cssVar = (name, fallback) => {
@@ -41,27 +42,27 @@ export const formatEntryTime = (entry) => {
       minute: '2-digit',
       hour12: true,
     });
-    return `${entry.date} at ${time}`;
+    return `${formatEntryDate(entry.date)} at ${time}`;
   }
-  return entry.date;
+  return formatEntryDate(entry.date);
 };
 
 export const getWeeklyMoodData = (pastEntries, days = 7) => {
   const today = new Date();
   const weekData = [];
 
-  // Create entry lookup by date
+  // Create entry lookup by normalised ISO day key so both stored date shapes
+  // (M/D/YYYY and YYYY-MM-DD) land on the same chart day
   const entryLookup = {};
   pastEntries.forEach(entry => {
-    entryLookup[entry.date] = entry;
+    entryLookup[entryDateKey(entry.date)] = entry;
   });
 
   // Get last N days
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toLocaleDateString();
-    const entry = entryLookup[dateStr];
+    const entry = entryLookup[toISODateKey(date)];
 
     weekData.push({
       date: days <= 7

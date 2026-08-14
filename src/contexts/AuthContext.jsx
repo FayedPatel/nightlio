@@ -114,14 +114,16 @@ export const AuthProvider = ({ children }) => {
       // If verify fails, clear token; in single-user self-host mode
       // (no OIDC) immediately local-login again.
       logout();
-      if (!config.enable_oidc) {
+      // Credential-free re-entry only exists when the server allows local
+      // login at all (DISABLE_LOCAL_LOGIN exposes enable_local_login: false).
+      if (!config.enable_oidc && config.enable_local_login !== false) {
         await localLogin();
         return;
       }
     } finally {
       setLoading(false);
     }
-  }, [token, config.enable_oidc, logout, localLogin]);
+  }, [token, config.enable_oidc, config.enable_local_login, logout, localLogin]);
 
   // Cookie-only session check: no token in memory or localStorage, but a
   // previous login may still have left the httpOnly session cookie behind
@@ -158,7 +160,7 @@ export const AuthProvider = ({ children }) => {
       if (cancelled) return;
       if (restored) {
         setLoading(false);
-      } else if (!config.enable_oidc) {
+      } else if (!config.enable_oidc && config.enable_local_login !== false) {
         // In single-user self-host mode, auto-login to the local account on
         // first visit — the credential-free "enter" flow.
         await localLogin();
@@ -169,7 +171,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [token, configLoading, config.enable_oidc, verifyToken, localLogin, restoreFromCookie]);
+  }, [token, configLoading, config.enable_oidc, config.enable_local_login, verifyToken, localLogin, restoreFromCookie]);
 
   const value = {
     user,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useConfig } from '../contexts/ConfigContext';
+import { useTheme, THEMES } from '../contexts/ThemeContext';
 import apiService from '../services/api';
 
 const ACTIVITY_PAGE_SIZE = 20;
@@ -46,6 +47,7 @@ const formatTimestamp = (value) => {
 
 const SettingsView = () => {
   const { config, loading } = useConfig();
+  const { theme, setTheme } = useTheme();
   const [activities, setActivities] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -89,6 +91,42 @@ const SettingsView = () => {
   return (
     <div style={{ textAlign: 'left' }}>
       <h2 style={{ marginTop: 0, color: 'var(--text)' }}>Settings</h2>
+
+      <section
+        style={{
+          marginTop: '1rem',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '1rem',
+          background: 'var(--surface)',
+        }}
+        aria-label="Appearance"
+      >
+        <h3 style={{ marginTop: 0, marginBottom: '0.5rem', color: 'var(--text)' }}>Appearance</h3>
+        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          Pick a theme. Your choice is saved to your account and follows you
+          across devices.
+        </p>
+        <div
+          role="radiogroup"
+          aria-label="Theme"
+          style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}
+        >
+          {THEMES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={theme === option.id}
+              onClick={() => setTheme(option.id)}
+              className={`theme-option${theme === option.id ? ' is-active' : ''}`}
+            >
+              <span className={`theme-option__swatch theme-option__swatch--${option.id}`} aria-hidden="true" />
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section
         style={{
