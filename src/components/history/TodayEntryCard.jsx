@@ -1,11 +1,13 @@
 import HistoryEntry from './HistoryEntry';
 import TodayEntryPrompt from './TodayEntryPrompt';
+import { entryDateKey, todayISO } from '../../utils/dateUtils';
 
 // Exported so other dashboard sections (RecentEntries) can filter out
-// today's own entry using the exact same date-string comparison as this
-// card, instead of re-deriving a slightly different format and risking the
-// two disagreeing about what "today" matched.
-export const getTodayDateString = () => new Date().toLocaleDateString();
+// today's own entry using the exact same comparison as this card, instead
+// of re-deriving a slightly different one and risking the two disagreeing
+// about what "today" matched. Compares normalised ISO day keys so both
+// stored date shapes (M/D/YYYY and YYYY-MM-DD) work.
+export const isTodayEntry = (entry) => entryDateKey(entry.date) === todayISO();
 
 // Home's "today" widget (Phase 7c, dashboard polish pass): shows EVERY entry
 // written today, newest first (multiple same-day entries are a supported
@@ -14,9 +16,8 @@ export const getTodayDateString = () => new Date().toLocaleDateString();
 // normal edit/delete access from HistoryEntry, rendered `featured` as
 // full-width rows. No entry yet: a prompt pointing at the mood row above.
 const TodayEntryCard = ({ pastEntries = [], onDelete, onEdit }) => {
-  const todayStr = getTodayDateString();
   const todaysEntries = pastEntries
-    .filter((entry) => entry.date === todayStr)
+    .filter(isTodayEntry)
     .sort((a, b) => {
       const aTime = new Date(a.created_at || a.time || 0).getTime();
       const bTime = new Date(b.created_at || b.time || 0).getTime();

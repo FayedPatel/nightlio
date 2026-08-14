@@ -14,12 +14,10 @@ export const MONTH_NAMES_FULL = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const pad2 = (value) => String(value).padStart(2, '0');
-
-// Local-time ISO day key (YYYY-MM-DD) matching the backend's normalised day
-// format. Never uses toISOString(), which would shift days across timezones.
-export const toISODateKey = (date) =>
-  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+// Canonical implementation moved to utils/dateUtils; re-exported here so
+// existing imports keep working.
+import { toISODateKey } from '../../utils/dateUtils';
+export { toISODateKey };
 
 export const formatAvg = (value, digits = 2) =>
   value == null || Number.isNaN(value) ? '—' : Number(value).toFixed(digits);

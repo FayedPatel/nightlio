@@ -65,6 +65,49 @@
   color: color-mix(in oklab, var(--text), transparent 40%);
 }
 .entry-editing-note strong { color: var(--text); }
+/* Entry-date row (new entries only): native date input + quick chips for
+   backdating a forgotten day. */
+.entry-date-section { margin-bottom: 1rem; }
+.entry-date-section__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: color-mix(in oklab, var(--text), transparent 40%);
+}
+.entry-date-section__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.entry-date-section__input {
+  padding: 0.4rem 0.7rem;
+  min-height: 44px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  color-scheme: light dark;
+}
+.entry-date-chip {
+  padding: 0.4rem 0.9rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.entry-date-chip:hover { border-color: var(--accent-600); }
+.entry-date-chip.is-active {
+  background: var(--accent-bg-softer);
+  border-color: color-mix(in oklab, var(--accent-600), transparent 45%);
+}
 .entry-mood-section { margin-bottom: 1rem; }
 .entry-change-mood-btn {
   margin-top: 0.75rem;

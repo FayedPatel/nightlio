@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pencil, Trash2, Download } from 'lucide-react';
 import apiService from '../../services/api';
 import { getMoodLabel } from '../../utils/moodUtils';
+import { entryDateKey, formatEntryDate } from '../../utils/dateUtils';
 import Modal from '../ui/Modal';
 import './EntryModal.css';
 
@@ -45,7 +46,7 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
     setIsExporting(true);
     try {
       const timeStr = entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-      const dateStr = `${entry.date}${timeStr ? ` at ${timeStr}` : ''}`;
+      const dateStr = `${formatEntryDate(entry.date)}${timeStr ? ` at ${timeStr}` : ''}`;
 
       const moodLabel = entry.mood ? getMoodLabel(entry.mood) : '';
 
@@ -68,7 +69,7 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Entry_${entry.date || 'Export'}.pdf`;
+      a.download = `Entry_${entryDateKey(entry.date) || 'Export'}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -88,7 +89,7 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }) =>
 
   const modalTitle = (
     <span className="entry-modal-title">
-      <span className="entry-modal-title__date">{entry.date}</span>
+      <span className="entry-modal-title__date">{formatEntryDate(entry.date)}</span>
       {timeStr && <span className="entry-modal-title__time">{timeStr}</span>}
     </span>
   );

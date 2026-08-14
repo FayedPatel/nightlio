@@ -1,5 +1,6 @@
 import { Frown, Meh, Smile, Heart } from 'lucide-react';
 import { getMoodIcon } from '../../utils/moodUtils';
+import { entryDateKey, toISODateKey } from '../../utils/dateUtils';
 
 export const RANGE_OPTIONS = Object.freeze([7, 30, 90]);
 
@@ -56,11 +57,15 @@ export const formatTrendTooltip = (value, _name, props) => {
   return [label, 'Mood'];
 };
 
+// ISO day key for calendar bucketing. Stored date strings go through
+// entryDateKey (never new Date('YYYY-MM-DD'), which parses as UTC midnight
+// and can shift the day in negative-offset timezones).
 export const normalizeDateKey = (date) => {
   if (!date) return null;
-  const instance = date instanceof Date ? date : new Date(date);
-  if (Number.isNaN(instance.getTime())) return null;
-  return instance.toLocaleDateString();
+  if (date instanceof Date) {
+    return Number.isNaN(date.getTime()) ? null : toISODateKey(date);
+  }
+  return entryDateKey(date) || null;
 };
 
 export const buildMoodDistributionData = (moodDistribution) =>
