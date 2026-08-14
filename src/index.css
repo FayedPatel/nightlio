@@ -232,7 +232,10 @@ html[data-theme="light"] {
   --fg-body: var(--text);
 }
 
-html[data-theme="dark"] {
+/* "Default" theme: the app's signature Dracula-purple dark look. (Was
+   data-theme="dark" before the 4-theme system; "dark" is now the neutral
+   near-black theme below.) */
+html[data-theme="default"] {
   /* Dracula palette */
   --bg: #282a36;               /* background */
   --surface: #343746;          /* elevated surfaces */
@@ -291,5 +294,108 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 
-/* Subtle hover in dark mode */
-html[data-theme="dark"] button:hover { background-color: rgba(255,255,255,0.04); box-shadow: var(--shadow-sm); }
+/* Neutral near-black "Dark" theme: cool blue accent, flat ground. */
+html[data-theme="dark"] {
+  --bg: #0b0c10;
+  --surface: #14161d;
+  --text: #e6e8ee;
+  --text-muted: #8f95a3;
+  --border: #262a35;
+  --bg-card: rgba(20,22,29,0.92);
+  --fg-body: var(--text);
+
+  --accent-50:  #eef3fe;
+  --accent-100: #dce7fd;
+  --accent-200: #bcd2fb;
+  --accent-400: #93b4f9;
+  --accent-500: #86abf8;
+  --accent-600: #7aa2f7;       /* primary */
+  --accent-700: #5d86e0;
+
+  --accent-bg: color-mix(in oklab, var(--accent-600) 80%, #000);
+  --accent-bg-2: color-mix(in oklab, var(--accent-700) 80%, #000);
+  --accent-bg-soft: color-mix(in oklab, var(--accent-600) 20%, transparent);
+  --accent-bg-softer: color-mix(in oklab, var(--accent-600) 14%, transparent);
+  --accent-chip-bg: color-mix(in oklab, var(--accent-600) 22%, transparent);
+
+  --ring: 0 0 0 3px rgba(122,162,247,0.35);
+
+  --success: #4ade80;
+  --danger: #f87171;
+  --mood-1: #f87171; /* red */
+  --mood-2: #fb923c; /* orange */
+  --mood-3: #fde047; /* yellow */
+  --mood-4: #4ade80; /* green */
+  --mood-5: #60a5fa; /* blue */
+  --overlay: rgba(0,0,0,0.6);
+  --skeleton-a: rgba(255,255,255,0.05);
+  --skeleton-b: rgba(255,255,255,0.10);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.25);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.35), 0 3px 6px rgba(0,0,0,0.25);
+  --shadow-1: var(--shadow-md);
+  --shadow-2: var(--shadow-lg);
+  --shadow-3: 0 20px 60px rgba(0,0,0,0.4);
+
+  --gradient-background: var(--bg);
+
+  color-scheme: dark;
+}
+
+/* "Synthwave" theme: neon pink/cyan on deep indigo, sunset-glow ground.
+   Matches the landing page's synthwave identity. */
+html[data-theme="synthwave"] {
+  --bg: #16102e;
+  --surface: #221743;
+  --text: #f2e9ff;
+  --text-muted: #a794d8;
+  --border: #3c2a6b;
+  --bg-card: rgba(34,23,67,0.92);
+  --fg-body: var(--text);
+
+  --accent-50:  #ffeefb;
+  --accent-100: #ffddf6;
+  --accent-200: #ffbbee;
+  --accent-400: #ff7fe0;
+  --accent-500: #ff64da;
+  --accent-600: #ff4fd8;       /* primary — hot pink */
+  --accent-700: #d63bb4;
+
+  --accent-bg: color-mix(in oklab, var(--accent-600) 78%, #12002a);
+  --accent-bg-2: color-mix(in oklab, var(--accent-700) 78%, #12002a);
+  --accent-bg-soft: color-mix(in oklab, var(--accent-600) 22%, transparent);
+  --accent-bg-softer: color-mix(in oklab, var(--accent-600) 15%, transparent);
+  --accent-chip-bg: color-mix(in oklab, var(--accent-600) 24%, transparent);
+
+  --ring: 0 0 0 3px rgba(255,79,216,0.4);
+
+  --success: #00e5a0;
+  --danger: #ff5577;
+  --mood-1: #ff2975; /* neon red-pink */
+  --mood-2: #ff8c42; /* orange */
+  --mood-3: #ffd319; /* yellow */
+  --mood-4: #00e5a0; /* teal-green */
+  --mood-5: #00cfff; /* cyan */
+  --overlay: rgba(10,4,30,0.65);
+  --skeleton-a: rgba(255,255,255,0.06);
+  --skeleton-b: rgba(255,255,255,0.12);
+
+  --shadow-sm: 0 1px 2px rgba(10,4,30,0.4);
+  --shadow-md: 0 4px 14px rgba(255,41,117,0.10), 0 2px 4px rgba(10,4,30,0.4);
+  --shadow-lg: 0 10px 30px rgba(255,41,117,0.14), 0 3px 8px rgba(10,4,30,0.45);
+  --shadow-1: var(--shadow-md);
+  --shadow-2: var(--shadow-lg);
+  --shadow-3: 0 20px 60px rgba(255,41,117,0.18);
+
+  --gradient-background: radial-gradient(circle at top, rgba(255,41,117,0.16), transparent 55%),
+                         radial-gradient(circle at 15% 30%, rgba(0,207,255,0.10), transparent 45%),
+                         linear-gradient(180deg, var(--bg) 0%, #1d1240 100%);
+
+  color-scheme: dark;
+}
+
+/* Subtle hover on all dark-ground themes */
+html[data-theme="default"] button:hover,
+html[data-theme="dark"] button:hover,
+html[data-theme="synthwave"] button:hover { background-color: rgba(255,255,255,0.04); box-shadow: var(--shadow-sm); }

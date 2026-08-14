@@ -109,6 +109,39 @@
   border-color: color-mix(in oklab, var(--accent-600), transparent 45%);
 }
 .entry-mood-section { margin-bottom: 1rem; }
+/* Settings > Appearance theme picker */
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.theme-option:hover { border-color: var(--accent-600); }
+.theme-option.is-active {
+  background: var(--accent-bg-softer);
+  border-color: color-mix(in oklab, var(--accent-600), transparent 40%);
+  font-weight: 600;
+}
+.theme-option__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+/* Swatches preview each theme's signature ground + accent */
+.theme-option__swatch--default { background: linear-gradient(135deg, #282a36 50%, #bd93f9 50%); }
+.theme-option__swatch--light { background: linear-gradient(135deg, #f7f8fb 50%, #2f7e89 50%); }
+.theme-option__swatch--dark { background: linear-gradient(135deg, #0b0c10 50%, #7aa2f7 50%); }
+.theme-option__swatch--synthwave { background: linear-gradient(135deg, #16102e 50%, #ff4fd8 50%); }
 .entry-change-mood-btn {
   margin-top: 0.75rem;
   padding: 0.4rem 0.9rem;
@@ -443,7 +476,9 @@
 .entry-card .timestamp { color: color-mix(in oklab, var(--text), transparent 20%); font-size: 0.9rem; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-2); }
 .tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-pill); font-size: 0.875rem; line-height: 1; background: var(--accent-chip-bg); color: var(--accent-700); border: 1px solid color-mix(in oklab, var(--accent-600), transparent 45%); }
-html[data-theme="dark"] .tag { color: #fff; }
+html[data-theme="default"] .tag,
+html[data-theme="dark"] .tag,
+html[data-theme="synthwave"] .tag { color: #fff; }
 .tag--neutral { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 /* Phase 9c: "+n" overflow indicator for capped tag lists (HistoryEntry
    caps entry.selections before rendering; see MAX_VISIBLE_TAGS there).

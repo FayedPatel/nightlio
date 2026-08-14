@@ -151,7 +151,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }) => 
               title={`Theme: ${theme}`}
               aria-label="Toggle theme"
             >
-              {theme === 'dark' ? <Sun size={14} strokeWidth={2} /> : <Moon size={14} strokeWidth={2} />}
+              {theme === 'light' ? <Moon size={14} strokeWidth={2} /> : <Sun size={14} strokeWidth={2} />}
             </button>
 
             <button

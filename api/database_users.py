@@ -43,6 +43,22 @@ class UsersMixin(DatabaseConnectionMixin):
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def get_user_theme(self, user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            cursor = conn.execute(
+                "SELECT theme_preference FROM users WHERE id = ?", (user_id,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def set_user_theme(self, user_id: int, theme: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE users SET theme_preference = ? WHERE id = ?",
+                (theme, user_id),
+            )
+            conn.commit()
+
     def update_user_last_login(self, user_id: int) -> None:
         with self._connect() as conn:
             conn.execute(

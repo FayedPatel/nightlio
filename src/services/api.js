@@ -214,6 +214,17 @@ class ApiService {
 
   // Activity feed endpoint (keyset-paginated: pass the previous page's
   // next_cursor as `before` to fetch older events)
+  async getPreferences() {
+    return this.request('/api/preferences');
+  }
+
+  async updateThemePreference(theme) {
+    return this.request('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ theme }),
+    });
+  }
+
   async getActivity(before, limit) {
     const params = new URLSearchParams();
     if (before != null) params.set('before', String(before));

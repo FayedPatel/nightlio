@@ -4,7 +4,7 @@ import LoginPage from "./components/auth/LoginPage";
 import NotFound from "./views/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { BurnerProvider } from "./contexts/BurnerContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Header from "./components/Header";
@@ -20,6 +20,7 @@ import { ToastProvider } from "./components/ui/ToastProvider";
 import AchievementsView from "./views/AchievementsView";
 import LandingPage from "./views/LandingPage";
 import AboutPage from "./views/AboutPage";
+import apiService from "./services/api";
 import { useMoodData } from "./hooks/useMoodData";
 import { useGroups } from "./hooks/useGroups";
 import { useStatistics } from "./hooks/useStatistics";
@@ -36,6 +37,22 @@ const MusicDockGate = () => {
 const AppContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { syncFromServer } = useTheme();
+
+  // Pull the account's saved theme once per session; the server copy wins
+  // over whatever this browser had locally.
+  useEffect(() => {
+    let cancelled = false;
+    apiService
+      .getPreferences()
+      .then((prefs) => {
+        if (!cancelled && prefs?.theme) syncFromServer(prefs.theme);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [syncFromServer]);
   
   // Custom hooks
   const { pastEntries, setPastEntries, loading: historyLoading, error: historyError, refreshHistory } = useMoodData();
