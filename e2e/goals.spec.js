@@ -104,9 +104,11 @@ test('log a goal completion for a past day', async ({ page }) => {
   await seedGoal({ title: 'Water Plants', frequency: 5 });
   await page.goto('/dashboard/goals');
 
-  await page.getByRole('button', { name: 'Log past day for Water Plants' }).click();
-  await page.getByRole('button', { name: 'Yesterday' }).click();
-  await page.getByRole('button', { name: 'Log it' }).click();
+  // exact: true — the goal card itself is a role=button whose accessible
+  // name concatenates its children, so a substring match hits both.
+  await page.getByRole('button', { name: 'Log past day for Water Plants', exact: true }).click();
+  await page.getByRole('button', { name: 'Yesterday', exact: true }).click();
+  await page.getByRole('button', { name: 'Log it', exact: true }).click();
   await expect(page.getByText(/Logged for/)).toBeVisible();
 
   const yesterday = isoDaysAgo(1);

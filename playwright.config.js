@@ -21,16 +21,20 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: [
+    // reuseExistingServer stays false: specs wipe entries/goals through the
+    // API, so silently attaching to whatever already listens on these ports
+    // (docker compose, a dev server) would destroy real data. A busy port
+    // must fail the run loudly instead.
     {
       command: './scripts/e2e-api.sh',
       url: 'http://localhost:5000/api/config',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
     {
       command: 'yarn dev --port 5173 --strictPort',
       url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: false,
       timeout: 60_000,
     },
   ],
