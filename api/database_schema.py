@@ -114,7 +114,8 @@ class DatabaseSchemaMixin(DatabaseConnectionMixin):
                 last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 auth_provider TEXT,
                 external_id TEXT,
-                password_hash TEXT
+                password_hash TEXT,
+                theme_preference TEXT
             )
             """
         )
@@ -144,6 +145,12 @@ class DatabaseSchemaMixin(DatabaseConnectionMixin):
             if "password_hash" not in cols:
                 conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
                 logger.info("Users table migrated to include password_hash")
+            if "theme_preference" not in cols:
+                # Per-user UI theme (default/light/dark/synthwave). NULL means
+                # the client falls back to its default; validation lives in
+                # the preferences route.
+                conn.execute("ALTER TABLE users ADD COLUMN theme_preference TEXT")
+                logger.info("Users table migrated to include theme_preference")
 
             conn.execute(
                 "UPDATE users SET external_id = google_id WHERE external_id IS NULL"

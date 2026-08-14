@@ -2,11 +2,16 @@ import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
 import './SearchBar.css';
 
+// Stable default (a default-parameter array literal would be a fresh
+// identity every render and re-trigger the search effect).
+const DEFAULT_SEARCH_FIELDS = ['content', 'date'];
+const EMPTY_ENTRIES = [];
+
 export default function SearchBar({
-  entries = [],
+  entries = EMPTY_ENTRIES,
   onSearch,
   placeholder = "Search entries...",
-  searchFields = ['content', 'date']  // Which fields to search
+  searchFields = DEFAULT_SEARCH_FIELDS  // Which fields to search
 }) {
   const [query, setQuery] = useState('');
 

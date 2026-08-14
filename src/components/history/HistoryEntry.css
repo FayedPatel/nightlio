@@ -16,6 +16,10 @@
 
 .entry-card-row {
   position: relative;
+  /* As a .card-grid item the row stretches to the tallest card in its grid
+     row; flex passes that height down so cards stay equal-height no matter
+     how long each entry's text is. */
+  display: flex;
 }
 
 .entry-card-row__actions {
@@ -70,6 +74,7 @@
   position: relative;
   z-index: 1;
   background: var(--surface);
+  flex: 1;
 }
 
 /* Pointer-capable devices: no swipe gesture exists, so present the same

@@ -1,12 +1,9 @@
 import { ChevronUp, Moon } from 'lucide-react';
 
-// Home's empty "today" state. Used to be the shared AddEntryCard tile, but
-// on the dashboard route its click handler is a no-op: it dispatches
-// `nightlio:new-entry`, which App.jsx's listener only turns into a
-// `window.scrollTo({ top: 0 })` when already on `/dashboard` — it never
-// opens the editor. Mood selection is the real entry point (MoodPicker's
-// onMoodSelect navigates straight into EntryView), so this state points at
-// the mood row above instead of offering a second, dead "Add Entry" button.
+// Home's empty "today" state. Deliberately not the AddEntryCard tile: on
+// home the mood row is already visible right above, so a card that (like
+// AddEntryCard) navigates to the editor's mood prompt would be a redundant
+// detour. This state just points at the mood row instead.
 const TodayEntryPrompt = () => (
   <div className="today-entry-prompt" role="note">
     <div className="today-entry-prompt__icon" aria-hidden="true">

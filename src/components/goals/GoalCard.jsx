@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Target, Trash2, CheckCircle, Calendar } from 'lucide-react';
+import { Target, Trash2, CheckCircle, Calendar, CalendarPlus } from 'lucide-react';
 import { useToast } from '../ui/ToastProvider';
+import { todayISO, yesterdayISO } from '../../utils/dateUtils';
 import GoalStatsCalendar from './GoalStatsCalendar';
 import Modal from '../ui/Modal';
 
-const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
+const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showBackdate, setShowBackdate] = useState(false);
+  const [backdate, setBackdate] = useState(() => yesterdayISO());
   const { show } = useToast();
 
   const handleDelete = async () => {
@@ -23,8 +26,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
   };
 
   const handleMarkComplete = () => {
-    const d = new Date();
-    const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = todayISO();
     try {
       const localVal = typeof localStorage !== 'undefined' ? localStorage.getItem(`goal_done_${goal.id}`) : null;
       if (localVal === today) {
@@ -46,11 +48,16 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
     show('Progress updated!', 'success');
   };
 
+  const handleLogDay = () => {
+    if (!backdate || backdate > todayISO()) return;
+    onLogDay?.(goal.id, backdate);
+    setShowBackdate(false);
+  };
+
   const progressPercentage = (goal.completed / goal.total) * 100;
   const isCompleted = goal.completed >= goal.total;
   const isDoneToday = (() => {
-    const d = new Date();
-    const today = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const today = todayISO();
     try {
       const localVal = typeof localStorage !== 'undefined' ? localStorage.getItem(`goal_done_${goal.id}`) : null;
       return (localVal === today) || goal.last_completed_date === today || goal._doneToday === true;
@@ -71,7 +78,12 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
         position: 'relative',
         opacity: isDeleting ? 0.5 : 1,
         pointerEvents: isDeleting ? 'none' : 'auto',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        // Flex column + marginTop: auto on the progress block pins the
+        // progress/actions group to the card bottom, so buttons line up
+        // across cards whose descriptions wrap differently.
+        display: 'flex',
+        flexDirection: 'column'
       }}
       role="button"
       tabIndex={0}
@@ -150,7 +162,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
       )}
 
       {/* Progress Bar */}
-      <div style={{ marginBottom: '12px' }}>
+      <div style={{ marginBottom: '12px', marginTop: 'auto' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -205,6 +217,92 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress }) => {
         <CheckCircle size={14} />
         {isDoneToday ? 'Completed' : 'Mark as done'}
       </button>
+
+      {/* Backdate: log a completion for a day the user forgot to record.
+          stopPropagation on the wrapper keeps clicks and date-input typing
+          from opening the stats modal via the card's own handlers. */}
+      <div
+        role="presentation"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        style={{ marginTop: '8px' }}
+      >
+        {!showBackdate ? (
+          <button
+            type="button"
+            onClick={() => setShowBackdate(true)}
+            aria-label={`Log past day for ${goal.title}`}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+              background: 'transparent',
+              color: 'var(--text)',
+              opacity: 0.85,
+              fontSize: '0.85rem',
+              fontWeight: '500',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+            }}
+          >
+            <CalendarPlus size={14} />
+            Log past day
+          </button>
+        ) : (
+          <div className="entry-date-section" style={{ marginBottom: 0 }}>
+            <label
+              className="entry-date-section__label"
+              htmlFor={`goal-backdate-${goal.id}`}
+            >
+              Day you did it
+            </label>
+            <div className="entry-date-section__controls">
+              <input
+                id={`goal-backdate-${goal.id}`}
+                type="date"
+                className="entry-date-section__input"
+                max={todayISO()}
+                value={backdate}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (next && next <= todayISO()) setBackdate(next);
+                }}
+              />
+              <button
+                type="button"
+                className={`entry-date-chip${backdate === yesterdayISO() ? ' is-active' : ''}`}
+                onClick={() => setBackdate(yesterdayISO())}
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                className="entry-date-chip"
+                style={{
+                  background: 'var(--accent-bg)',
+                  borderColor: 'transparent',
+                  color: '#fff',
+                }}
+                onClick={handleLogDay}
+              >
+                Log it
+              </button>
+              <button
+                type="button"
+                className="entry-date-chip"
+                onClick={() => setShowBackdate(false)}
+                aria-label="Cancel logging a past day"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       <Modal open={showStats} title="Goal Statistics" onClose={() => setShowStats(false)}>
         <GoalStatsCalendar goalId={goal.id} />
       </Modal>

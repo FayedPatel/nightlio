@@ -16,6 +16,7 @@ import MDArea from '../components/MarkdownArea.jsx';
 import apiService from '../services/api';
 import { useToast } from '../components/ui/ToastProvider';
 import { useBurner } from '../contexts/BurnerContext';
+import { formatEntryDate, todayISO, yesterdayISO } from '../utils/dateUtils';
 
 const DEFAULT_MARKDOWN = `# How was your day?
 
@@ -27,11 +28,15 @@ const normalizeSelectedOptions = (optionIds = []) => (
   [...optionIds].map((id) => Number(id)).filter((id) => Number.isFinite(id)).sort((a, b) => a - b)
 );
 
-const buildSnapshot = ({ mood, content, selectedOptions }) => (
+// `date` only participates for new entries (editing never sends a date, so
+// its snapshots keep date: null); a date change must mark the draft dirty so
+// autosave picks it up.
+const buildSnapshot = ({ mood, content, selectedOptions, date = null }) => (
   JSON.stringify({
     mood: mood ?? null,
     content: content ?? '',
     selected_options: normalizeSelectedOptions(selectedOptions),
+    date,
   })
 );
 
@@ -53,6 +58,9 @@ const EntryView = ({
   const [selectedOptions, setSelectedOptions] = useState(initialSelectionIds);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
   const [markdownContent, setMarkdownContent] = useState(editingEntry?.content || DEFAULT_MARKDOWN);
+  // New entries only: which local day the entry is journaled for. Editing an
+  // existing entry keeps its stored date untouched.
+  const [entryDate, setEntryDate] = useState(todayISO());
   const [activeEntryId, setActiveEntryId] = useState(editingEntry?.id ?? null);
   const [saveState, setSaveState] = useState('idle');
   const [lastSavedAt, setLastSavedAt] = useState(null);
@@ -118,6 +126,7 @@ const EntryView = ({
     setSelectedOptions([]);
     setActiveEntryId(null);
     setMarkdownContent(DEFAULT_MARKDOWN);
+    setEntryDate(todayISO());
     createdByAutosaveRef.current = false;
     skipAutosaveFlushRef.current = false;
 
@@ -134,6 +143,7 @@ const EntryView = ({
       mood: selectedMood,
       content: DEFAULT_MARKDOWN,
       selectedOptions: [],
+      date: todayISO(),
     });
     setLastSavedAt(null);
     setSaveState(isBurnerMode ? 'disabled' : 'idle');
@@ -196,7 +206,7 @@ const EntryView = ({
           const now = new Date();
           const createPayload = {
             ...payload,
-            date: now.toLocaleDateString(),
+            date: payload.date || todayISO(),
             time: now.toISOString(),
           };
 
@@ -317,10 +327,16 @@ const EntryView = ({
       content: markdownContent || '',
       selected_options: normalizeSelectedOptions(selectedOptions),
     };
+    if (!isEditing) {
+      // Also sent on updates of an autosave-created row, so changing the
+      // date after the first save corrects the stored date.
+      payload.date = entryDate;
+    }
     const snapshot = buildSnapshot({
       mood: payload.mood,
       content: payload.content,
       selectedOptions: payload.selected_options,
+      date: isEditing ? null : entryDate,
     });
 
     latestPayloadRef.current = { payload, snapshot };
@@ -366,6 +382,8 @@ const EntryView = ({
     selectedMood,
     selectedOptions,
     markdownContent,
+    entryDate,
+    isEditing,
     isBurnerMode,
     executeAutosave,
     clearAutosaveTimer,
@@ -410,6 +428,7 @@ const EntryView = ({
       mood: selectedMood,
       content: DEFAULT_MARKDOWN,
       selectedOptions: [],
+      date: entryDate,
     });
     lastSavedSnapshotRef.current = resetSnapshot;
     latestPayloadRef.current = {
@@ -417,6 +436,7 @@ const EntryView = ({
         mood: selectedMood ? Number(selectedMood) : null,
         content: DEFAULT_MARKDOWN,
         selected_options: [],
+        date: entryDate,
       },
       snapshot: resetSnapshot,
     };
@@ -532,7 +552,45 @@ const EntryView = ({
         <div className="entry-left">
           {isEditing && editingEntry && (
             <div className="entry-editing-note">
-              Editing entry from <strong>{editingEntry.date}</strong>
+              Editing entry from <strong>{formatEntryDate(editingEntry.date)}</strong>
+            </div>
+          )}
+          {!isEditing && (
+            <div className="entry-date-section">
+              <label className="entry-date-section__label" htmlFor="entry-date-input">
+                Entry date
+              </label>
+              <div className="entry-date-section__controls">
+                <input
+                  id="entry-date-input"
+                  className="entry-date-section__input"
+                  type="date"
+                  value={entryDate}
+                  max={todayISO()}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (next && next <= todayISO()) {
+                      setEntryDate(next);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className={`entry-date-chip${entryDate === yesterdayISO() ? ' is-active' : ''}`}
+                  onClick={() => setEntryDate(yesterdayISO())}
+                >
+                  Yesterday
+                </button>
+                {entryDate !== todayISO() && (
+                  <button
+                    type="button"
+                    className="entry-date-chip"
+                    onClick={() => setEntryDate(todayISO())}
+                  >
+                    Today
+                  </button>
+                )}
+              </div>
             </div>
           )}
           <div className="entry-mood-section">

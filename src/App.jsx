@@ -1,16 +1,15 @@
-import { useEffect, useState } from "react";
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import LoginPage from "./components/auth/LoginPage";
 import NotFound from "./views/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { BurnerProvider } from "./contexts/BurnerContext";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Header from "./components/Header";
 import Sidebar from "./components/navigation/Sidebar";
 import BottomNav from "./components/navigation/BottomNav";
-import FAB from "./components/FAB";
 import HistoryView from "./views/HistoryView";
 import HistoryPageView from "./views/HistoryPageView";
 import EntryView from "./views/EntryView";
@@ -21,6 +20,7 @@ import { ToastProvider } from "./components/ui/ToastProvider";
 import AchievementsView from "./views/AchievementsView";
 import LandingPage from "./views/LandingPage";
 import AboutPage from "./views/AboutPage";
+import apiService from "./services/api";
 import { useMoodData } from "./hooks/useMoodData";
 import { useGroups } from "./hooks/useGroups";
 import { useStatistics } from "./hooks/useStatistics";
@@ -37,6 +37,22 @@ const MusicDockGate = () => {
 const AppContent = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { syncFromServer } = useTheme();
+
+  // Pull the account's saved theme once per session; the server copy wins
+  // over whatever this browser had locally.
+  useEffect(() => {
+    let cancelled = false;
+    apiService
+      .getPreferences()
+      .then((prefs) => {
+        if (!cancelled && prefs?.theme) syncFromServer(prefs.theme);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [syncFromServer]);
   
   // Custom hooks
   const { pastEntries, setPastEntries, loading: historyLoading, error: historyError, refreshHistory } = useMoodData();
@@ -45,7 +61,10 @@ const AppContent = () => {
   const { statistics, currentStreak, loading: statsLoading, error: statsError, loadStatistics } = useStatistics();
 
   const handleMoodSelect = (moodValue) => {
-    navigate('entry', { state: { mood: moodValue } });
+    // Absolute path: relative 'entry' resolves against the current nested
+    // location (e.g. /dashboard/history -> /dashboard/history/entry), which
+    // matches no route and rendered a blank screen.
+    navigate('/dashboard/entry', { state: { mood: moodValue } });
   };
 
   const handleBackToHistory = () => {
@@ -73,11 +92,11 @@ const AppContent = () => {
   };
 
   const handleStartEdit = (entry) => {
-    navigate('entry', { state: { entry: entry, mood: entry.mood } });
+    navigate('/dashboard/entry', { state: { entry: entry, mood: entry.mood } });
   };
 
   const handleEditMoodSelect = (moodValue) => {
-    navigate('.', { state: { ...location.state, mood: moodValue }, replace: true });
+    navigate('/dashboard/entry', { state: { ...location.state, mood: moodValue }, replace: true });
   };
 
   const handleEntryUpdated = (updatedEntry, options = {}) => {
@@ -105,9 +124,9 @@ const AppContent = () => {
   const displayEntries = searchResults !== null ? searchResults : pastEntries;
 
   // Determine if we are in entry view for layout purposes (no sidebar)
-  const isEntryView = location.pathname.endsWith('/entry');
+  const isEntryView = location.pathname === '/dashboard/entry';
 
-  const handleGlobalSearch = (results) => {
+  const handleGlobalSearch = useCallback((results) => {
     setSearchResults(results);
     if (results !== null) {
       // Search results live on the History page (Phase 7c moved the full
@@ -130,24 +149,6 @@ const AppContent = () => {
         }
       }, 50); // slight delay to allow rendering if navigating
     }
-  };
-
-  useEffect(() => {
-    const handler = () => {
-      // The mood picker that actually starts an entry only lives on home
-      // (index route). "Add Entry" tiles can now be tapped from other pages
-      // too (e.g. the History page's empty state), so route to home itself
-      // — not just anywhere under /dashboard — before scrolling up to it.
-      const isHome = location.pathname === '/dashboard' || location.pathname === '/dashboard/';
-      if (!isHome) {
-        navigate('/dashboard');
-        return;
-      }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-    window.addEventListener('nightlio:new-entry', handler);
-    return () => window.removeEventListener('nightlio:new-entry', handler);
   }, [location.pathname, navigate]);
 
   return (
@@ -212,6 +213,9 @@ const AppContent = () => {
                 <Route path="achievements" element={<AchievementsView />} />
                 <Route path="goals" element={<GoalsView />} />
                 <Route path="settings" element={<SettingsView />} />
+                {/* Unmatched /dashboard/... paths bounce home instead of
+                    rendering an empty main area. */}
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </main>
           </div>
@@ -222,16 +226,6 @@ const AppContent = () => {
         onLoadStatistics={loadStatistics}
       />
 
-      <FAB
-        onClick={() => {
-          if (location.pathname === '/dashboard' || location.pathname === '/dashboard/') {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          } else {
-            navigate('/dashboard');
-          }
-        }}
-        label="Scroll to top"
-      />
       <MusicDockGate />
     </>
   );

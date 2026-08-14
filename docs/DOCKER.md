@@ -51,6 +51,7 @@ This guide will help you get Nightlio running with Docker in just a few minutes.
 
 ### Optional Features
 - `OIDC_ISSUER_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET`: set all three to enable OIDC single sign-on (leave empty for local-password/single-user auth)
+- `DISABLE_LOCAL_LOGIN`: set to `1` on SSO-only deployments to hard-disable `POST /api/auth/local/login` entirely (password form and credential-free mode) — the identity provider becomes the only way in. Warning: with OIDC unconfigured AND this set, nobody can log in.
 - `ENABLE_MOOD_MUSIC`: Set to `1` to enable mood-based music recommendations
 - `DEFAULT_SELF_HOST_ID`: User ID for self-hosted instances
 - `APP_ENV`: environment selector (`production`/`development`); replaces `RAILWAY_ENVIRONMENT`, which is still honored as a fallback

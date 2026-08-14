@@ -1,15 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Target, Plus } from 'lucide-react';
 import GoalsList from '../components/goals/GoalsList';
 import GoalForm from '../components/goals/GoalForm';
 import Skeleton from '../components/ui/Skeleton';
+import { useToast } from '../components/ui/ToastProvider';
+import { todayISO, formatEntryDate } from '../utils/dateUtils';
 import apiService from '../services/api';
 
 const GoalsView = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { show } = useToast();
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  // Home's "Add Goal" card navigates here with openForm so one click lands
+  // on the creation form instead of requiring a second click on this page.
+  const [showForm, setShowForm] = useState(() => Boolean(location.state?.openForm));
   const formRef = useRef(null);
+
+  // Consume the flag so back/refresh shows the normal Goals page rather
+  // than re-opening the form.
+  useEffect(() => {
+    if (location.state?.openForm) {
+      navigate('/dashboard/goals', { replace: true, state: null });
+    }
+  }, [location.state, navigate]);
   const suggestions = [
     { t: 'Morning Meditation', d: '10 minutes of mindfulness' },
     { t: 'Evening Walk', d: '30-minute walk outside' },
@@ -168,6 +184,41 @@ const GoalsView = () => {
     });
   };
 
+  // Backdated completion: log a day the user forgot to record. The server
+  // inserts the goal_completions row idempotently and only bumps the weekly
+  // counter for dates inside the current week.
+  const handleLogDay = (goalId, date) => {
+    const today = todayISO();
+    apiService.incrementGoalProgress(goalId, date).then(updated => {
+      if (!updated) return;
+      if (date === today && !updated.already_logged) {
+        try {
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(`goal_done_${goalId}`, today);
+          }
+        } catch {
+          // localStorage access failed
+        }
+      }
+      setGoals(prev => prev.map(g => g.id === goalId ? {
+        ...g,
+        completed: updated.completed ?? g.completed,
+        total: updated.frequency_per_week ?? g.total,
+        streak: updated.streak ?? g.streak,
+        last_completed_date: updated.last_completed_date || g.last_completed_date,
+        _doneToday: updated.already_completed_today === true || g._doneToday === true,
+        frequency: `${updated.frequency_per_week ?? g.total} days a week`,
+      } : g));
+      if (updated.already_logged) {
+        show(`Already logged for ${formatEntryDate(date)}`, 'info');
+      } else {
+        show(`Logged for ${formatEntryDate(date)}`, 'success');
+      }
+    }).catch(() => {
+      show('Could not log that day. Try again.', 'error');
+    });
+  };
+
   if (showForm) {
     return (
       <div>
@@ -273,10 +324,11 @@ const GoalsView = () => {
           </div>
         </div>
       ) : (
-        <GoalsList 
-          goals={goals} 
+        <GoalsList
+          goals={goals}
           onDelete={handleDeleteGoal}
           onUpdateProgress={handleUpdateProgress}
+          onLogDay={handleLogDay}
           onAdd={() => setShowForm(true)}
         />
       )}

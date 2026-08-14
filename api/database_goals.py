@@ -190,8 +190,19 @@ class GoalsMixin(DatabaseConnectionMixin):
             conn.commit()
             return cursor.rowcount > 0
 
-    def increment_goal_progress(self, user_id: int, goal_id: int) -> Optional[Dict]:
+    def increment_goal_progress(
+        self, user_id: int, goal_id: int, date_str: Optional[str] = None
+    ) -> Optional[Dict]:
+        """Log a completion for ``date_str`` (ISO, default today).
+
+        The per-day ``goal_completions`` log is the source of truth for
+        duplicates (UNIQUE per goal+day). The weekly ``completed`` counter
+        only moves for dates inside the current period: a date from an
+        already-rolled-over week lands in the log (calendar, stats) but the
+        closed week's counter and streak are not recomputed.
+        """
         today_str = datetime.now().strftime("%Y-%m-%d")
+        target_date = date_str or today_str
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -208,11 +219,22 @@ class GoalsMixin(DatabaseConnectionMixin):
             period_start = goal.get("period_start")
             last_completed_date = goal.get("last_completed_date")
 
-            if last_completed_date != today_str and current_completed < freq:
+            cursor = conn.execute(
+                """
+                INSERT OR IGNORE INTO goal_completions (user_id, goal_id, date)
+                VALUES (?, ?, ?)
+                """,
+                (user_id, goal_id, target_date),
+            )
+            newly_logged = cursor.rowcount == 1
+
+            in_current_period = bool(period_start) and target_date >= period_start
+            if newly_logged and in_current_period and current_completed < freq:
                 current_completed += 1
-                last_completed_date = today_str
-            elif last_completed_date != today_str:
-                last_completed_date = today_str
+
+            # max() keeps today's "Completed" button lock intact when a
+            # backdated day is logged after today was already marked done.
+            last_completed_date = max(last_completed_date or "", target_date)
 
             conn.execute(
                 """
@@ -234,18 +256,6 @@ class GoalsMixin(DatabaseConnectionMixin):
                 ),
             )
 
-            if last_completed_date == today_str:
-                try:
-                    conn.execute(
-                        """
-                        INSERT OR IGNORE INTO goal_completions (user_id, goal_id, date)
-                        VALUES (?, ?, ?)
-                        """,
-                        (user_id, goal_id, today_str),
-                    )
-                except sqlite3.Error:
-                    pass
-
             conn.commit()
             updated = conn.execute(
                 """
@@ -263,6 +273,8 @@ class GoalsMixin(DatabaseConnectionMixin):
             result["already_completed_today"] = (
                 result.get("last_completed_date") == today_str
             )
+            result["already_logged"] = not newly_logged
+            result["logged_date"] = target_date
             return result
 
     def get_goal_completions(

@@ -215,7 +215,10 @@ const GoalPreviewCard = ({ goal, onMarkComplete }) => {
       style={{
         border: isHovered ? '1px solid color-mix(in oklab, var(--accent-600), transparent 55%)' : '1px solid var(--border)',
         boxShadow: isHovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
-        position: 'relative'
+        position: 'relative',
+        // Same bottom-pinning as GoalCard: buttons align across cards.
+        display: 'flex',
+        flexDirection: 'column'
       }}
     >
       {/* Header */}
@@ -270,7 +273,7 @@ const GoalPreviewCard = ({ goal, onMarkComplete }) => {
       )}
 
   {/* Progress Bar */}
-      <div style={{ marginBottom: '12px' }}>
+      <div style={{ marginBottom: '12px', marginTop: 'auto' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 

@@ -45,7 +45,7 @@ const HistoryView = ({ pastEntries, onMoodSelect, onDelete, onEdit }) => {
       </section>
 
       <section className="dashboard-section" aria-label="Active goals">
-        <GoalsSection onNavigateToGoals={() => navigate('goals')} />
+        <GoalsSection onNavigateToGoals={() => navigate('goals', { state: { openForm: true } })} />
       </section>
 
       <RecentEntries

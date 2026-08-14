@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 root = Path(__file__).resolve().parent.parent
 api_dir = root / "api"
 if str(api_dir) not in sys.path:
@@ -23,3 +25,30 @@ for _var in (
     "TRUST_PROXY_HEADERS",
 ):
     os.environ[_var] = ""
+
+
+# Shared fixtures. Older test files still define their own `client` (a fixed
+# /tmp/nightlio_test.db path plus manual resets); local fixtures shadow these,
+# so they can migrate file-by-file. New tests should use these: tmp_path gives
+# every test its own database, which keeps tests isolated and parallelizable.
+
+
+@pytest.fixture()
+def client(tmp_path, monkeypatch):
+    from api.config import TestingConfig
+
+    monkeypatch.setattr(
+        TestingConfig, "DATABASE_PATH", str(tmp_path / "nightlio_test.db")
+    )
+    from api.app import create_app
+
+    app = create_app("testing")
+    with app.test_client() as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def auth_headers(client):
+    resp = client.post("/api/auth/local/login")
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    return {"Authorization": f"Bearer {resp.get_json()['token']}"}

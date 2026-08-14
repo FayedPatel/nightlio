@@ -3,6 +3,7 @@ from typing import Any, List, Optional, Tuple
 from flask import Blueprint, request, jsonify
 from api.services.mood_service import MoodService
 from api.utils.auth_middleware import require_auth, get_current_user_id
+from api.utils.validators import validate_entry_date
 
 # Sanity bounds for statistics query params; requests outside them get a 400.
 MIN_STATS_YEAR = 1970
@@ -69,7 +70,7 @@ def create_mood_routes(mood_service: MoodService):
             except (TypeError, ValueError):
                 return jsonify({"error": "Mood must be an integer"}), 400
 
-            date_value = str(date)
+            date_value = validate_entry_date(date)
             content_value = str(content)
             time_value = str(time) if time else None
 
@@ -183,7 +184,7 @@ def create_mood_routes(mood_service: MoodService):
                     return jsonify({"error": "Mood must be an integer"}), 400
 
             content_value = str(content) if content is not None else None
-            date_value = str(date) if date is not None else None
+            date_value = validate_entry_date(date) if date is not None else None
             time_value = str(time) if time else None
 
             updated_entry = mood_service.update_entry(

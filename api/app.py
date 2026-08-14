@@ -23,6 +23,7 @@ try:
     from api.routes.auth_routes import create_auth_routes
     from api.routes.misc_routes import create_misc_routes
     from api.routes.config_routes import create_config_routes
+    from api.routes.preferences_routes import create_preferences_routes
     from api.routes.achievement_routes import create_achievement_routes
     from api.routes.activity_routes import create_activity_routes
     from api.utils.error_handlers import setup_error_handlers
@@ -42,6 +43,7 @@ except Exception:  # fallback for running from inside api/
     from routes.auth_routes import create_auth_routes
     from routes.misc_routes import create_misc_routes
     from routes.config_routes import create_config_routes
+    from routes.preferences_routes import create_preferences_routes
     from routes.achievement_routes import create_achievement_routes
     from routes.activity_routes import create_activity_routes
     from utils.error_handlers import setup_error_handlers
@@ -166,6 +168,7 @@ def create_app(config_name="default"):
     )
     app.register_blueprint(create_misc_routes(), url_prefix="/api")
     app.register_blueprint(create_config_routes(), url_prefix="/api")
+    app.register_blueprint(create_preferences_routes(user_service), url_prefix="/api")
     app.register_blueprint(create_activity_routes(db), url_prefix="/api")
 
     # Expose services for optional blueprints (e.g., OAuth) to reuse

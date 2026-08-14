@@ -4,6 +4,30 @@ This doc is for self-hosters who already have a running Nightlio (any version
 before the Phase 5 compose rework). It covers what changes, why your data is
 safe, and the exact commands to run.
 
+## Upgrading v0.2.0 → v0.3.0
+
+Nothing manual. Pull the new image (or `git pull` + `--build`), then
+`docker compose up -d`. Your data lives in the `nightlio_data` volume and is
+untouched; the API's startup migrations add the one new column this release
+introduces (`users.theme_preference`, for the theme picker) before serving
+any requests. Goal backdating reuses the existing `goal_completions` table.
+Rolling back to the 0.2.0 image is safe — it simply ignores the extra
+column.
+
+Cheap insurance before any upgrade:
+
+```bash
+# (the api image has no sqlite3 CLI; python's sqlite3 module does the same)
+docker compose exec api python -c "import sqlite3; sqlite3.connect('/app/data/nightlio.db').backup(sqlite3.connect('/app/data/pre-v0.3.0.db'))"
+```
+
+Optional new setting for SSO-only deployments: `DISABLE_LOCAL_LOGIN=1` in
+`.env` hard-disables all local logins (password form and credential-free
+mode) so your identity provider is the only door. Leave it unset/`0` if you
+use local or credential-free login.
+
+The rest of this document covers the older Phase 5 compose-rework upgrade.
+
 > **Status:** final. Phase 2 (local password login + generic OIDC, Google
 > removal) and Phase 4 (httpOnly session cookie, `/api/auth/logout`) have
 > both landed in `api/` and `src/`. This doc now reflects the actual shipped

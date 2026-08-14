@@ -7,8 +7,16 @@ from typing import Dict, List, Optional
 
 try:  # pragma: no cover - allow top-level script usage
     from .database_common import DatabaseConnectionMixin
+    from .database_stats import _ISO_DAY_EXPR
 except ImportError:  # pragma: no cover
     from database_common import DatabaseConnectionMixin  # type: ignore
+    from database_stats import _ISO_DAY_EXPR  # type: ignore
+
+# History ordering: newest journaled day first (normalised across both stored
+# date shapes), then creation time within the day. Ordering by created_at
+# alone floated backdated entries above newer-dated ones. Unparseable dates
+# (NULL day) sort last under DESC.
+_ENTRY_ORDER = f"ORDER BY {_ISO_DAY_EXPR} DESC, created_at DESC"
 
 
 class MoodEntriesMixin(DatabaseConnectionMixin):
@@ -56,11 +64,11 @@ class MoodEntriesMixin(DatabaseConnectionMixin):
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
-                """
+                f"""
                 SELECT id, date, mood, content, created_at, updated_at
                   FROM mood_entries
                  WHERE user_id = ?
-                 ORDER BY created_at DESC, date DESC
+                 {_ENTRY_ORDER}
                 """,
                 (user_id,),
             )
@@ -75,11 +83,11 @@ class MoodEntriesMixin(DatabaseConnectionMixin):
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
-                """
+                f"""
                 SELECT id, date, mood, content, created_at, updated_at
                   FROM mood_entries
                  WHERE user_id = ? AND date BETWEEN ? AND ?
-                 ORDER BY created_at DESC, date DESC
+                 {_ENTRY_ORDER}
                 """,
                 (user_id, start_date, end_date),
             )

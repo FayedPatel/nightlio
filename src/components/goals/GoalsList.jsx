@@ -1,7 +1,7 @@
 import GoalCard from './GoalCard';
 import AddGoalCard from './AddGoalCard';
 
-const GoalsList = ({ goals, onDelete, onUpdateProgress, onAdd }) => {
+const GoalsList = ({ goals, onDelete, onUpdateProgress, onLogDay, onAdd }) => {
   if (goals.length === 0) {
     return (
       <div className="card-grid">
@@ -16,11 +16,12 @@ const GoalsList = ({ goals, onDelete, onUpdateProgress, onAdd }) => {
         <AddGoalCard onAdd={onAdd} />
       )}
       {goals.map(goal => (
-        <GoalCard 
-          key={goal.id} 
-          goal={goal} 
+        <GoalCard
+          key={goal.id}
+          goal={goal}
           onDelete={onDelete}
           onUpdateProgress={onUpdateProgress}
+          onLogDay={onLogDay}
         />
       ))}
     </div>
