@@ -32,30 +32,22 @@ class GoalService:
     def delete_goal(self, user_id: int, goal_id: int) -> bool:
         return self.db.delete_goal(user_id, goal_id)
 
-    def increment_progress(self, user_id: int, goal_id: int) -> Optional[Dict]:
-        previous = self.db.get_goal_by_id(user_id, goal_id)
-        result = self.db.increment_goal_progress(user_id, goal_id)
+    def increment_progress(
+        self, user_id: int, goal_id: int, date_str: Optional[str] = None
+    ) -> Optional[Dict]:
+        result = self.db.increment_goal_progress(user_id, goal_id, date_str)
 
-        # Log a completion only when this call marked today as completed for
-        # the first time; the write is best-effort and must never break the
-        # mutation itself.
+        # Log activity only when this call recorded a new completion day;
+        # the write is best-effort and must never break the mutation itself.
         try:
-            if (
-                result
-                and result.get("last_completed_date")
-                and (
-                    previous is None
-                    or previous.get("last_completed_date")
-                    != result.get("last_completed_date")
-                )
-            ):
+            if result and not result.get("already_logged"):
                 self.db.add_activity(
                     user_id,
                     "goal_completed",
                     {
                         "goal_id": goal_id,
                         "title": result.get("title"),
-                        "date": result.get("last_completed_date"),
+                        "date": result.get("logged_date"),
                     },
                 )
         except Exception:

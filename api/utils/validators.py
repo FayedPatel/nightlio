@@ -30,6 +30,28 @@ def validate_entry_date(date_str: Any) -> str:
     return value
 
 
+def validate_completion_date(date_str: Any) -> str:
+    """Validate a goal-completion date and return it normalized to ISO.
+
+    Accepts the same shapes as entry dates but always returns YYYY-MM-DD,
+    since goal_completions.date is ISO-only. Same one-day future slack.
+    """
+    value = str(date_str)
+    for fmt in ENTRY_DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(value, fmt).date()
+            break
+        except ValueError:
+            continue
+    else:
+        raise ValueError("date must be YYYY-MM-DD or M/D/YYYY")
+
+    if parsed > _date.today() + timedelta(days=1):
+        raise ValueError("date cannot be in the future")
+
+    return parsed.strftime("%Y-%m-%d")
+
+
 def validate_mood_entry(data: Dict[str, Any]) -> List[str]:
     """Validate mood entry data"""
     errors = []

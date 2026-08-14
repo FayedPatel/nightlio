@@ -323,8 +323,11 @@ class ApiService {
     return this.request(`/api/goals/${goalId}`, { method: 'DELETE' });
   }
 
-  async incrementGoalProgress(goalId) {
-    return this.request(`/api/goals/${goalId}/progress`, { method: 'POST' });
+  async incrementGoalProgress(goalId, date) {
+    return this.request(`/api/goals/${goalId}/progress`, {
+      method: 'POST',
+      ...(date ? { body: JSON.stringify({ date }) } : {}),
+    });
   }
 
   async getGoalCompletions(goalId, { start, end } = {}) {

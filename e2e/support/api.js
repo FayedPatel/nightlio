@@ -62,6 +62,14 @@ export const listGoals = async () => {
   return goals;
 };
 
+export const listGoalCompletions = async (goalId) => {
+  const { ctx, headers } = await apiContext();
+  const resp = await ctx.get(`/api/goals/${goalId}/completions`, { headers });
+  const rows = await resp.json();
+  await ctx.dispose();
+  return rows;
+};
+
 export const seedGoal = async ({ title, description = 'Seeded goal.', frequency = 3 }) => {
   const { ctx, headers } = await apiContext();
   const resp = await ctx.post('/api/goals', {

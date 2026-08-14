@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { wipeGoals, listGoals, seedGoal } from './support/api';
+import {
+  wipeGoals,
+  listGoals,
+  seedGoal,
+  listGoalCompletions,
+  isoDaysAgo,
+} from './support/api';
 
 test.beforeEach(async () => {
   await wipeGoals();
@@ -92,6 +98,31 @@ test('goal statistics calendar opens from the card', async ({ page }) => {
   await expect(modal.getByText('Sun')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(modal).not.toBeVisible();
+});
+
+test('log a goal completion for a past day', async ({ page }) => {
+  await seedGoal({ title: 'Water Plants', frequency: 5 });
+  await page.goto('/dashboard/goals');
+
+  await page.getByRole('button', { name: 'Log past day for Water Plants' }).click();
+  await page.getByRole('button', { name: 'Yesterday' }).click();
+  await page.getByRole('button', { name: 'Log it' }).click();
+  await expect(page.getByText(/Logged for/)).toBeVisible();
+
+  const yesterday = isoDaysAgo(1);
+  const goal = (await listGoals()).find((g) => g.title === 'Water Plants');
+  const completions = await listGoalCompletions(goal.id);
+  expect(completions.some((c) => c.date === yesterday)).toBe(true);
+
+  // The weekly counter only credits days inside the current Monday-based
+  // week; on Mondays "yesterday" belongs to last week and stays at 0.
+  const now = new Date();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const pad = (v) => String(v).padStart(2, '0');
+  const mondayIso = `${monday.getFullYear()}-${pad(monday.getMonth() + 1)}-${pad(monday.getDate())}`;
+  const expected = yesterday >= mondayIso ? '1/5' : '0/5';
+  await expect(page.getByText(expected)).toBeVisible();
 });
 
 test('delete a goal with confirmation', async ({ page }) => {
