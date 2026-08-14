@@ -16,7 +16,11 @@ export default defineConfig({
   fullyParallel: false,
   workers: process.env.CI ? 2 : 4,
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
+  // HTML report is written locally too (playwright-report/, gitignored) so
+  // `yarn playwright show-report` works after any run, not just on CI.
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : [['list'], ['html', { open: 'never' }]],
   use: {
     baseURL: 'http://localhost:5173',
     serviceWorkers: 'block',
