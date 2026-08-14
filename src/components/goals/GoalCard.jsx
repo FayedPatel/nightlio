@@ -78,7 +78,12 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }) => {
         position: 'relative',
         opacity: isDeleting ? 0.5 : 1,
         pointerEvents: isDeleting ? 'none' : 'auto',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        // Flex column + marginTop: auto on the progress block pins the
+        // progress/actions group to the card bottom, so buttons line up
+        // across cards whose descriptions wrap differently.
+        display: 'flex',
+        flexDirection: 'column'
       }}
       role="button"
       tabIndex={0}
@@ -157,7 +162,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }) => {
       )}
 
       {/* Progress Bar */}
-      <div style={{ marginBottom: '12px' }}>
+      <div style={{ marginBottom: '12px', marginTop: 'auto' }}>
         <div style={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
