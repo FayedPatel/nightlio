@@ -253,11 +253,14 @@
 }
 
 .landing__neon {
-  background: linear-gradient(90deg, var(--sw-pink), var(--sw-cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 12px rgba(255, 79, 216, 0.35));
+  /* Solid color + text-shadow instead of gradient-clip text: color-rewriting
+     extensions (Dark Reader et al.) strip background gradients but leave
+     color: transparent, turning clipped text into an unreadable ghost. */
+  color: var(--sw-pink);
+  text-shadow:
+    0 0 6px rgba(255, 79, 216, 0.55),
+    0 0 24px rgba(255, 79, 216, 0.35),
+    0 0 56px rgba(0, 207, 255, 0.25);
 }
 
 .landing__hero-copy p {

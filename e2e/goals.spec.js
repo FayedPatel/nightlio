@@ -1,8 +1,42 @@
 import { test, expect } from '@playwright/test';
-import { wipeGoals, listGoals } from './support/api';
+import { wipeGoals, listGoals, seedGoal } from './support/api';
 
 test.beforeEach(async () => {
   await wipeGoals();
+});
+
+test('home Add Goal card opens the creation form in one click', async ({ page }) => {
+  // The dashed Add Goal card only renders on Home once at least one goal
+  // exists (empty state shows an "Add First Goal" button instead).
+  await seedGoal({ title: 'Existing Goal' });
+  await page.goto('/dashboard');
+  await page
+    .locator('section[aria-label="Active goals"]')
+    .getByRole('button', { name: 'Add Goal' })
+    .click();
+
+  await expect(page).toHaveURL(/\/dashboard\/goals$/);
+  await expect(
+    page.getByRole('heading', { name: 'Add New Goal' }),
+  ).toBeVisible();
+
+  // The openForm navigation state is consumed with a replace, so a reload
+  // shows the normal Goals page rather than re-opening the form.
+  await page.reload();
+  await expect(
+    page.getByRole('heading', { name: 'Add New Goal' }),
+  ).not.toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Goal' })).toBeVisible();
+});
+
+test('empty-state Add First Goal opens the creation form in one click', async ({ page }) => {
+  await page.goto('/dashboard');
+  await page.getByRole('button', { name: 'Add First Goal' }).click();
+
+  await expect(page).toHaveURL(/\/dashboard\/goals$/);
+  await expect(
+    page.getByRole('heading', { name: 'Add New Goal' }),
+  ).toBeVisible();
 });
 
 test('create a goal through the form', async ({ page }) => {

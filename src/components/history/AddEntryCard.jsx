@@ -1,8 +1,12 @@
 import { Plus } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const AddEntryCard = () => {
+  const navigate = useNavigate();
+  // Straight to the editor: without a mood in location.state, EntryView
+  // renders its inline mood prompt, so this is a one-click new-entry flow.
   const handleAdd = () => {
-    window.dispatchEvent(new CustomEvent('nightlio:new-entry'));
+    navigate('/dashboard/entry');
   };
   return (
     <div

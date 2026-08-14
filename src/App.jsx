@@ -151,24 +151,6 @@ const AppContent = () => {
     }
   }, [location.pathname, navigate]);
 
-  useEffect(() => {
-    const handler = () => {
-      // The mood picker that actually starts an entry only lives on home
-      // (index route). "Add Entry" tiles can now be tapped from other pages
-      // too (e.g. the History page's empty state), so route to home itself
-      // — not just anywhere under /dashboard — before scrolling up to it.
-      const isHome = location.pathname === '/dashboard' || location.pathname === '/dashboard/';
-      if (!isHome) {
-        navigate('/dashboard');
-        return;
-      }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
-    window.addEventListener('nightlio:new-entry', handler);
-    return () => window.removeEventListener('nightlio:new-entry', handler);
-  }, [location.pathname, navigate]);
-
   return (
     <>
       <div className={`app-page ${isEntryView ? 'no-sidebar' : ''}`}>

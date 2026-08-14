@@ -62,6 +62,17 @@ export const listGoals = async () => {
   return goals;
 };
 
+export const seedGoal = async ({ title, description = 'Seeded goal.', frequency = 3 }) => {
+  const { ctx, headers } = await apiContext();
+  const resp = await ctx.post('/api/goals', {
+    headers,
+    data: { title, description, frequency_per_week: frequency },
+  });
+  const body = await resp.json();
+  await ctx.dispose();
+  return body;
+};
+
 export const wipeGoals = async () => {
   const { ctx, headers } = await apiContext();
   const resp = await ctx.get('/api/goals', { headers });

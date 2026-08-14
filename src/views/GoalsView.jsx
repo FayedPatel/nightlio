@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Target, Plus } from 'lucide-react';
 import GoalsList from '../components/goals/GoalsList';
 import GoalForm from '../components/goals/GoalForm';
@@ -6,10 +7,22 @@ import Skeleton from '../components/ui/Skeleton';
 import apiService from '../services/api';
 
 const GoalsView = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
+  // Home's "Add Goal" card navigates here with openForm so one click lands
+  // on the creation form instead of requiring a second click on this page.
+  const [showForm, setShowForm] = useState(() => Boolean(location.state?.openForm));
   const formRef = useRef(null);
+
+  // Consume the flag so back/refresh shows the normal Goals page rather
+  // than re-opening the form.
+  useEffect(() => {
+    if (location.state?.openForm) {
+      navigate('/dashboard/goals', { replace: true, state: null });
+    }
+  }, [location.state, navigate]);
   const suggestions = [
     { t: 'Morning Meditation', d: '10 minutes of mindfulness' },
     { t: 'Evening Walk', d: '30-minute walk outside' },
