@@ -55,5 +55,13 @@ old/
 CLAUDE.md
 PLAN.md
 BASELINE.md
+plan-2.md
+
 # Local carrier archive — never commit
 project.zip
+
+# Test artifacts
+playwright-report/
+test-results/
+coverage/
+screenshots/

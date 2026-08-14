@@ -10,6 +10,14 @@ function normalizeBaseUrl(raw) {
   v = v.replace(/["']/g, '');
   // Remove trailing slashes
   v = v.replace(/\/+$/g, '');
+  // Reject bases with a non-http(s) scheme (file:, javascript:, ...): a
+  // value like 'file:///x' would otherwise be treated as a path prefix and
+  // resolve to an absolute file: URL in the browser. Fall back to the
+  // relative /api mode instead.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^https?:\/\//i.test(v)) {
+    console.warn(`Ignoring VITE_API_URL with unsupported scheme: ${v}`);
+    return '';
+  }
   return v;
 }
 
@@ -206,6 +214,17 @@ class ApiService {
 
   // Activity feed endpoint (keyset-paginated: pass the previous page's
   // next_cursor as `before` to fetch older events)
+  async getPreferences() {
+    return this.request('/api/preferences');
+  }
+
+  async updateThemePreference(theme) {
+    return this.request('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ theme }),
+    });
+  }
+
   async getActivity(before, limit) {
     const params = new URLSearchParams();
     if (before != null) params.set('before', String(before));

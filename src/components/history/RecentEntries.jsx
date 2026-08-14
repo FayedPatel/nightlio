@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import HistoryEntry from './HistoryEntry';
-import { getTodayDateString } from './TodayEntryCard';
+import { isTodayEntry } from './TodayEntryCard';
 
 const RECENT_LIMIT = 5;
 
@@ -9,8 +9,7 @@ const RECENT_LIMIT = 5;
 // excluded here since the dashboard already shows it via TodayEntryCard
 // right above this section; showing it twice would just be noise.
 const RecentEntries = ({ entries = [], onDelete, onEdit, onViewAll }) => {
-  const todayStr = getTodayDateString();
-  const recent = entries.filter((entry) => entry.date !== todayStr).slice(0, RECENT_LIMIT);
+  const recent = entries.filter((entry) => !isTodayEntry(entry)).slice(0, RECENT_LIMIT);
 
   // Render only when there is something to show — an empty-history one-liner
   // would just duplicate the "add entry" CTA TodayEntryCard already renders.

@@ -1,7 +1,11 @@
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any
 from pathlib import Path
+from urllib.parse import urlsplit
+
+logger = logging.getLogger(__name__)
 
 # Optional .env loader: only if python-dotenv is installed.
 try:
@@ -184,6 +188,25 @@ class ConfigData:
 _CONFIG_SINGLETON: Optional[ConfigData] = None
 
 
+def _safe_http_url(raw: Optional[str]) -> Optional[str]:
+    """Return the value only if it is an absolute http(s) URL, else None.
+
+    Values from env flow into <a href> on the login page; anything with
+    another scheme (file:, javascript:, ...) must never reach the browser.
+    """
+    value = (raw or "").strip()
+    if not value:
+        return None
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        parts = None
+    if parts and parts.scheme in ("http", "https") and parts.netloc:
+        return value
+    logger.warning("Ignoring configured URL with unsupported scheme: %r", value)
+    return None
+
+
 def _load_config_from_env() -> ConfigData:
     """Load ConfigData from environment variables.
 
@@ -221,7 +244,7 @@ def _load_config_from_env() -> ConfigData:
         SELFHOST_USER_NAME=os.getenv("SELFHOST_USER_NAME") or "Me",
         SELFHOST_USER_EMAIL=os.getenv("SELFHOST_USER_EMAIL") or None,
         FRONTEND_URL=os.getenv("FRONTEND_URL") or None,
-        OIDC_SIGNUP_URL=(os.getenv("OIDC_SIGNUP_URL") or "").strip() or None,
+        OIDC_SIGNUP_URL=_safe_http_url(os.getenv("OIDC_SIGNUP_URL")),
     )
 
 

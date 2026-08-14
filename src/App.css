@@ -65,7 +65,83 @@
   color: color-mix(in oklab, var(--text), transparent 40%);
 }
 .entry-editing-note strong { color: var(--text); }
+/* Entry-date row (new entries only): native date input + quick chips for
+   backdating a forgotten day. */
+.entry-date-section { margin-bottom: 1rem; }
+.entry-date-section__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: color-mix(in oklab, var(--text), transparent 40%);
+}
+.entry-date-section__controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.entry-date-section__input {
+  padding: 0.4rem 0.7rem;
+  min-height: 44px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  color-scheme: light dark;
+}
+.entry-date-chip {
+  padding: 0.4rem 0.9rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.entry-date-chip:hover { border-color: var(--accent-600); }
+.entry-date-chip.is-active {
+  background: var(--accent-bg-softer);
+  border-color: color-mix(in oklab, var(--accent-600), transparent 45%);
+}
 .entry-mood-section { margin-bottom: 1rem; }
+/* Settings > Appearance theme picker */
+.theme-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 1rem;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.theme-option:hover { border-color: var(--accent-600); }
+.theme-option.is-active {
+  background: var(--accent-bg-softer);
+  border-color: color-mix(in oklab, var(--accent-600), transparent 40%);
+  font-weight: 600;
+}
+.theme-option__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+/* Swatches preview each theme's signature ground + accent */
+.theme-option__swatch--default { background: linear-gradient(135deg, #282a36 50%, #bd93f9 50%); }
+.theme-option__swatch--light { background: linear-gradient(135deg, #f7f8fb 50%, #2f7e89 50%); }
+.theme-option__swatch--dark { background: linear-gradient(135deg, #0b0c10 50%, #7aa2f7 50%); }
+.theme-option__swatch--synthwave { background: linear-gradient(135deg, #16102e 50%, #ff4fd8 50%); }
 .entry-change-mood-btn {
   margin-top: 0.75rem;
   padding: 0.4rem 0.9rem;
@@ -336,10 +412,6 @@
 .bottom-nav__item.is-active { color: var(--accent-600); }
 .bottom-nav__label { font-size: 12px; }
 
-/* Floating action button */
-.fab { position: fixed; right: calc(18px + env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: #fff; border: none; box-shadow: var(--shadow-md); z-index: var(--z-fab); }
-.fab { display: none; }
-
 /* Mood selector */
 .mood-grid { display: flex; gap: 0.75rem; justify-content: flex-start; flex-wrap: wrap; margin: 0; }
 .mood-button { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: transform 180ms cubic-bezier(.2,.6,.2,1), border-color 180ms cubic-bezier(.2,.6,.2,1), box-shadow 180ms cubic-bezier(.2,.6,.2,1); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
@@ -352,7 +424,6 @@
   .app-shell { margin-left: 0; }
   .sidebar { display: none; }
   .bottom-nav { display: flex; }
-  .fab { display: grid; }
 
   /* 5 * 52px + 4 * 0.75rem gaps = 308px, comfortably under the 359px budget
      (375px viewport minus the app-main 16px edge padding on each side) —
@@ -389,7 +460,7 @@
    consistency only — this is not the S25 Ultra width bug, just keeping every
    ad-hoc 600 out of the stylesheet. */
 @media (max-height: 640px) {
-  .bottom-nav, .fab { display: none !important; }
+  .bottom-nav { display: none !important; }
   .app-main { padding-bottom: var(--space-4) !important; }
   
   /* Let the header scroll away so it doesn't eat vertical space */
@@ -405,7 +476,9 @@
 .entry-card .timestamp { color: color-mix(in oklab, var(--text), transparent 20%); font-size: 0.9rem; }
 .tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--space-2); }
 .tag { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--radius-pill); font-size: 0.875rem; line-height: 1; background: var(--accent-chip-bg); color: var(--accent-700); border: 1px solid color-mix(in oklab, var(--accent-600), transparent 45%); }
-html[data-theme="dark"] .tag { color: #fff; }
+html[data-theme="default"] .tag,
+html[data-theme="dark"] .tag,
+html[data-theme="synthwave"] .tag { color: #fff; }
 .tag--neutral { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 /* Phase 9c: "+n" overflow indicator for capped tag lists (HistoryEntry
    caps entry.selections before rendering; see MAX_VISIBLE_TAGS there).

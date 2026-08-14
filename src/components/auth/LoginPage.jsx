@@ -12,17 +12,6 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-const inputStyle = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '0.75rem 1rem',
-  borderRadius: '12px',
-  border: '1px solid var(--border)',
-  background: 'var(--surface)',
-  color: 'var(--text)',
-  fontSize: '0.95rem',
-};
-
 const SSO_ERROR_MESSAGES = {
   callback_failed: 'Single sign-on failed. Please try again.',
   auth_failed: 'Single sign-on could not complete. Please try again.',
@@ -38,8 +27,19 @@ const LoginPage = () => {
   const [message, setMessage] = useState('');
 
   const enableOidc = Boolean(config.enable_oidc);
+  // Server-supplied value that lands in an <a href> — only ever render
+  // absolute http(s) URLs, even if a misconfigured backend passes something
+  // else (file:, javascript:, ...) through.
+  const isSafeHttpUrl = (value) => {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === 'http:' || protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
   const signupUrl =
-    enableOidc && typeof config.signup_url === 'string' && config.signup_url
+    enableOidc && typeof config.signup_url === 'string' && isSafeHttpUrl(config.signup_url)
       ? config.signup_url
       : null;
 
@@ -127,24 +127,9 @@ const LoginPage = () => {
   if (configLoading) {
     return (
       <div className="login-page">
-        <div
-          className="login-page__card"
-          style={{ maxWidth: '420px', padding: '3rem 2rem' }}
-          aria-busy="true"
-        >
+        <div className="login-page__card login-page__card--auth" aria-busy="true">
           <LoadingSpinner />
-          <span
-            style={{
-              position: 'absolute',
-              width: '1px',
-              height: '1px',
-              overflow: 'hidden',
-              clipPath: 'inset(50%)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Loading sign-in options…
-          </span>
+          <span className="login-page__sr-only">Loading sign-in options…</span>
         </div>
       </div>
     );
@@ -152,36 +137,21 @@ const LoginPage = () => {
 
   return (
     <div className="login-page">
-      <div className="login-page__card" style={{ maxWidth: '420px', padding: '3rem 2rem' }}>
-        <div style={{ marginBottom: '0.5rem' }}>
-          <h1 className="login-page__brand-title" style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-            marginBottom: '0.75rem'
-          }}>
-            <img
-              src="/logo.png"
-              alt="Nightlio logo"
-              style={{
-                width: '1em',
-                height: '1em',
-                objectFit: 'contain',
-                display: 'block'
-              }}
-            />
+      <div className="login-page__card login-page__card--auth">
+        <div className="login-page__header">
+          <h1 className="login-page__brand-title">
+            <img src="/logo.png" alt="Nightlio logo" className="login-page__brand-logo" />
             Nightlio
           </h1>
-          <p className="login-page__brand-subtitle" style={{ marginBottom: 0 }}>Your daily mood companion.</p>
+          <p className="login-page__brand-subtitle">Your daily mood companion.</p>
         </div>
 
-        <div style={{ marginTop: '0.5rem' }}>
+        <div className="login-page__body">
           {enableOidc ? (
             /* SSO-first mode: the identity provider owns credentials and
                registration, so no local form and no credential-free entry. */
             <>
-              {message && <p className="login-page__message" style={{ marginBottom: '1rem' }}>{message}</p>}
+              {message && <p className="login-page__message">{message}</p>}
 
               <button
                 type="button"
@@ -199,13 +169,13 @@ const LoginPage = () => {
             </>
           ) : (
             <>
-              <p className="login-page__description" style={{ marginBottom: '1.5rem', fontSize: '0.925rem' }}>
+              <p className="login-page__description">
                 Sign in to continue tracking your mood journey.
               </p>
 
-              {message && <p className="login-page__message" style={{ marginBottom: '1rem' }}>{message}</p>}
+              {message && <p className="login-page__message">{message}</p>}
 
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <form onSubmit={handleSubmit} className="login-page__form">
                 <input
                   type="text"
                   name="username"
@@ -215,7 +185,7 @@ const LoginPage = () => {
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   disabled={isLoading}
-                  style={inputStyle}
+                  className="login-page__input"
                 />
                 <input
                   type="password"
@@ -226,7 +196,7 @@ const LoginPage = () => {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   disabled={isLoading}
-                  style={inputStyle}
+                  className="login-page__input"
                 />
                 <button
                   type="submit"
@@ -246,26 +216,17 @@ const LoginPage = () => {
 
               <button
                 type="button"
-                className="login-page__button"
+                className="login-page__button login-page__button--secondary"
                 onClick={handleSelfHostContinue}
                 disabled={isLoading}
-                style={{ marginTop: '0.75rem' }}
               >
                 Continue without account
               </button>
             </>
           )}
 
-          <div className="login-page__footer" style={{
-            marginTop: '1.75rem',
-            fontSize: '0.8rem',
-            opacity: 0.6,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem'
-          }}>
-            <Lock size={12} aria-hidden="true" style={{ flexShrink: 0 }} />
+          <div className="login-page__footer">
+            <Lock size={12} aria-hidden="true" />
             <span>
               {enableOidc
                 ? 'Sign in with your identity provider.'

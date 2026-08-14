@@ -2,4 +2,5 @@
 # (api/Dockerfile installs requirements.txt only) -- keeps pytest and its
 # transitive deps out of what self-hosters run in production.
 -r requirements.txt
-pytest==7.4.3
+pytest==8.4.1
+pytest-cov==6.2.1
