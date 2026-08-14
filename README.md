@@ -29,6 +29,8 @@ Nightlio is the result: a feature-complete, open-source alternative that you can
 * **Privacy First, Always:** Built from the ground up to be self-hosted. Your sensitive data is stored in a simple SQLite database file on *your* server. No third-party trackers or analytics.
 * **Simple Self-Hosting with Docker:** Get up and running in minutes with a single `docker compose up` command.
 * **Gamified Achievements:** Stay consistent with built-in achievements that unlock as you build your journaling habit.
+* **Backdating:** Forgot a day? File a journal entry or a goal completion under the day it actually happened.
+* **Four Themes:** Default (Dracula purple), Light, Dark, and Synthwave — saved to your account and synced across devices.
 
 <div align="center">🌙</div>
 
@@ -163,6 +165,11 @@ ENABLE_MOOD_MUSIC=0
 OIDC_ISSUER_URL=
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
+# Optional: signup/invite URL at the provider, shown as "Create account"
+# OIDC_SIGNUP_URL=
+# Optional, for SSO-only deployments: 1 hard-disables ALL local logins
+# (password form and credential-free mode) so SSO is the only door
+# DISABLE_LOCAL_LOGIN=0
 
 # Mood music (if enabled)
 JAMENDO_CLIENT_ID=
@@ -340,7 +347,7 @@ Nightlio is actively developed. Here are some of the features planned for the fu
 - [x] **Multi-User Support:** Multiple accounts on a single instance via local username/password and OIDC (Pocket ID) sign-in.
 - [x] **Advanced Analytics:** Tag–mood correlations, rolling averages, day-of-week patterns, and mood volatility.
 - [ ] **Data Import/Export:** Tools to import data from other services (like Daylio) and export your data to standard formats (JSON, CSV).
-- [ ] **More Themes & Customization:** Additional themes and more options to personalize the look and feel of your journal.
+- [x] **More Themes & Customization:** Four themes (Default, Light, Dark, Synthwave) saved per account.
 
 ## Contributing
 
@@ -349,10 +356,14 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 Please ensure you run the tests before opening a PR:
 
 ```bash
-yarn test
+yarn test:api    # backend (pytest)
+yarn test:unit   # frontend unit tests (Vitest)
+yarn test:e2e    # browser tests (Playwright; runs its own servers —
+                 # stop any docker compose stack on ports 5000/5173 first)
 ```
 
-This command runs the backend tests using `pytest`. Please ensure you add tests for any new API functionality.
+CI runs all three suites on every pull request. Please add tests for any new
+API functionality or user-facing behavior.
 
 ## License
 
