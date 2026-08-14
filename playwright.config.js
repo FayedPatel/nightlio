@@ -52,7 +52,8 @@ export default defineConfig({
       // phones report a ~600-620px CSS viewport (see src/index.css — the
       // mobile breakpoint moved 600 -> 640 precisely because this band used
       // to fall into the tablet layout). Pixel 7's 412px never touches that
-      // edge zone, so this project guards the 600-640 band specifically.
+      // edge zone. This project runs the FULL feature suite so every feature
+      // is verified on both desktop and the phone layout.
       name: 'mobile-large',
       use: {
         ...devices['Pixel 7'],
@@ -61,7 +62,8 @@ export default defineConfig({
         userAgent:
           'Mozilla/5.0 (Linux; Android 15; SM-S938B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
       },
-      testMatch: /mobile\.spec\.js/,
+      // Header search is CSS-hidden at <=640px, so its spec can't run here.
+      testIgnore: /search\.spec\.js/,
     },
   ],
 });

@@ -23,7 +23,9 @@ export const useGroups = () => {
 
   const createGroup = async (name) => {
     try {
-      await apiService.createGroup(name);
+      // The API expects an object body; a bare string serialized to JSON
+      // ("name") made request.json a string server-side and creation 500'd.
+      await apiService.createGroup({ name });
       await loadGroups(); // Refresh the list
       return true;
     } catch (error) {
@@ -35,7 +37,7 @@ export const useGroups = () => {
 
   const createGroupOption = async (groupId, name) => {
     try {
-      await apiService.createGroupOption(groupId, name);
+      await apiService.createGroupOption(groupId, { name });
       await loadGroups(); // Refresh the list
       return true;
     } catch (error) {

@@ -54,6 +54,24 @@ export const listEntries = async () => {
   return entries;
 };
 
+export const listGoals = async () => {
+  const { ctx, headers } = await apiContext();
+  const resp = await ctx.get('/api/goals', { headers });
+  const goals = await resp.json();
+  await ctx.dispose();
+  return goals;
+};
+
+export const wipeGoals = async () => {
+  const { ctx, headers } = await apiContext();
+  const resp = await ctx.get('/api/goals', { headers });
+  const goals = await resp.json();
+  for (const goal of goals) {
+    await ctx.delete(`/api/goals/${goal.id}`, { headers });
+  }
+  await ctx.dispose();
+};
+
 export const isoDaysAgo = (days) => {
   const date = new Date();
   date.setDate(date.getDate() - days);

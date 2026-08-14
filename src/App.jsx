@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import LoginPage from "./components/auth/LoginPage";
 import NotFound from "./views/NotFound";
@@ -109,7 +109,7 @@ const AppContent = () => {
   // Determine if we are in entry view for layout purposes (no sidebar)
   const isEntryView = location.pathname === '/dashboard/entry';
 
-  const handleGlobalSearch = (results) => {
+  const handleGlobalSearch = useCallback((results) => {
     setSearchResults(results);
     if (results !== null) {
       // Search results live on the History page (Phase 7c moved the full
@@ -132,7 +132,7 @@ const AppContent = () => {
         }
       }, 50); // slight delay to allow rendering if navigating
     }
-  };
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     const handler = () => {
