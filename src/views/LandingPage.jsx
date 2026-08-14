@@ -53,6 +53,7 @@ const featureBlocks = [
 
 export const LandingNav = ({ active }) => (
   <nav className="landing__nav" aria-label="Main">
+    <div className="landing__nav-inner">
     <Link className="landing__brand" to="/">
       <img src="/logo.png" alt="Nightlio logo" className="landing__brand-mark" />
       <span className="landing__brand-name">Nightlio</span>
@@ -78,6 +79,7 @@ export const LandingNav = ({ active }) => (
       <Link className="landing__button landing__button--primary" to="/login">
         Sign in
       </Link>
+    </div>
     </div>
   </nav>
 );
@@ -112,13 +114,15 @@ const LandingPage = () => {
 
   return (
     <div className="landing">
+      {/* Sticky: outside the hero so it follows the whole page and keeps
+          Sign in reachable without a scroll-to-top control. */}
+      <LandingNav />
+
       <header className="landing__hero">
         <div className="landing__horizon" aria-hidden="true">
           <div className="landing__sun" />
           <div className="landing__grid-floor" />
         </div>
-
-        <LandingNav />
 
         <div className="landing__hero-body">
           <div className="landing__hero-copy">
@@ -240,17 +244,11 @@ docker-compose up -d`}</code></pre>
             </p>
           </div>
           <div className="landing__cta-buttons">
+            {/* Single closing action: the footer right below already links
+                GitHub, so repeating it here was pure duplication. */}
             <Link className="landing__button landing__button--primary landing__button--lg" to="/login">
               Sign in
             </Link>
-            <a
-              className="landing__button landing__button--ghost landing__button--lg"
-              href={GITHUB_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View on GitHub
-            </a>
           </div>
         </div>
       </section>

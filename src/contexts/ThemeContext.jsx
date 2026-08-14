@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import apiService from '../services/api';
 
 // The four configurable themes. "default" is the app's signature
@@ -38,6 +38,10 @@ const ThemeContext = createContext({
 
 export const ThemeProvider = ({ children }) => {
   const [theme, setThemeState] = useState(readStoredTheme);
+  // Once the user picks a theme in this session, the in-flight login sync
+  // must not overwrite it: the GET /api/preferences response can land AFTER
+  // a toggle click and silently revert the user's choice.
+  const userChangedRef = useRef(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -49,12 +53,15 @@ export const ThemeProvider = ({ children }) => {
   // authenticated change or is overridden by syncFromServer after login.
   const setTheme = useCallback((next) => {
     if (!THEME_IDS.includes(next)) return;
+    userChangedRef.current = true;
     setThemeState(next);
     apiService.updateThemePreference(next).catch(() => {});
   }, []);
 
-  // Server-initiated (login sync): apply without echoing a PUT back.
+  // Server-initiated (login sync): apply without echoing a PUT back, and
+  // never over a choice the user already made this session.
   const syncFromServer = useCallback((next) => {
+    if (userChangedRef.current) return;
     if (THEME_IDS.includes(next)) setThemeState(next);
   }, []);
 
@@ -63,6 +70,7 @@ export const ThemeProvider = ({ children }) => {
     setTheme,
     syncFromServer,
     cycle: () => {
+      userChangedRef.current = true;
       setThemeState((current) => {
         const next = THEME_IDS[(THEME_IDS.indexOf(current) + 1) % THEME_IDS.length];
         apiService.updateThemePreference(next).catch(() => {});

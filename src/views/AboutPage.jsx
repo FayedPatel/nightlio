@@ -7,9 +7,7 @@ const UPSTREAM_URL = 'https://github.com/shirsakm/nightlio';
 const AboutPage = () => {
   return (
     <div className="landing">
-      <header className="landing__hero">
-        <LandingNav active="about" />
-      </header>
+      <LandingNav active="about" />
 
       <main className="landing__article">
         <h1>Why I forked Nightlio</h1>
