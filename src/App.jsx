@@ -10,7 +10,6 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Header from "./components/Header";
 import Sidebar from "./components/navigation/Sidebar";
 import BottomNav from "./components/navigation/BottomNav";
-import FAB from "./components/FAB";
 import HistoryView from "./views/HistoryView";
 import HistoryPageView from "./views/HistoryPageView";
 import EntryView from "./views/EntryView";
@@ -228,16 +227,6 @@ const AppContent = () => {
         onLoadStatistics={loadStatistics}
       />
 
-      <FAB
-        onClick={() => {
-          if (location.pathname === '/dashboard' || location.pathname === '/dashboard/') {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-          } else {
-            navigate('/dashboard');
-          }
-        }}
-        label="Scroll to top"
-      />
       <MusicDockGate />
     </>
   );

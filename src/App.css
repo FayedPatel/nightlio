@@ -379,10 +379,6 @@
 .bottom-nav__item.is-active { color: var(--accent-600); }
 .bottom-nav__label { font-size: 12px; }
 
-/* Floating action button */
-.fab { position: fixed; right: calc(18px + env(safe-area-inset-right)); bottom: calc(78px + env(safe-area-inset-bottom)); width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-bg); color: #fff; border: none; box-shadow: var(--shadow-md); z-index: var(--z-fab); }
-.fab { display: none; }
-
 /* Mood selector */
 .mood-grid { display: flex; gap: 0.75rem; justify-content: flex-start; flex-wrap: wrap; margin: 0; }
 .mood-button { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: transform 180ms cubic-bezier(.2,.6,.2,1), border-color 180ms cubic-bezier(.2,.6,.2,1), box-shadow 180ms cubic-bezier(.2,.6,.2,1); display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
@@ -395,7 +391,6 @@
   .app-shell { margin-left: 0; }
   .sidebar { display: none; }
   .bottom-nav { display: flex; }
-  .fab { display: grid; }
 
   /* 5 * 52px + 4 * 0.75rem gaps = 308px, comfortably under the 359px budget
      (375px viewport minus the app-main 16px edge padding on each side) —
@@ -432,7 +427,7 @@
    consistency only — this is not the S25 Ultra width bug, just keeping every
    ad-hoc 600 out of the stylesheet. */
 @media (max-height: 640px) {
-  .bottom-nav, .fab { display: none !important; }
+  .bottom-nav { display: none !important; }
   .app-main { padding-bottom: var(--space-4) !important; }
   
   /* Let the header scroll away so it doesn't eat vertical space */

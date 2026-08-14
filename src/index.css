@@ -20,11 +20,11 @@
   Mobile threshold was 600px originally; bumped to 640px because large
   phones (e.g. Galaxy S25 Ultra) report a ~600-620px CSS viewport width and
   were landing in the 600-900 tablet band (64px icon rail + wrapped header)
-  instead of the intended phone UI (BottomNav + FAB). 640px keeps every
+  instead of the intended phone UI (BottomNav). 640px keeps every
   large phone on the phone layout while tablets (768px+ in practice) still
   get the rail.
 
-  - mobile:  max-width: 640px  (sidebar hidden, BottomNav + FAB shown)
+  - mobile:  max-width: 640px  (sidebar hidden, BottomNav shown)
   - tablet:  640px–900px       (sidebar collapses to a 64px icon-only rail)
   - desktop: min-width: 900px  (full 280px sidebar, two-column layouts)
 
@@ -40,9 +40,12 @@
   number, so the order below is provable by grepping this file rather than
   reverse-engineering it from scattered numbers:
 
-    header (40) < nav / sidebar+bottom-nav (50) < FAB (60) <
+    header (40) < nav / sidebar+bottom-nav (50) <
     MusicDock (70) < dropdown/popover (100) < modal/sheet (1000) <
     toast (1100)
+
+  60 was the FAB tier; the FAB is gone but the gap stays so the remaining
+  tiers keep their numbers.
 
   Toast sits above modal on purpose — a save-error toast must still be
   readable while a modal is open.
@@ -50,7 +53,6 @@
 :root {
   --z-header: 40;
   --z-nav: 50;
-  --z-fab: 60;
   --z-music-dock: 70;
   --z-dropdown: 100;
   --z-modal: 1000;
