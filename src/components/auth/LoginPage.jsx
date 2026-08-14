@@ -27,6 +27,10 @@ const LoginPage = () => {
   const [message, setMessage] = useState('');
 
   const enableOidc = Boolean(config.enable_oidc);
+  // DISABLE_LOCAL_LOGIN on the server hard-refuses /api/auth/local/login;
+  // don't render a form that can only 403. Missing field (older API)
+  // defaults to enabled.
+  const enableLocalLogin = config.enable_local_login !== false;
   // Server-supplied value that lands in an <a href> — only ever render
   // absolute http(s) URLs, even if a misconfigured backend passes something
   // else (file:, javascript:, ...) through.
@@ -167,6 +171,13 @@ const LoginPage = () => {
                 </a>
               )}
             </>
+          ) : !enableLocalLogin ? (
+            /* Local login disabled without SSO configured: nothing can issue
+               a session. Say so instead of rendering a dead form. */
+            <p className="login-page__description">
+              Local login is disabled on this server. Contact the
+              administrator to enable a sign-in method.
+            </p>
           ) : (
             <>
               <p className="login-page__description">

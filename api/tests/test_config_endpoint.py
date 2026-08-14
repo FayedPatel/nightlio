@@ -17,10 +17,12 @@ def test_config_endpoint_client():
     assert set(data.keys()) == {
         "enable_oidc",
         "enable_mood_music",
+        "enable_local_login",
         "signup_url",
     }
     assert isinstance(data["enable_oidc"], bool)
     assert isinstance(data["enable_mood_music"], bool)
+    assert isinstance(data["enable_local_login"], bool)
     assert data["signup_url"] is None or isinstance(data["signup_url"], str)
 
 
