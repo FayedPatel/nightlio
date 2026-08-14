@@ -64,3 +64,4 @@ project.zip
 playwright-report/
 test-results/
 coverage/
+screenshots/
