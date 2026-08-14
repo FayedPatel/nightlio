@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import LoginPage from "./components/auth/LoginPage";
 import NotFound from "./views/NotFound";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -45,7 +45,10 @@ const AppContent = () => {
   const { statistics, currentStreak, loading: statsLoading, error: statsError, loadStatistics } = useStatistics();
 
   const handleMoodSelect = (moodValue) => {
-    navigate('entry', { state: { mood: moodValue } });
+    // Absolute path: relative 'entry' resolves against the current nested
+    // location (e.g. /dashboard/history -> /dashboard/history/entry), which
+    // matches no route and rendered a blank screen.
+    navigate('/dashboard/entry', { state: { mood: moodValue } });
   };
 
   const handleBackToHistory = () => {
@@ -73,11 +76,11 @@ const AppContent = () => {
   };
 
   const handleStartEdit = (entry) => {
-    navigate('entry', { state: { entry: entry, mood: entry.mood } });
+    navigate('/dashboard/entry', { state: { entry: entry, mood: entry.mood } });
   };
 
   const handleEditMoodSelect = (moodValue) => {
-    navigate('.', { state: { ...location.state, mood: moodValue }, replace: true });
+    navigate('/dashboard/entry', { state: { ...location.state, mood: moodValue }, replace: true });
   };
 
   const handleEntryUpdated = (updatedEntry, options = {}) => {
@@ -105,7 +108,7 @@ const AppContent = () => {
   const displayEntries = searchResults !== null ? searchResults : pastEntries;
 
   // Determine if we are in entry view for layout purposes (no sidebar)
-  const isEntryView = location.pathname.endsWith('/entry');
+  const isEntryView = location.pathname === '/dashboard/entry';
 
   const handleGlobalSearch = (results) => {
     setSearchResults(results);
@@ -212,6 +215,9 @@ const AppContent = () => {
                 <Route path="achievements" element={<AchievementsView />} />
                 <Route path="goals" element={<GoalsView />} />
                 <Route path="settings" element={<SettingsView />} />
+                {/* Unmatched /dashboard/... paths bounce home instead of
+                    rendering an empty main area. */}
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
             </main>
           </div>
