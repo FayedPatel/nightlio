@@ -47,5 +47,21 @@ export default defineConfig({
       use: { ...devices['Pixel 7'] },
       testMatch: /mobile\.spec\.js/,
     },
+    {
+      // Galaxy S25 Ultra: no Playwright preset, so a custom profile. Large
+      // phones report a ~600-620px CSS viewport (see src/index.css — the
+      // mobile breakpoint moved 600 -> 640 precisely because this band used
+      // to fall into the tablet layout). Pixel 7's 412px never touches that
+      // edge zone, so this project guards the 600-640 band specifically.
+      name: 'mobile-large',
+      use: {
+        ...devices['Pixel 7'],
+        viewport: { width: 620, height: 1340 },
+        deviceScaleFactor: 3,
+        userAgent:
+          'Mozilla/5.0 (Linux; Android 15; SM-S938B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+      },
+      testMatch: /mobile\.spec\.js/,
+    },
   ],
 });
