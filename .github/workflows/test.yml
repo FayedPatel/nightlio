@@ -2,8 +2,16 @@ name: Tests
 
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   # Lets publish.yml gate its build-push job on this workflow's outcome by
   # calling it as a reusable workflow (`uses: ./.github/workflows/test.yml`
   # + `needs: test`), rather than the flakier `workflow_run` trigger (which

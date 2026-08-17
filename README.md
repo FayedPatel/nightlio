@@ -1,36 +1,75 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/shirsakm/nightlio/refs/heads/dev/public/logo.png" height="60px" />
+<img src="public/logo.png" height="60px" alt="Nightlio logo" />
 <h1>Nightlio</h1>
 
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue?style=flat-square)](LICENSE)
-
-*Private fork of [shirsakm/nightlio](https://github.com/shirsakm/nightlio): Pocket ID OIDC, hardened containers, expanded statistics, mobile UI/PWA.*
+[![Tests](https://img.shields.io/github/actions/workflow/status/FayedPatel/nightlio/test.yml?style=flat-square&label=tests)](https://github.com/FayedPatel/nightlio/actions/workflows/test.yml)
 
 **Privacy-first mood tracker and daily journal, designed for effortless self-hosting.** <br />
 **Your data, your server, your rules.**
 
+*A fork of [shirsakm/nightlio](https://github.com/shirsakm/nightlio) — same privacy-first idea, rebuilt on a Rust API and a strict-TypeScript frontend.*
+
 </div>
 
-<!-- <img width="1366" height="645" alt="image" src="https://github.com/user-attachments/assets/dd50ec1f-4c3f-4588-907c-dca6ac1f7f98" /> -->
-![Preview](https://github.com/user-attachments/assets/77f52abc-b4f8-439d-9bb2-772e3996256c)
+![Nightlio dashboard in the Synthwave theme](docs/assets/dashboard.png)
 
 ## Why Nightlio?
 
-Nightlio was inspired by awesome mood-tracking apps like Daylio, but born out of frustration with aggressive subscription models, paywalls, and a lack of cross-platform access. I wanted a beautiful, effective tool to log my mood and journal my thoughts without compromising on privacy or being locked into a single device.
+Nightlio was inspired by mood-tracking apps like Daylio, but born out of frustration with subscription models, paywalls, and single-device lock-in. It's a feature-complete, open-source alternative you can run anywhere: fully web-based, responsive on desktop and mobile, no ads, no subscriptions, no data mining. Your journal lives in one SQLite file on *your* server.
 
-Nightlio is the result: a feature-complete, open-source alternative that you can run anywhere. It's fully web-based and responsive for use on both desktop and mobile. No ads, no subscriptions, and absolutely no data mining. Just you and your data.
+This fork took that foundation and rebuilt the machinery: the backend is a single Rust binary (158 MB image, ~7.5 MiB of RAM), the frontend is strict TypeScript, and the whole wire contract is pinned by golden fixtures and an OpenAPI document. The measured before/after lives in [`docs/REWRITE.md`](docs/REWRITE.md).
 
-### Key Features
+## A tour
 
-* **Rich Journaling with Markdown:** Write detailed notes for every entry using Markdown for formatting, lists, and links.
-* **Track Your Mood & Find Patterns:** Log your daily mood on a simple 5-point scale and use customizable tags (e.g., 'Sleep', 'Productivity') to discover what influences your state of mind.
-* **Insightful Analytics:** View your mood history on a calendar, see your average mood over time, and track your journaling streak to stay motivated.
-* **Privacy First, Always:** Built from the ground up to be self-hosted. Your sensitive data is stored in a simple SQLite database file on *your* server. No third-party trackers or analytics.
-* **Simple Self-Hosting with Docker:** Get up and running in minutes with a single `docker compose up` command.
-* **Gamified Achievements:** Stay consistent with built-in achievements that unlock as you build your journaling habit.
-* **Backdating:** Forgot a day? File a journal entry or a goal completion under the day it actually happened.
-* **Four Themes:** Default (Dracula purple), Light, Dark, and Synthwave — saved to your account and synced across devices.
+### Log your day in seconds
+
+Pick a mood, write as much or as little as you want — Markdown supported, autosaved as you type.
+
+![Logging a mood entry](docs/assets/log-mood.gif)
+
+### Your history, your patterns
+
+Every entry on one timeline, searchable, with tags for what shaped the day.
+
+![History view](docs/assets/history.png)
+
+### Analytics that earn their place
+
+Calendar heatmap, averages, streaks, tag–mood correlations, rolling averages, day-of-week patterns, volatility — the statistics page is the longest in the app, so here's the whole scroll:
+
+![Statistics page, full scroll](docs/assets/stats-scroll.gif)
+
+### Goals and achievements
+
+Weekly goals with streaks (backdate a completion to the day it actually happened), and achievements that unlock as the habit builds.
+
+| Goals | Achievements |
+| --- | --- |
+| ![Goals view](docs/assets/goals.png) | ![Achievements view](docs/assets/achievements.png) |
+
+### Four themes, synced to your account
+
+Default (Dracula purple), Light, Dark, and Synthwave — pick in Settings or cycle from the header; the choice follows you across devices.
+
+![Theme cycle](docs/assets/themes.gif)
+
+### At home on a phone
+
+Responsive layout with bottom navigation, plus an installable PWA.
+
+<img src="docs/assets/mobile-dashboard.png" width="320" alt="Mobile dashboard" />
+
+## Feature list
+
+* **Rich journaling with Markdown** — formatting, lists, links; autosave while you type; PDF export of any entry.
+* **Mood tracking with tags** — a 5-point scale plus customizable tag groups ('Sleep', 'Productivity', …) to find what moves the needle.
+* **Backdating** — file a journal entry or a goal completion under the day it actually happened.
+* **Gamified consistency** — streaks and achievements, counted fairly (viewing statistics counts once per day, not per page load).
+* **Single sign-on** — any OIDC-compliant provider; [Pocket ID](https://github.com/pocket-id/pocket-id) (passkeys) ships as an opt-in compose profile. Local passwords and a credential-free single-user mode also supported.
+* **Privacy first, always** — self-hosted, one SQLite file, no third-party trackers, no telemetry.
+* **Small footprint** — the API is one static Rust binary: 158 MB image, single-digit MiB of RAM, amd64 + arm64 images published.
 
 <div align="center">🌙</div>
 
@@ -74,7 +113,8 @@ docker compose up -d
 ```
 
 Images are published by `.github/workflows/publish.yml` on every merge to
-`main` (`latest`, `sha-*` tags) and on `v*` release tags (semver tags).
+`main` (`latest`, `sha-*` tags) and on `v*` release tags (semver tags), for
+both **linux/amd64 and linux/arm64**.
 
 ### Self-hosting
 
@@ -141,6 +181,8 @@ docker compose up -d --build
 >    with `docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup alpine tar czf /backup/nightlio-backup.tar.gz -C /data .`
 > 2. Pin `API_IMAGE`/`WEB_IMAGE` to a version tag for predictable upgrades
 >    when using published images.
+> 3. Upgrading an existing deployment across versions? See
+>    [`docs/UPGRADING.md`](docs/UPGRADING.md).
 
 <div align="center">🌙</div>
 
@@ -248,8 +290,8 @@ Interested in contributing or running the project without Docker? Here's what yo
 * **Frontend:** React 19 + Vite, written in strict TypeScript, served by Nginx.
 * **Backend:** Rust (Axum) JSON API in `api/`, shipped as a single static binary. The wire contract is pinned by `contract/openapi.yaml` plus golden request/response fixtures in `contract/fixtures/`, and mirrored in `src/types/api.ts`.
 * **PDF export:** rendered in-process by the Rust API via the `markdown2pdf` crate (see `contract/DECISIONS.md` #15) — no extra service required.
-* **Database:** SQLite, with auto-migrations on startup (`api/src/db/`).
-* **Authentication:** JWT-based (Bearer header or httpOnly cookie). Supports credential-free single-user self-host mode, local username/password accounts, and optional generic OIDC single sign-on (Pocket ID recommended).
+* **Database:** SQLite (WAL journal mode), with auto-migrations on startup (`api/src/db/`).
+* **Authentication:** JWT-based (Bearer header or httpOnly cookie). Supports credential-free single-user self-host mode, local username/password accounts (argon2id, with transparent rehash of legacy hashes), and optional generic OIDC single sign-on (Pocket ID recommended).
 </details>
 
 <details>
@@ -276,7 +318,7 @@ renders it in-process (`markdown2pdf` crate), no extra service needed.
 <details>
 <summary><strong>API Reference</strong></summary>
 
-All protected endpoints require an `Authorization: Bearer <jwt>` header unless otherwise noted.
+All protected endpoints require an `Authorization: Bearer <jwt>` header unless otherwise noted. The full wire contract is `contract/openapi.yaml`.
 
 **Auth**
 * `POST /api/auth/local/login { username, password }` → 200 { token, user } — credentialed login, works regardless of OIDC config
@@ -288,21 +330,22 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `GET /api/auth/callback/oidc` → OIDC callback (register this as the redirect URI with your provider); on success, redirects to the SPA with the token in the URL fragment (`#sso_token=...`) and sets the session cookie; on failure, redirects with `#sso_error=...`
 
 **Config & Misc**
-* `GET /api/config` → { enable_oidc, enable_mood_music }
+* `GET /api/config` → { enable_oidc, enable_mood_music, enable_local_login }
 * `GET /api/` → health payload
 * `GET /api/time` → { time }
 * `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
 * `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`), rendered in-process (see `contract/DECISIONS.md` #15)
 * `GET /api/music/vibe[?tag=chill]` → track suggestion for the given mood tag (requires `ENABLE_MOOD_MUSIC=1` and `JAMENDO_CLIENT_ID`)
 
-**Moods**
+**Moods & Statistics**
 * `POST /api/mood { date, mood(1-5), content, time?, selected_options?: number[] }` → 201 { entry_id, new_achievements[] }
 * `GET /api/moods[?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD]` → list of entries
 * `GET /api/mood/:id` → entry
 * `PUT /api/mood/:id { mood?, content? }` → success
 * `DELETE /api/mood/:id` → success
 * `GET /api/mood/:id/selections` → options linked to the entry
-* `GET /api/statistics` → { statistics, mood_distribution, current_streak }
+* `GET /api/statistics` → { statistics, mood_distribution, current_streak } — pure read
+* `POST /api/statistics/view` → { counted } — records at most one statistics view per day (feeds the Data Lover achievement)
 * `GET /api/streak` → { current_streak, message }
 
 **Groups & Options**
@@ -329,6 +372,21 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `entry_selections`: entry_id(FK), option_id(FK)
 * `achievements`: id, user_id(FK), achievement_type, earned_at, ...
 * `activity_log`: id, user_id(FK), event_type, metadata, created_at — backs `GET /api/activity`
+* `user_metrics`: user_id(PK/FK), stats_views, last_view_date — per-day statistics-view tracking
+</details>
+
+<details>
+<summary><strong>Regenerating the README media</strong></summary>
+
+The screenshots and GIFs in this README are real captures from the running app:
+
+```bash
+README_CAPTURES=1 yarn playwright test e2e/readme-captures.spec.ts --project=chromium
+# then, with any directory that has `npm i gifenc pngjs`:
+node scripts/build-readme-gifs.mjs <that-directory>
+```
+
+Stills land in `docs/assets/`, GIF keyframes in `screenshots/readme-frames/` (gitignored) before assembly.
 </details>
 
 <div align="center">🌙</div>
@@ -337,19 +395,23 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 
 * **Data Ownership:** Your data is stored in a local SQLite file. You can back it up, move it, or delete it at any time.
 * **No Telemetry:** This application does not collect any usage data or send information to third-party services.
-* **Secure Authentication:** API endpoints are protected using JSON Web Tokens (JWT).
+* **Secure Authentication:** API endpoints are protected using JSON Web Tokens (JWT); local passwords are stored as argon2id.
 * **Configurable CORS:** Restrict API access to trusted domains via environment variables.
 
 See [SECURITY.md](./SECURITY.md) for the full threat model, vulnerability disclosure process, and a record of hardening fixes self-hosters should be aware of when upgrading.
 
 ## Roadmap
 
-Nightlio is actively developed. Here are some of the features planned for the future:
 - [x] **Responsive Design:** Full support for usage on mobile devices, plus an installable PWA.
 - [x] **Multi-User Support:** Multiple accounts on a single instance via local username/password and OIDC (Pocket ID) sign-in.
 - [x] **Advanced Analytics:** Tag–mood correlations, rolling averages, day-of-week patterns, and mood volatility.
-- [ ] **Data Import/Export:** Tools to import data from other services (like Daylio) and export your data to standard formats (JSON, CSV).
 - [x] **More Themes & Customization:** Four themes (Default, Light, Dark, Synthwave) saved per account.
+- [x] **Rust rewrite:** single-binary API, typed contract, 75% smaller images ([details](docs/REWRITE.md)).
+- [ ] **Data Import/Export:** Tools to import data from other services (like Daylio) and export your data to standard formats (JSON, CSV).
+
+## Credits
+
+Nightlio was created by [shirsakm](https://github.com/shirsakm) — the [original project](https://github.com/shirsakm/nightlio) established everything this fork stands on: the privacy-first, single-SQLite-file journal that's genuinely pleasant to use. This fork is maintained independently and has since diverged (OIDC SSO, themes, backdating, the Rust/TypeScript rewrite), but the idea and the name are upstream's. The fork story is on the [About page](src/views/AboutPage.tsx) of every running instance.
 
 ## Contributing
 
@@ -367,8 +429,7 @@ yarn test:e2e    # browser tests (Playwright; runs its own servers —
                  # stop any docker compose stack on ports 5000/5173 first)
 ```
 
-CI runs all of these suites on every pull request. Please add tests for any
-new API functionality or user-facing behavior.
+CI runs all of these suites on every pull request (documentation-only changes skip the suites). Please add tests for any new API functionality or user-facing behavior.
 
 ## License
 

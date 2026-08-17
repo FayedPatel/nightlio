@@ -47,7 +47,16 @@ test('about page tells the fork story', async ({ page }) => {
   await expect(
     page.getByRole('heading', { name: /why i forked nightlio/i }),
   ).toBeVisible();
-  await expect(page.getByText(/originally created by/i)).toBeVisible();
+  await expect(page.getByText(/this is a fork, and it says so proudly/i)).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: /the v0\.4\.0 rewrite/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/rust api built on axum and rusqlite/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'original project on GitHub' }),
+  ).toHaveAttribute('href', 'https://github.com/shirsakm/nightlio');
 });
 
 test('features link works from the about page', async ({ page }) => {
