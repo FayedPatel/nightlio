@@ -10,7 +10,6 @@ services:
     restart: unless-stopped
     environment:
       - APP_ENV=production
-      - RAILWAY_ENVIRONMENT=production
       # Required, no insecure fallback: a predictable key lets an attacker
       # forge auth tokens for any user (see SECURITY.md). Generate with:
       #   openssl rand -hex 32
