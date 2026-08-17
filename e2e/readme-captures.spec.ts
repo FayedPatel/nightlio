@@ -36,13 +36,16 @@ const ENTRIES: Array<{ day: number; mood: MoodValue; content: string }> = [
   { day: 6, mood: 5, content: '# Hike day\nTwelve kilometres of forest trail and zero notifications.' },
 ];
 
-const GOALS: Array<{ title: string; description: string; frequency: number; progress: number }> = [
-  { title: 'Train 3x a week', description: 'Any workout counts.', frequency: 3, progress: 2 },
-  { title: 'Read before bed', description: 'Twenty minutes, no phone.', frequency: 5, progress: 3 },
-  { title: 'Cook at home', description: 'Takeout is for Fridays.', frequency: 4, progress: 1 },
-  { title: 'Morning pages', description: 'Three sentences before coffee.', frequency: 7, progress: 5 },
-  { title: 'Walk outside', description: 'Daylight before noon.', frequency: 5, progress: 0 },
-  { title: 'Call someone', description: 'Family or an old friend.', frequency: 2, progress: 1 },
+// Weekly progress dedupes same-day repeats, so `done` is a boolean: half
+// the goals are completed today (chip + progress tick), half stay open —
+// that mix reads better than every card looking identical.
+const GOALS: Array<{ title: string; description: string; frequency: number; done: boolean }> = [
+  { title: 'Train 3x a week', description: 'Any workout counts.', frequency: 3, done: true },
+  { title: 'Read before bed', description: 'Twenty minutes, no phone.', frequency: 5, done: false },
+  { title: 'Cook at home', description: 'Takeout is for Fridays.', frequency: 4, done: true },
+  { title: 'Morning pages', description: 'Three sentences before coffee.', frequency: 7, done: false },
+  { title: 'Walk outside', description: 'Daylight before noon.', frequency: 5, done: true },
+  { title: 'Call someone', description: 'Family or an old friend.', frequency: 2, done: false },
 ];
 
 const setTheme = async (theme: string) => {
@@ -180,8 +183,8 @@ test.beforeAll(async () => {
   const { ctx, headers } = await apiContext();
   for (const g of GOALS) {
     const created = await seedGoal({ title: g.title, description: g.description, frequency: g.frequency });
-    for (let i = 0; i < g.progress; i += 1) {
-      await ctx.post(`/api/goals/${created.goal_id}/progress`, { headers, data: {} });
+    if (g.done) {
+      await ctx.post(`/api/goals/${created.id}/progress`, { headers, data: {} });
     }
   }
   await ctx.post('/api/achievements/check', { headers, data: {} });
