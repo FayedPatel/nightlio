@@ -8,8 +8,7 @@ v0.4.0 replaced the Flask/Python backend with a Rust API (Axum + rusqlite) and c
 |---|---|---|
 | API image (disk) | 624 MB | **158 MB** (−75%) |
 | API image (compressed pull) | 161 MB | **41 MB** |
-| PDF export | separate 614 MB sidecar container | **in-process**, container gone |
-| Containers in the stack | 3 (api, pdf-sidecar, frontend) | **2** |
+| PDF export | in-process, Python `markdown-pdf` library | in-process, `markdown2pdf` Rust crate — same wire contract (a Python sidecar container was the rewrite's interim design, retired before release: `contract/DECISIONS.md` #15) |
 | API memory under load | ~290 MiB (gunicorn worker pool) | **~7.5 MiB** (single process) |
 | p99 latency, health endpoint @ 20 concurrent | 12 ms | **6 ms** |
 | p99 latency, authenticated statistics | 19 ms | **8 ms** |
@@ -33,4 +32,4 @@ Both images ran side by side on the same host (2026-08-16): the published v0.3.0
 
 ## Why throughput barely moved and it still mattered
 
-For a single-user self-hosted journal, Flask was never latency-bound — mean response times were fine. The wins that justify the rewrite are the 99th-percentile latency (no worker-pool queuing or GC pauses), the ~40× memory reduction on hosts shared with Pocket ID and a reverse proxy, the 75% smaller image pulls, one less container, and — most durably — that the port forced every line of backend behavior through a recorded contract, which is how the latent bugs above were found. The full decision-by-decision record lives in [`contract/DECISIONS.md`](../contract/DECISIONS.md).
+For a single-user self-hosted journal, Flask was never latency-bound — mean response times were fine. The wins that justify the rewrite are the 99th-percentile latency (no worker-pool queuing or GC pauses), the ~40× memory reduction on hosts shared with Pocket ID and a reverse proxy, the 75% smaller image pulls, and — most durably — that the port forced every line of backend behavior through a recorded contract, which is how the latent bugs above were found. The full decision-by-decision record lives in [`contract/DECISIONS.md`](../contract/DECISIONS.md).

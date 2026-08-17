@@ -10,13 +10,13 @@ The full rewrite: the Flask/Python backend is replaced by a Rust API (Axum + rus
 
 - Complete port of the backend as a single Rust binary: routes with Flask-parity semantics (slash aliases, int-converter 404s, response envelopes), the versioned SQLite bootstrap and migrations, JWT + `nightlio_token` cookie auth, CSRF checks, OIDC, and the login rate limiter.
 - **Argon2 rehash-on-login**: new password hashes are argon2id; legacy Werkzeug scrypt/pbkdf2 hashes keep verifying and are transparently upgraded on the next successful login.
-- **PDF export renders in-process** (the Python pdf-sidecar container and `PDF_SERVICE_URL` are gone).
+- **PDF export renders in-process** via the `markdown2pdf` crate (replacing the Python `markdown-pdf` library; the wire contract is unchanged).
 - **WAL journal mode**, size-bounded with checkpoint-truncate on shutdown.
 - Correctness fixes along the way: correctly-rounded float JSON parsing, a latent stale-week clamp bug in goal updates, and schema-legal REAL mood values no longer 500.
 
 ### Measured against the v0.3.0 image (same host, side by side)
 
-- API image: 624 MB → **158 MB** on disk (161 MB → 41 MB compressed) — and the 614 MB pdf-sidecar image is eliminated entirely.
+- API image: 624 MB → **158 MB** on disk (161 MB → 41 MB compressed).
 - API memory under load: ~290 MiB (gunicorn worker pool) → **~7.5 MiB** (single process).
 - Tail latency at 20 concurrent requests: p99 12 ms → **6 ms** on health, 19 ms → **8 ms** on authenticated statistics, at equal-or-better throughput.
 
@@ -43,7 +43,6 @@ The full rewrite: the Flask/Python backend is replaced by a Rust API (Axum + rus
 ### Removed
 
 - The entire Flask/Python backend, its requirements files, `test.sh`, and the pytest suite (−9,432 lines).
-- The pdf-sidecar service and image.
 - The Python demo-data seeder and assorted personal operational scripts (now local-only).
 
 ### Upgrading
