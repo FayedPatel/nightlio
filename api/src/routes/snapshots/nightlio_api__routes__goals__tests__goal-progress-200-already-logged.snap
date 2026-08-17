@@ -1,0 +1,23 @@
+---
+source: src/routes/goals.rs
+expression: "json!({ \"status\": expected_status, \"body\": actual })"
+---
+{
+  "body": {
+    "already_completed_today": true,
+    "already_logged": true,
+    "completed": 1,
+    "created_at": "<TS>",
+    "description": "15 minutes",
+    "frequency_per_week": 4,
+    "id": 1,
+    "last_completed_date": "<DATE>",
+    "logged_date": "<DATE>",
+    "period_start": "<DATE>",
+    "streak": 0,
+    "title": "Meditate more",
+    "updated_at": "<TS>",
+    "user_id": 1
+  },
+  "status": 200
+}

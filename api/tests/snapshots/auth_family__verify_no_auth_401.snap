@@ -1,0 +1,10 @@
+---
+source: tests/auth_family.rs
+expression: "json!({\"status\": 401, \"body\": body})"
+---
+{
+  "body": {
+    "error": "Authorization header required"
+  },
+  "status": 401
+}

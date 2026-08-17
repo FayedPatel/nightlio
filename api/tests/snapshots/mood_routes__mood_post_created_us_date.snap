@@ -1,0 +1,13 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "entry_id": 2,
+    "message": "Mood entry created successfully",
+    "new_achievements": [],
+    "status": "success"
+  },
+  "status": 201
+}

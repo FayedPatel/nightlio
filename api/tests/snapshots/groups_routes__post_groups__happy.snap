@@ -1,0 +1,12 @@
+---
+source: tests/groups_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "group_id": 4,
+    "message": "Group created successfully",
+    "status": "success"
+  },
+  "status": 201
+}

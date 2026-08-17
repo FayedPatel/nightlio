@@ -1,0 +1,22 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "activities": [
+      {
+        "created_at": "<TS>",
+        "event_type": "entry_created",
+        "id": 7,
+        "metadata": {
+          "date": "2026-08-14",
+          "entry_id": 5
+        },
+        "user_id": 1
+      }
+    ],
+    "next_cursor": 7
+  },
+  "status": 200
+}

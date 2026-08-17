@@ -1,0 +1,65 @@
+{
+  "_comment": "Pinned werkzeug.security.generate_password_hash output (api/venv), generated 2026-08-15. Verdicts asserted against werkzeug at generation time.",
+  "hashes": [
+    {
+      "name": "scrypt_full",
+      "method": "scrypt:32768:8:1",
+      "hash": "scrypt:32768:8:1$iipX1Z0IdvItWilj$dd48b39499c1cb687a46ce95bafcdaec819269c064236876b5832b5d76ad598e1523c9990896ad7aa0053b0c711a8b83f3d43149d84754576d9ad1afae3a9df7",
+      "password": "correct horse battery staple",
+      "wrong_passwords": [
+        "not the password",
+        ""
+      ],
+      "werkzeug_accepts_password": true,
+      "werkzeug_rejects_wrong": true
+    },
+    {
+      "name": "pbkdf2_600k",
+      "method": "pbkdf2:sha256:600000",
+      "hash": "pbkdf2:sha256:600000$8laUofpdxosCyixt$7c50cd18805e9b09bd53cabf0e520b73af45333a226412c5886f319d3f38adbe",
+      "password": "hunter2",
+      "wrong_passwords": [
+        "not the password",
+        ""
+      ],
+      "werkzeug_accepts_password": true,
+      "werkzeug_rejects_wrong": true
+    },
+    {
+      "name": "pbkdf2_1m",
+      "method": "pbkdf2:sha256:1000000",
+      "hash": "pbkdf2:sha256:1000000$BppJGXnae0h8jdWr$21362e8c57d65a6c6a3c8bf30a7180d1844303e4ec41fd34fafc5c160f042042",
+      "password": "hunter2",
+      "wrong_passwords": [
+        "not the password",
+        ""
+      ],
+      "werkzeug_accepts_password": true,
+      "werkzeug_rejects_wrong": true
+    },
+    {
+      "name": "scrypt_cheap",
+      "method": "scrypt:2048:8:1",
+      "hash": "scrypt:2048:8:1$1CrbApJ627hO44SD$88e93a6befaa0ab4f86ac5ecffe767c1888b601dfcdf0e8077621f8f4c088960229ebb3e7aa1d57c5d6c60f32970d4424a04f28f4ccc721931c2599ebb4bd6d3",
+      "password": "hunter2",
+      "wrong_passwords": [
+        "not the password",
+        ""
+      ],
+      "werkzeug_accepts_password": true,
+      "werkzeug_rejects_wrong": true
+    },
+    {
+      "name": "pbkdf2_cheap",
+      "method": "pbkdf2:sha256:1000",
+      "hash": "pbkdf2:sha256:1000$5CVyGlUbxLbnBbTE$3ba6acce4c40146aaf5af89528c730cd6d5d37ffb8b69bc8a35988b875770868",
+      "password": "hunter2",
+      "wrong_passwords": [
+        "not the password",
+        ""
+      ],
+      "werkzeug_accepts_password": true,
+      "werkzeug_rejects_wrong": true
+    }
+  ]
+}

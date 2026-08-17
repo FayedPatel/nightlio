@@ -1,0 +1,15 @@
+---
+source: tests/auth_family.rs
+expression: "json!({\"status\": 200, \"body\": body})"
+---
+{
+  "body": {
+    "user": {
+      "avatar_url": null,
+      "email": "selfhost_default_user@localhost",
+      "id": 1,
+      "name": "Me"
+    }
+  },
+  "status": 200
+}

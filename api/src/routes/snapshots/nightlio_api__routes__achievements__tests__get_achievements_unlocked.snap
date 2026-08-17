@@ -1,0 +1,45 @@
+---
+source: src/routes/achievements.rs
+expression: "json!({ \"status\": status.as_u16(), \"body\": body })"
+---
+{
+  "body": [
+    {
+      "achievement_type": "data_lover",
+      "description": "View statistics on 10 different days",
+      "earned_at": "<TS>",
+      "icon": "BarChart3",
+      "id": 3,
+      "name": "Data Lover",
+      "nft_minted": 0,
+      "nft_token_id": null,
+      "nft_tx_hash": null,
+      "rarity": "uncommon"
+    },
+    {
+      "achievement_type": "first_entry",
+      "description": "Log your first mood entry",
+      "earned_at": "<TS>",
+      "icon": "Zap",
+      "id": 1,
+      "name": "First Entry",
+      "nft_minted": 0,
+      "nft_token_id": null,
+      "nft_tx_hash": null,
+      "rarity": "common"
+    },
+    {
+      "achievement_type": "week_warrior",
+      "description": "Maintain a 7-day streak",
+      "earned_at": "<TS>",
+      "icon": "Flame",
+      "id": 2,
+      "name": "Week Warrior",
+      "nft_minted": 0,
+      "nft_token_id": null,
+      "nft_tx_hash": null,
+      "rarity": "uncommon"
+    }
+  ],
+  "status": 200
+}

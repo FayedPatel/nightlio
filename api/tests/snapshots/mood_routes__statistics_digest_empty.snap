@@ -1,0 +1,17 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "average_mood": null,
+    "entries_logged": 0,
+    "longest_streak": 0,
+    "month": 8,
+    "mood_trend": null,
+    "previous_average_mood": null,
+    "top_tags": [],
+    "year": 2025
+  },
+  "status": 200
+}

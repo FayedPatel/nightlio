@@ -1,0 +1,135 @@
+---
+source: tests/groups_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": [
+    {
+      "id": 1,
+      "name": "Emotions",
+      "options": [
+        {
+          "id": 10,
+          "name": "angry"
+        },
+        {
+          "id": 9,
+          "name": "anxious"
+        },
+        {
+          "id": 8,
+          "name": "bored"
+        },
+        {
+          "id": 5,
+          "name": "content"
+        },
+        {
+          "id": 13,
+          "name": "desperate"
+        },
+        {
+          "id": 2,
+          "name": "excited"
+        },
+        {
+          "id": 3,
+          "name": "grateful"
+        },
+        {
+          "id": 1,
+          "name": "happy"
+        },
+        {
+          "id": 4,
+          "name": "relaxed"
+        },
+        {
+          "id": 12,
+          "name": "sad"
+        },
+        {
+          "id": 11,
+          "name": "stressed"
+        },
+        {
+          "id": 6,
+          "name": "tired"
+        },
+        {
+          "id": 7,
+          "name": "unsure"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Productivity",
+      "options": [
+        {
+          "id": 22,
+          "name": "accomplished"
+        },
+        {
+          "id": 23,
+          "name": "busy"
+        },
+        {
+          "id": 24,
+          "name": "distracted"
+        },
+        {
+          "id": 20,
+          "name": "focused"
+        },
+        {
+          "id": 27,
+          "name": "lazy"
+        },
+        {
+          "id": 21,
+          "name": "motivated"
+        },
+        {
+          "id": 26,
+          "name": "overwhelmed"
+        },
+        {
+          "id": 25,
+          "name": "procrastinating"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Sleep",
+      "options": [
+        {
+          "id": 17,
+          "name": "exhausted"
+        },
+        {
+          "id": 19,
+          "name": "insomniac"
+        },
+        {
+          "id": 15,
+          "name": "refreshed"
+        },
+        {
+          "id": 18,
+          "name": "restless"
+        },
+        {
+          "id": 16,
+          "name": "tired"
+        },
+        {
+          "id": 14,
+          "name": "well-rested"
+        }
+      ]
+    }
+  ],
+  "status": 200
+}

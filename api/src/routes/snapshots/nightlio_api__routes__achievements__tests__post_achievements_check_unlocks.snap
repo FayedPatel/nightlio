@@ -1,0 +1,19 @@
+---
+source: src/routes/achievements.rs
+expression: "json!({ \"status\": status.as_u16(), \"body\": body })"
+---
+{
+  "body": {
+    "count": 1,
+    "new_achievements": [
+      {
+        "achievement_type": "data_lover",
+        "description": "View statistics on 10 different days",
+        "icon": "BarChart3",
+        "name": "Data Lover",
+        "rarity": "uncommon"
+      }
+    ]
+  },
+  "status": 200
+}

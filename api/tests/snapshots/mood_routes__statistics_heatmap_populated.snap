@@ -1,0 +1,28 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "days": [
+      {
+        "average_mood": 4.0,
+        "date": "2025-08-01",
+        "entry_count": 1
+      },
+      {
+        "average_mood": 2.0,
+        "date": "2025-08-02",
+        "entry_count": 1
+      },
+      {
+        "average_mood": 5.0,
+        "date": "2025-08-03",
+        "entry_count": 1
+      }
+    ],
+    "days_logged": 3,
+    "year": 2025
+  },
+  "status": 200
+}

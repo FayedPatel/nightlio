@@ -1,0 +1,14 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": [
+    {
+      "group_name": "Activities",
+      "id": 28,
+      "name": "Exercise"
+    }
+  ],
+  "status": 200
+}

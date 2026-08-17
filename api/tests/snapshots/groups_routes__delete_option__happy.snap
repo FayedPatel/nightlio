@@ -1,0 +1,11 @@
+---
+source: tests/groups_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "message": "Option deleted successfully",
+    "status": "success"
+  },
+  "status": 200
+}

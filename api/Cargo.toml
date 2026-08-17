@@ -1,0 +1,71 @@
+[package]
+name = "nightlio-api"
+version = "0.1.0"
+edition = "2024"
+# Rust 1.90 is what CI / dev machines have installed.
+rust-version = "1.90"
+
+# Single source of truth for the whole Rust rewrite's dependency set.
+# Later agents (routes, auth, data layer) must NOT touch this file —
+# everything the port needs is already declared below.
+
+[dependencies]
+# HTTP surface
+axum = "0.8.9"
+tower = "0.5.3"
+tower-http = { version = "0.6.11", features = ["cors", "set-header", "trace"] }
+tokio = { version = "1.53.1", features = ["full"] }
+
+# SQLite. `bundled` is non-negotiable: it pins the SQLite version so
+# GLOB/printf/instr/julianday/strftime('%w') and ON CONFLICT semantics
+# cannot drift under a system libsqlite3.
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+r2d2 = "0.8.10"
+r2d2_sqlite = "0.35.0"
+
+# Auth / crypto (JWT signing, werkzeug-compatible password hashes, OIDC SSO)
+jsonwebtoken = "9.3.1"
+# argon2id for NEW password hashes (rehash-on-login); owner-approved
+# addition after the Flask-rollback constraint was retired.
+argon2 = "0.5.3"
+scrypt = "0.12.0"
+pbkdf2 = "0.13.0"
+hmac = "0.13.0"
+sha2 = "0.11.0"
+subtle = "2.6.1"
+openidconnect = "4.0.1"
+# 0.12.x on purpose: openidconnect 4 -> oauth2 integrates with reqwest 0.12,
+# so a single reqwest version serves both our direct HTTP calls and the OIDC
+# client. 0.13 also renamed the rustls-tls feature.
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json"] }
+
+# Serialization / config
+serde = { version = "1.0.229", features = ["derive"] }
+# float_roundtrip: serde_json's default f64 parsing is imprecise (can be
+# 1 ulp off on full-precision floats); this makes parsing correctly
+# rounded so float request values (REAL moods, epoch timestamps) survive
+# a parse→serialize round trip byte-identically.
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+dotenvy = "0.15.7"
+
+# Errors / logging
+thiserror = "2.0.20"
+anyhow = "1.0.104"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+# Misc
+chrono = "0.4.45"
+cookie = "0.18.2"
+rand = "0.10.2"
+urlencoding = "2.1.3"
+markdown2pdf = "1.6.0"
+
+[dev-dependencies]
+insta = { version = "1.48.0", features = ["json"] }
+rstest = "0.26.1"
+tempfile = "3.27.0"
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "json"] }
+# Fake OIDC provider for the SSO integration tests (discovery/JWKS/token
+# endpoints over real HTTP). Dev-only; was missing from the frozen set.
+wiremock = "0.6.5"

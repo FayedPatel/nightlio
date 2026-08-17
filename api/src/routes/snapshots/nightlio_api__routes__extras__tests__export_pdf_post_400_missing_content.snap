@@ -1,0 +1,10 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "error": "Content is required"
+  },
+  "status": 400
+}

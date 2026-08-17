@@ -1,0 +1,8 @@
+---
+source: src/routes/achievements.rs
+expression: "json!({ \"status\": status.as_u16(), \"body\": body })"
+---
+{
+  "body": [],
+  "status": 200
+}

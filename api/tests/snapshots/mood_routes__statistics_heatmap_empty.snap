@@ -1,0 +1,12 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "days": [],
+    "days_logged": 0,
+    "year": 2025
+  },
+  "status": 200
+}
