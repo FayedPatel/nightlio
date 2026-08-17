@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "path": "/api/goals",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "Bad freq",
+      "frequency_per_week": 9
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "frequency_per_week must be 1..7"
+    }
+  },
+  "notes": "frequency_per_week outside 1..7 -> 400. Also raised when both frequency_per_week and legacy alias 'frequency' are absent (int(0-ish) -> 0)."
+}

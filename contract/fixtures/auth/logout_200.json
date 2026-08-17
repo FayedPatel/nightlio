@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/api/auth/logout",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "headers_that_matter": {
+      "Set-Cookie": "nightlio_token=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; Path=/; SameSite=Lax"
+    },
+    "body": {
+      "status": "success"
+    }
+  },
+  "notes": [
+    "Not behind require_auth: succeeds with no credentials at all, and is idempotent (calling again returns the identical response).",
+    "Cookie clearing recorded verbatim: empty value, Expires=Thu, 01 Jan 1970 00:00:00 GMT, Max-Age=0, HttpOnly, Path=/, SameSite=Lax. Secure absent over plain HTTP (mirrors the set-cookie logic).",
+    "Because it is unauthenticated, no CSRF check applies despite being a POST."
+  ]
+}

@@ -1,0 +1,2622 @@
+# Nightlio API contract — merged OpenAPI 3.1 document.
+#
+# Assembled from the per-family fragments in contract/openapi-parts/ (auth,
+# mood+statistics, goals, groups, achievements, misc) and cross-checked against
+# the golden fixtures in contract/fixtures/**. This file is the single source
+# of truth the TypeScript frontend (src/types/api.ts) and the Rust API rewrite
+# are graded against. See contract/README.md for the replay and grading rules.
+#
+# Vendor extensions used in this document:
+#   x-nightlio-conditional : the path is registered ONLY when the named env
+#                            flag is enabled; otherwise it 404s like any
+#                            unknown path ({"error": "Resource not found"}).
+#   x-nightlio-alias-of    : the path is a separately registered Werkzeug rule
+#                            (never a redirect) whose behavior is byte-identical
+#                            to the named canonical path.
+#   x-nightlio-unrecorded  : behavior documented from code only; no golden
+#                            fixture exists. Excluded from parity grading until
+#                            an owner records or waives it.
+
+openapi: 3.1.0
+
+info:
+  title: Nightlio API
+  version: 0.4.0-dev
+  description: |
+    Wire contract for the Nightlio Flask API (api/routes/*.py), recorded
+    against live instances and encoded as golden fixtures.
+
+    ## Global rules (verified by fixtures)
+
+    - **Error envelope.** Every application-level error body is
+      `{"error": "<string>"}` — including framework routing 404s, which are
+      rewritten to JSON by app-level handlers (api/utils/error_handlers.py):
+      `{"error": "Resource not found"}`. Since the contract change,
+      **405** follows the envelope too (`{"error": "Method not allowed"}` +
+      `Allow` header); the sole exception is the **308** redirect from
+      `GET /api` to `/api/` (empty body). Grade error
+      responses on status code and `{error}` shape, NEVER on message text —
+      Python exception `__str__` output is not reproducible in Rust. The only
+      error strings fixed exactly by the contract are the two CSRF 403 bodies:
+      `"Content-Type must be application/json"` and
+      `"Missing required request header"`.
+    - **No 204 on data endpoints.** The frontend client throws on any 2xx
+      whose Content-Type is not application/json, so DELETEs return
+      200 + JSON body, never 204. The only non-JSON 2xx are the OPTIONS
+      responses (below) and the `POST /api/export/pdf` binary body.
+    - **OPTIONS — unified (contract change).** Every route answers
+      OPTIONS with **204**, an empty body (Content-Type text/html), and an
+      `Allow` header, before any auth or token check. A CORS preflight
+      (Origin + Access-Control-Request-Method) rides the same 204 — the
+      CORS layer is a non-short-circuiting after-request hook that appends
+      the CORS headers. A 204 carries no Content-Length on the wire.
+      (pre-rewrite the app had two regimes: explicitly registered OPTIONS
+      rules — the goal-completions aliases and the achievements-progress
+      variants — answered 204 while Flask's automatic OPTIONS answered
+      200-empty. Fixture auth/verify_options-204.json records the unified
+      behavior.)
+    - **Auth.** 32 rules sit behind require_auth: `Authorization: Bearer <jwt>`
+      is checked first; the `nightlio_token` httpOnly cookie is the fallback.
+      Missing credentials -> 401 `{"error": "Authorization header required"}`
+      (same body even when the missing credential is the cookie); expired ->
+      `{"error": "Token expired"}`; malformed -> `{"error": "Invalid token"}`.
+    - **CSRF (cookie auth only).** A cookie-authenticated POST/PUT/PATCH/DELETE
+      must ALSO send `Content-Type: application/json` (checked first) and
+      `X-Requested-With: nightlio`, else 403 with the exact bodies noted above.
+      Bearer requests bypass both checks entirely. This applies to
+      POST /api/auth/verify too, despite it being semantically read-only.
+      Documented on each mutation via the shared XRequestedWith parameter.
+    - **Routing.** Rules are registered without trailing slashes
+      (strict_slashes default), so a trailing-slash variant 404s with the JSON
+      envelope and no redirect — EXCEPT the health rule `/api/` (the only rule
+      registered WITH a slash; bare `/api` 308-redirects to it), the
+      goal-completions aliases, and both achievements-progress variants.
+      The `<int:>` path converter rejects negative and non-numeric segments at
+      routing time (404, BEFORE auth), but is UNBOUNDED: an id beyond SQLite's
+      i64 range matches the route and the sqlite3 bind raises -> observed 500
+      `{"error": "Python int too large to convert to SQLite INTEGER"}`.
+      The Rust port deliberately returns a clean 404 for the overflow case
+      (accepted drift, contract/DECISIONS.md #1).
+    - **Bare arrays.** Six endpoints return top-level JSON arrays:
+      GET /api/moods, /api/goals, /api/groups, /api/achievements,
+      /api/mood/{id}/selections, /api/goals/{id}/completions (+ its aliases).
+      Everything else returns an object. /api/activity is the only paginated
+      endpoint (`{activities, next_cursor}` keyset pagination).
+    - **JSON body leniency.** POST /api/auth/local/login,
+      POST /api/goals/{id}/progress and POST /api/achievements/check parse the
+      body with get_json(silent=True): a missing, empty, or non-JSON body is
+      tolerated. A strict JSON extractor breaks recorded behavior.
+    - **Timestamps.** SQLite CURRENT_TIMESTAMP text: UTC "YYYY-MM-DD HH:MM:SS",
+      space separator, no timezone suffix. Normalized to "<TS>" in fixtures.
+    - **Autoincrement ids** are never graded exactly: the self-host login
+      upsert burns rowids on every conflict, and a fresh DB is pre-seeded with
+      3 default groups / 27 options (first user-created group id is 4, first
+      option id is 28).
+    - **Rate limits** (sqlite-backed, per client): /api/auth/local/login
+      30/min, /api/auth/local/register 10/min; excess -> 429. No 429 fixture
+      was recorded; the `{error}` body shape is documented from code only.
+
+security: []
+
+paths:
+  # ── auth ────────────────────────────────────────────────────────────────
+  /api/auth/verify:
+    post:
+      operationId: verifyToken
+      summary: Verify the caller's session (Bearer header or cookie) and return user info.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      description: >-
+        Behind require_auth. Semantically read-only but uses POST, so a
+        cookie-authenticated call is subject to the CSRF checks (403 without
+        Content-Type application/json and X-Requested-With nightlio); Bearer
+        calls need neither header. Request body is ignored.
+      responses:
+        "200":
+          description: Session valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/AuthUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: 'Authenticated user id no longer exists ({"error": "User not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/logout:
+    post:
+      operationId: logout
+      summary: Clear the session cookie.
+      description: >-
+        Deliberately NOT behind require_auth (and therefore not behind the
+        CSRF gate): must work with an expired/invalid/missing session.
+        Idempotent — always 200 {"status": "success"} with a clearing
+        Set-Cookie (nightlio_token=; Expires=Thu, 01 Jan 1970 00:00:00 GMT;
+        Max-Age=0; HttpOnly; Path=/; SameSite=Lax; Secure only over HTTPS).
+      responses:
+        "200":
+          description: Cookie cleared (or was never set).
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Clearing cookie, attributes exactly as in the description.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: success
+
+  /api/auth/local/login:
+    post:
+      operationId: localLogin
+      summary: Local login (credentialed, or credential-free self-host mode).
+      description: >-
+        Unauthenticated; rate-limited 30/min. Body is optional JSON
+        (get_json(silent=True) — no body, empty body, and non-JSON body all
+        behave like {}). If the parsed body contains `username` OR `password`
+        (mere key presence), the credentialed branch runs: both must be
+        non-empty strings (else 400), then the password is checked against the
+        stored hash (any failure -> 401 {"error": "Invalid credentials"};
+        unknown user and wrong password are deliberately indistinguishable).
+        With neither key, the credential-free self-host branch issues a token
+        for the default self-host user — but ONLY while OIDC is unconfigured;
+        with OIDC enabled it is 403 {"error": "Credentials required"}.
+        DISABLE_LOCAL_LOGIN hard-disables both branches: 403
+        {"error": "Local login is disabled"}. The flag defaults to the
+        OIDC-configured state when unset/empty (SSO deployments are
+        SSO-only by default; owner-approved change from the Flask default
+        of always-off) — an explicit 0/1 always wins. Each credential-free login
+        upserts the self-host user (INSERT ... ON CONFLICT), burning an
+        autoincrement rowid per conflict — exact user ids are never graded.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token issued; identical shape for both branches.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                nightlio_token=<jwt>; Expires=<http-date>; Max-Age=3600;
+                HttpOnly; Path=/; SameSite=Lax (+ Secure only over HTTPS).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Credentialed branch with a missing/empty username or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unknown username, no stored hash, or wrong password (indistinguishable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Local login disabled, or credential-free branch attempted while OIDC is configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/local/register:
+    post:
+      operationId: localRegister
+      summary: Create an additional local account (family-account semantics).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      description: >-
+        Behind require_auth (any authenticated user may create accounts; there
+        is no role model). The 401 for missing credentials fires BEFORE the
+        rate limiter (10/min) and before any body validation. Validation
+        order: username required and non-blank -> 400; password required ->
+        400; length >= 8 -> 400. Username is trimmed before storage; the DB
+        layer defaults email to "<username>@localhost" and name to the
+        username, so AuthUser.name/email are non-null in practice for local
+        users despite nullable columns. Registering does NOT log the new user
+        in: no token in the response and no Set-Cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                password:
+                  type: string
+                  minLength: 8
+                email:
+                  type: string
+                  description: Optional; defaults to "<username>@localhost".
+                name:
+                  type: string
+                  description: Optional; defaults to the username.
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, user]
+                properties:
+                  status:
+                    type: string
+                    const: success
+                  user:
+                    $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Validation failure (see order in description).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "409":
+          description: 'Username already taken ({"error": "Username is already taken"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/login/oidc:
+    x-nightlio-conditional:
+      env: OIDC_ISSUER_URL
+      when-disabled: 'Path not registered; 404 {"error": "Resource not found"}.'
+    x-nightlio-unrecorded: true
+    get:
+      operationId: oidcLogin
+      summary: Start the OIDC redirect flow (top-level browser navigation, not XHR).
+      description: >-
+        CONDITIONAL ROUTE (api/auth/oauth.py, registered only when OIDC is
+        configured). No golden fixture exists — the recording environment ran
+        with OIDC blanked. Redirect-flow behavior is NOT part of the graded
+        contract until recorded or waived by an owner.
+      responses:
+        "302":
+          description: Redirect to the identity provider (unverified; code-derived).
+
+  /api/auth/callback/oidc:
+    x-nightlio-conditional:
+      env: OIDC_ISSUER_URL
+      when-disabled: 'Path not registered; 404 {"error": "Resource not found"}.'
+    x-nightlio-unrecorded: true
+    get:
+      operationId: oidcCallback
+      summary: OIDC redirect-flow callback.
+      description: >-
+        CONDITIONAL ROUTE; no golden fixture exists (OIDC blanked while
+        recording). Not part of the graded contract until recorded or waived.
+      responses:
+        "302":
+          description: Redirect back into the SPA with a session established (unverified; code-derived).
+
+  # ── mood + statistics ───────────────────────────────────────────────────
+  /api/mood:
+    post:
+      operationId: createMoodEntry
+      summary: Create a mood entry and run achievement checks.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMoodRequest"
+      responses:
+        "201":
+          description: Entry created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateMoodResponse"
+        "400":
+          description: >-
+            Validation failure: missing/falsy mood, date or content (a mood of
+            0 or an all-whitespace content string hits the "Missing required
+            fields" branch before the 1..5 range check); mood not an integer;
+            mood outside 1..5; date not YYYY-MM-DD or M/D/YYYY; date more than
+            one day in the future; selected_options not an array of integers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+
+  /api/moods:
+    get:
+      operationId: listMoodEntries
+      summary: List the user's mood entries, newest journaled day first.
+      description: >-
+        Returns a BARE ARRAY. Ordered by the normalized ISO day DESC (both
+        stored date shapes normalized via _ISO_DAY_EXPR), then created_at
+        DESC; entries with unparseable dates sort last. CAUTION: the optional
+        start_date/end_date filter runs a raw-string SQL BETWEEN on the stored
+        date column with NO normalization, so entries stored in US M/D/YYYY
+        format fall outside ISO-formatted ranges even when chronologically
+        inside them (fixture moods_get_date_range.json). Range filtering and
+        list ordering therefore use different date semantics — bug-compatible
+        by default; see contract/README.md unresolved list.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: false
+          schema: { type: string }
+          description: Raw-string lower bound; only applied when end_date is also present and both are non-empty.
+        - name: end_date
+          in: query
+          required: false
+          schema: { type: string }
+          description: Raw-string upper bound (inclusive; dates are ISO-normalized as of the rewrite).
+      responses:
+        "200":
+          description: Bare array of entries; [] for an empty account.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MoodEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/mood/{entry_id}:
+    parameters:
+      - $ref: "#/components/parameters/EntryId"
+    get:
+      operationId: getMoodEntry
+      summary: Fetch one entry (no selections key — unlike the PUT response).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The entry, WITHOUT a selections key.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntry"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: 'Entry missing or owned by another user ({"error": "Entry not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      operationId: updateMoodEntry
+      summary: Partially update an entry; returns the updated record WITH selections.
+      description: >-
+        All fields optional but at least one of mood/content/date/time/
+        selected_options must be present. selected_options, when present,
+        REPLACES the entry's selections (null is treated as []). "time", when
+        present and truthy, overwrites the row's created_at column verbatim
+        (backdating mechanism).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMoodRequest"
+      responses:
+        "200":
+          description: Updated; entry embedded WITH a selections array.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateMoodResponse"
+        "400":
+          description: >-
+            No update fields provided; mood not an integer; mood outside 1..5;
+            all-whitespace content; invalid/future date; selected_options not
+            an array of integers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: 'Entry not found ({"error": "Entry not found or no changes made"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteMoodEntry
+      summary: Delete an entry (always 200 + JSON body, never 204).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteMoodResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: Entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/mood/{entry_id}/selections:
+    get:
+      operationId: getEntrySelections
+      summary: Selected group options for an entry.
+      description: >-
+        Returns a BARE ARRAY of {id, name, group_name}, ordered by group name
+        then option name. contract change: a nonexistent entry id (or another user's
+        entry) now 404s ({"error": "Entry not found"}, matching GET
+        /api/mood/{id}); an EXISTING entry whose groups/options were deleted
+        still returns 200 [] (entry_selections cascade away). Pre-rewrite both
+        cases returned 200 [].
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: Bare array; [] when the entry has no selections or does not exist.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntrySelection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/statistics:
+    get:
+      operationId: getMoodStatistics
+      summary: Core statistics, mood distribution, and current streak.
+      description: >-
+        A PURE READ since the contract change: the old per-call
+        stats_views increment (which fed the data_lover achievement) moved
+        to the explicit POST /api/statistics/view endpoint, so repeated GETs
+        no longer advance data_lover progress and fixture replay order no
+        longer affects new_achievements determinism. first/last entry dates
+        are MIN/MAX over the stored date strings (ISO-normalized as of the rewrite,
+        so chronologically correct; formerly lexicographic over mixed-format
+        raw strings — see CoreStatistics).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Statistics bundle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatisticsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/statistics/view:
+    post:
+      operationId: recordStatisticsView
+      summary: Record a statistics view for the data_lover achievement (contract change).
+      description: >-
+        contract change (new endpoint): records that the user viewed
+        their statistics today. Per-day idempotent — counted is true only
+        when this call incremented the server-side stats_views metric (first
+        view of the server-local day); later calls the same day return
+        counted=false and change nothing. data_lover unlocks once
+        stats_views reaches 10 (views on 10 different days), surfacing in
+        the NEXT achievement check (a later POST /api/mood or
+        POST /api/achievements/check). No request body. As a mutation,
+        cookie-authenticated callers must satisfy the CSRF checks; Bearer
+        callers are exempt. Strict-slash: /api/statistics/view/ is 404.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: View recorded (or deduplicated for today).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatisticsViewResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+
+  /api/statistics/extended:
+    get:
+      operationId: getExtendedStatistics
+      summary: Rolling averages, weekday averages, volatility, correlations, current-month digest.
+      description: >-
+        Mixes deterministic and clock-relative data: mood_volatility's window
+        is the trailing 30 days from server-LOCAL now, and monthly_digest is
+        always the CURRENT server-local month.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Extended statistics bundle.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtendedStatisticsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/statistics/heatmap:
+    get:
+      operationId: getStatisticsHeatmap
+      summary: Average mood and entry count for every logged day of a year.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Defaults to the current server-local year. Must parse as an integer in 1970..2100.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2100
+      responses:
+        "200":
+          description: Heatmap for the year.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HeatmapResponse"
+        "400":
+          description: year not an integer or outside 1970..2100.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/statistics/digest:
+    get:
+      operationId: getStatisticsDigest
+      summary: Month-in-review digest for an explicit (or current) year/month.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Defaults to the current server-local year; integer in 1970..2100.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2100
+        - name: month
+          in: query
+          required: false
+          description: Defaults to the current server-local month; integer in 1..12.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+      responses:
+        "200":
+          description: Monthly digest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyDigest"
+        "400":
+          description: year/month not an integer or out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/streak:
+    get:
+      operationId: getCurrentStreak
+      summary: Current consecutive-day logging streak.
+      description: >-
+        Streak counts consecutive calendar days ending today or yesterday;
+        both stored date formats parse, duplicate same-day entries count
+        once, unparseable dates are skipped. The message string pluralizes
+        ("1 day" / "N days", including "0 days").
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Streak.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreakResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ── goals ───────────────────────────────────────────────────────────────
+  /api/goals:
+    get:
+      operationId: listGoals
+      summary: List the authenticated user's goals.
+      description: >-
+        Returns a bare array ordered by created_at DESC. Contract
+        change: reading is PURE — each row's weekly rollover (if its
+        period_start is not the current ISO week's Monday, completed resets
+        to 0 and streak is incremented or zeroed) is projected into the
+        response only; it is persisted solely by the write paths (progress
+        logging, update). Every row gains the computed key
+        already_completed_today.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bare array of goals (empty account -> []).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Goal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createGoal
+      summary: Create a goal.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalCreateRequest"
+      responses:
+        "201":
+          description: Created; body carries only the new autoincrement id.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+        "400":
+          description: >-
+            Blank/missing title, or effective frequency outside 1..7. A body
+            with neither frequency_per_week nor the legacy alias `frequency`
+            coerces to 0 and 400s. Non-numeric frequency 400s via ValueError.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+
+  /api/goals/{goal_id}:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoal
+      summary: Fetch one goal (same projected rollover — pure read since the rewrite — and row shape as the list).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: The goal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateGoal
+      summary: Update a goal (partial).
+      description: >-
+        PUT and PATCH share one Werkzeug rule and one handler; both are
+        partial updates. Only provided fields change. Lowering
+        frequency_per_week clamps completed to MIN(completed, new frequency).
+        contract change: an empty body (no recognized fields) returns 400 "No fields to
+        update", and a blank/whitespace title returns 400 "Title is
+        required" (matching create); 404 now only means missing/foreign
+        goal. (pre-rewrite both cases returned 404 "No changes or goal
+        not found" — the handler cannot distinguish no-op from missing row,
+        so this CANNOT be modeled as 400. Unlike create, update does NOT
+        reject a blank title (writes ""). The shipped frontend only ever
+        sends PUT and resolves the `frequency` alias client-side, but PATCH
+        and the alias are registered wire behavior.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalUpdateRequest"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalStatusOk"
+        "400":
+          description: frequency_per_week outside 1..7 or not coercible to int.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: Goal not found for this user, or body contained no updatable fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: patchGoal
+      summary: Update a goal (alias of PUT — same rule, same handler, same responses).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalUpdateRequest"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalStatusOk"
+        "400":
+          description: frequency_per_week outside 1..7 or not coercible to int.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: Goal not found for this user, or body contained no updatable fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteGoal
+      summary: Delete a goal (goal_completions rows cascade-delete).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: Deleted (200 with a body, never 204).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalStatusOk"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/goals/{goal_id}/progress:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    post:
+      operationId: incrementGoalProgress
+      summary: Log a goal completion for today or a past day.
+      description: >-
+        Body is optional (get_json(silent=True): a missing or even malformed
+        body is tolerated and means "today" — unlike POST /api/goals, which
+        requires a JSON Content-Type). {date} logs a backdated completion;
+        accepted formats YYYY-MM-DD or M/D/YYYY, normalized to ISO, at most 1
+        day in the future. Logging is idempotent per (goal, day) via a UNIQUE
+        constraint: a duplicate day returns 200 with already_logged=true and
+        does not move the completed counter. The counter only increments for
+        dates inside the current week's period and while completed <
+        frequency_per_week; older dates still land in the completions log.
+        A backdated date inside the current week still increments the
+        counter; already_completed_today stays keyed to today's date.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  description: "YYYY-MM-DD or M/D/YYYY; normalized to YYYY-MM-DD."
+      responses:
+        "200":
+          description: Updated goal with logging metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalProgress"
+        "400":
+          description: Unparseable date or date more than 1 day in the future.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/goals/{goal_id}/completions:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletions
+      summary: List completion dates for a goal.
+      description: >-
+        Bare array of {date} objects ascending. Without start & end (both
+        required together, else the default kicks in) the window is the last
+        90 days ending today. start/end are passed to SQL BETWEEN verbatim —
+        no validation. contract change: a nonexistent or foreign goal id now 404s
+        ({"error": "Not found"}, matching GET /api/goals/{id}); the
+        existence probe is a pure read like every other goal GET (contract change —
+        no rollover write). Pre-rewrite this returned 200 []. Aliases
+        /api/goals/{id}/completions/ and /api/goal/{id}/completions return
+        byte-identical bodies (all three registered strict_slashes=False).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: start
+          in: query
+          required: false
+          schema: { type: string }
+          description: Inclusive ISO start date; effective only when end is also present.
+        - name: end
+          in: query
+          required: false
+          schema: { type: string }
+          description: Inclusive ISO end date; effective only when start is also present.
+      responses:
+        "200":
+          description: Bare array of completion dates (possibly empty; 404 for a missing/foreign goal as of the rewrite).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsPreflight
+      summary: OPTIONS (app-wide automatic 204, no auth).
+      description: >-
+        Empty 204 with an Allow header before any token check (Content-Type
+        text/html kept for the empty body). Since the contract change
+        every OPTIONS in the app answers 204, so this rule is no longer a
+        special case.
+      security: []
+      responses:
+        "204":
+          description: Empty response, no auth required.
+
+  /api/goals/{goal_id}/completions/:
+    x-nightlio-alias-of: /api/goals/{goal_id}/completions
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletionsSlashAlias
+      summary: Trailing-slash alias of getGoalCompletions (same handler, no redirect).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Byte-identical to /api/goals/{goal_id}/completions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsSlashAliasPreflight
+      summary: OPTIONS (app-wide automatic 204, no auth).
+      security: []
+      responses:
+        "204":
+          description: Empty response, no auth required.
+
+  /api/goal/{goal_id}/completions:
+    x-nightlio-alias-of: /api/goals/{goal_id}/completions
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletionsSingularAlias
+      summary: Singular-noun alias of getGoalCompletions kept for old clients.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Byte-identical to /api/goals/{goal_id}/completions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsSingularAliasPreflight
+      summary: OPTIONS (app-wide automatic 204, no auth).
+      security: []
+      responses:
+        "204":
+          description: Empty response, no auth required.
+
+  # ── groups ──────────────────────────────────────────────────────────────
+  /api/groups:
+    get:
+      operationId: getGroups
+      summary: List the authenticated user's groups with nested options.
+      description: >-
+        Returns a bare JSON array. Groups ordered by name (SQLite default
+        collation: case-sensitive, uppercase before lowercase); each group's
+        options likewise ordered by name. A fresh account is seeded with 3
+        default groups (Emotions, Sleep, Productivity; 27 options), so [] is
+        only observable after the user deletes the defaults.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bare array of groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createGroup
+      summary: Create a group owned by the authenticated user.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: >-
+                    Stored trimmed. Empty string rejected at the route layer;
+                    whitespace-only rejected at the service layer — both 400
+                    (different message text; grade shape only).
+      responses:
+        "201":
+          description: Group created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateGroupResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{group_id}/options:
+    post:
+      operationId: createGroupOption
+      summary: Create an option under a group the user owns.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Stored trimmed; empty/whitespace-only -> 400.
+      responses:
+        "201":
+          description: Option created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOptionResponse"
+        "400":
+          description: >-
+            Validation error (e.g. blank option name). contract change: an unknown or
+            foreign group_id now returns 404 {"error": "Group not found"}
+            instead of the pre-rewrite 400 ("Group not found for user").
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{group_id}:
+    delete:
+      operationId: deleteGroup
+      summary: Delete a group the user owns, cascading to its options.
+      description: >-
+        Never 204 — success is 200 with a JSON body. Deleting a group
+        cascades to its group_options and to entry_selections referencing
+        those options (ON DELETE CASCADE), so past mood entries silently lose
+        those selections.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: Group deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusMessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: 'Group does not exist or belongs to another user ({"error": "Group not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/options/{option_id}:
+    delete:
+      operationId: deleteOption
+      summary: Delete a group option belonging to one of the user's groups.
+      description: >-
+        Never 204 — success is 200 with a JSON body. NOTE: no shipped
+        frontend code calls this endpoint (src/services/api.js has no method
+        for it), but it is registered wire behavior the port must implement.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/OptionId"
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: Option deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusMessageResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "404":
+          description: 'Option not reachable through one of the user''s groups ({"error": "Option not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ── achievements ────────────────────────────────────────────────────────
+  /api/achievements:
+    get:
+      operationId: getUserAchievements
+      summary: List the authenticated user's unlocked achievements.
+      description: >-
+        BARE ARRAY ordered by earned_at DESC; [] for an empty account. Each
+        element is the SQLite achievements row merged with static metadata.
+        Since the contract change this is the ONLY endpoint returning
+        full rows (id/earned_at/nft columns): POST /api/mood and
+        POST /api/achievements/check both return the unified metadata-object
+        NewAchievement shape — the old bare achievement_type strings are
+        gone. /api/achievements/ (trailing slash) is 404.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bare array of unlocked achievements.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnlockedAchievement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/achievements/check:
+    post:
+      operationId: checkAchievements
+      summary: Evaluate achievement conditions and award any newly met ones.
+      description: >-
+        The request body is entirely ignored — no Content-Type or body is
+        required under Bearer auth (cookie-authenticated calls must still
+        satisfy CSRF). Awarding is idempotent via the DB UNIQUE constraint;
+        an immediate second call returns an empty list. Returned items are
+        metadata objects WITHOUT id/earned_at — since the rewrite the ONE unified
+        new_achievements shape, shared with POST /api/mood's side-effect
+        awards; only GET /api/achievements returns full rows. No 400 is
+        reachable on any achievements endpoint. The trailing-slash form
+        404s.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      responses:
+        "200":
+          description: Newly awarded achievements (possibly empty) plus their count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementCheckResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/achievements/progress:
+    get:
+      operationId: getAchievementsProgress
+      summary: Progress toward every achievement (slashless variant).
+      description: >-
+        Fixed-key object mapping all five achievement types to
+        {current, max}; current is clamped to [0, max]. Registered with
+        strict_slashes=False at BOTH slash variants; identical bodies.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Progress map with exactly the five known achievement types as keys.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    options:
+      operationId: achievementsProgressPreflight
+      summary: OPTIONS (app-wide automatic 204, no auth).
+      description: >-
+        App-wide automatic OPTIONS (contract change — formerly a
+        dedicated route): 204 with an empty body and an Allow header before
+        any token check; observed Content-Type text/html; charset=utf-8.
+        Clients must not depend on the Content-Type.
+      security: []
+      responses:
+        "204":
+          description: Empty response, no auth required.
+
+  /api/achievements/progress/:
+    x-nightlio-alias-of: /api/achievements/progress
+    get:
+      operationId: getAchievementsProgressSlashAlias
+      summary: Trailing-slash alias — a separately registered rule, not a redirect.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Same body as the slashless variant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    options:
+      operationId: achievementsProgressSlashAliasPreflight
+      summary: OPTIONS (app-wide automatic 204, no auth).
+      security: []
+      responses:
+        "204":
+          description: Empty response, no auth required.
+
+  # ── misc / config / preferences / activity / export / music ─────────────
+  /api/:
+    get:
+      operationId: healthCheck
+      summary: Health check.
+      description: >-
+        Unauthenticated. The ONLY rule registered WITH a trailing slash;
+        requesting /api (no slash) yields a 308 Permanent Redirect with an
+        empty body and a Location ending in /api/.
+      responses:
+        "200":
+          description: API is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /api/time:
+    get:
+      operationId: getCurrentTime
+      summary: Current server time (unauthenticated). /api/time/ is 404.
+      responses:
+        "200":
+          description: Epoch time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [time]
+                properties:
+                  time:
+                    type: number
+                    description: time.time() — float epoch seconds.
+
+  /api/config:
+    get:
+      operationId: getPublicConfig
+      summary: Public feature flags (unauthenticated).
+      description: >-
+        Exactly four keys. signup_url is forced to null whenever OIDC is
+        disabled, even if OIDC_SIGNUP_URL is set. enable_local_login is
+        false by default whenever OIDC is configured (DISABLE_LOCAL_LOGIN
+        unset/empty defaults to the OIDC-configured state; explicit 0/1
+        always wins — owner-approved change from the Flask default of
+        always-on).
+      responses:
+        "200":
+          description: Public configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicConfig"
+
+  /api/preferences:
+    get:
+      operationId: getPreferences
+      summary: Get theme preference.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: >-
+            Stored theme. null for a user who has never PUT a theme — the
+            users.theme_preference column has no default; the frontend treats
+            null as the "default" theme. Reads echo whatever string is stored
+            (the enum is enforced only on PUT), so the read value cannot be
+            modeled with a closed enum.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [theme]
+                properties:
+                  theme:
+                    type: ["string", "null"]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: updatePreferences
+      summary: Set theme preference.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [theme]
+              properties:
+                theme:
+                  type: string
+                  enum: [default, light, dark, synthwave]
+      responses:
+        "200":
+          description: Theme stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, theme]
+                properties:
+                  status:
+                    type: string
+                    const: success
+                  theme:
+                    type: string
+                    enum: [default, light, dark, synthwave]
+        "400":
+          description: theme missing, non-string, or outside the allowed set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/activity:
+    get:
+      operationId: getActivity
+      summary: Per-user activity feed (the API's only paginated endpoint).
+      description: >-
+        Keyset pagination, newest first, on the activity row id. Pass the
+        previous page's next_cursor as `before` for older rows (strictly
+        id < before). limit is clamped server-side to 1..200 with NO error
+        for out-of-range values (0/negative -> 1, > 200 -> 200); only
+        non-integer before/limit yield 400. contract change: next_cursor is null when no
+        older rows exist (peek-ahead), even on an exactly-full page;
+        otherwise it is the last row's id
+        when the page length equals the clamped limit, else null — a full
+        FINAL page still yields a non-null cursor whose follow-up page is
+        {"activities": [], "next_cursor": null}.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: before
+          in: query
+          required: false
+          schema: { type: integer }
+          description: Exclusive upper bound on row id (the previous next_cursor).
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Requested page size; silently clamped to 1..200.
+      responses:
+        "200":
+          description: A page of activity events. Empty page keeps the same shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityPage"
+        "400":
+          description: before or limit not parseable as an integer.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          description: 'Any handler exception -> {"error": "Failed to load activity"}.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/export/pdf:
+    post:
+      operationId: exportPdf
+      summary: Render markdown to a PDF download.
+      description: >-
+        Unauthenticated and un-rate-limited; the 1 MiB cap is the only guard
+        (measured in UTF-8 encoded bytes of the content string). The ONLY 2xx
+        in the API whose body is not JSON — the frontend uses a dedicated
+        fetch path (ApiService.exportPdf) instead of the JSON-only request()
+        helper.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  description: Markdown source, at most 1048576 UTF-8 bytes.
+      responses:
+        "200":
+          description: >-
+            Binary PDF; Content-Disposition: attachment;
+            filename=entry_export.pdf.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: >-
+            Body missing the content key ({"error": "Content is required"}).
+            A non-JSON Content-Type makes request.get_json() raise; the
+            app-level 400 handler turns it into {"error": "Bad request"}.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: content exceeds 1048576 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: >-
+            markdown_pdf module not importable at process start. CODE-DERIVED
+            ONLY — not reproducible in the recording environment (renderer
+            installed); no fixture exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/music/vibe:
+    x-nightlio-conditional:
+      env: ENABLE_MOOD_MUSIC
+      when-disabled: >-
+        Blueprint not registered; the path 404s with the standard routing
+        body {"error": "Resource not found"} — indistinguishable from any
+        unknown path (recorded fixture).
+    get:
+      operationId: getMoodMusic
+      summary: Fetch a Jamendo track for a vibe tag (feature-gated; unauthenticated).
+      description: >-
+        Enabled-mode behavior is documented from code only (no fixtures — the
+        recording ran with the flag off and Jamendo unconfigured): the
+        MusicService returns either a track object (200) or an {"error": ...}
+        dict passed through with status 400, including
+        "Jamendo Client ID not configured" and raw upstream exception text.
+      parameters:
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+            default: chill
+      responses:
+        "200":
+          description: A playable track (only when the feature flag is on; code-derived).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MusicTrack"
+        "400":
+          description: Service-level error passthrough (flag on; code-derived).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Feature flag off — route not registered; app-level 404 JSON.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        HS256 JWT with claims {user_id: int, exp, iat}. Checked first; the
+        presence of any Authorization Bearer header makes the request
+        "header-authed" and exempt from the CSRF checks.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: nightlio_token
+      description: >-
+        Same JWT delivered as an httpOnly cookie
+        (Max-Age=3600; Path=/; SameSite=Lax; Secure only over HTTPS). Used
+        only when no Authorization header is present. State-changing methods
+        under cookie auth additionally require Content-Type application/json
+        and X-Requested-With nightlio (see XRequestedWith parameter).
+
+  parameters:
+    XRequestedWith:
+      name: X-Requested-With
+      in: header
+      required: false
+      schema:
+        type: string
+        const: nightlio
+      description: >-
+        CSRF header, REQUIRED whenever the request is cookie-authenticated
+        (no Authorization header): together with Content-Type
+        application/json it gates every cookie-authed
+        POST/PUT/PATCH/DELETE. Missing header -> 403
+        {"error": "Missing required request header"}; wrong/missing JSON
+        Content-Type is checked first -> 403
+        {"error": "Content-Type must be application/json"}. These two 403
+        message strings are the ONLY error texts fixed exactly by the
+        contract. Bearer-authenticated requests skip both checks.
+
+    EntryId:
+      name: entry_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: >-
+        Werkzeug <int:> converter — matches only non-negative all-digit
+        segments; negative or non-numeric values 404 at routing time (BEFORE
+        auth) with {"error": "Resource not found"}. The converter is
+        UNBOUNDED: values beyond SQLite's i64 range matched the route and
+        produced an observed 500 in Flask; the Rust port returns a clean 404
+        (accepted drift, contract/DECISIONS.md #1).
+
+    GoalId:
+      name: goal_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: Same <int:> converter semantics as EntryId (404 before auth; overflow 404 in Rust, accepted drift #1).
+
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: Same <int:> converter semantics as EntryId (404 before auth; overflow 404 in Rust, accepted drift #1).
+
+    OptionId:
+      name: option_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: Same <int:> converter semantics as EntryId (404 before auth; overflow 404 in Rust, accepted drift #1).
+
+  responses:
+    Unauthorized:
+      description: >-
+        No Bearer token and no nightlio_token cookie ->
+        {"error": "Authorization header required"} (same body even when the
+        missing credential is the cookie); expired token ->
+        {"error": "Token expired"}; otherwise-invalid token ->
+        {"error": "Invalid token"}. Compare status/shape, never text.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    CsrfForbidden:
+      description: >-
+        Cookie-authenticated mutation failing a CSRF check. Exact bodies (the
+        only contract-fixed error strings):
+        {"error": "Content-Type must be application/json"} (checked first) or
+        {"error": "Missing required request header"}. Never returned for
+        Bearer-authenticated requests.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource missing or owned by another user.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Missing or invalid required field.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: >-
+        Rate limit exceeded (sqlite-backed limiter). NO fixture exists — the
+        {error} body shape is code-derived and unverified on the wire.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: >-
+        Unhandled exception; body is {"error": str(exception)} — message text
+        is Python-specific and must never be graded.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: >-
+        Uniform JSON error envelope. Since the contract change it covers
+        405 too ({"error": "Method not allowed"} + Allow header); the sole
+        exception left is the GET /api 308 redirect (empty body). Grade
+        status + shape, never message text, except the two CSRF 403 strings.
+
+    AuthUser:
+      type: object
+      description: >-
+        Projection of the users row returned by every auth endpoint
+        (auth_routes._user_payload). Exactly these four keys — never the full
+        DB row (no created_at/last_login/auth_provider/external_id).
+      required: [id, name, email, avatar_url]
+      properties:
+        id:
+          type: integer
+          description: >-
+            SQLite autoincrement. Self-host login upserts burn autoincrement
+            values on every conflict, so later users' ids have gaps. Never
+            grade exact ids.
+        name:
+          type: [string, "null"]
+          description: >-
+            Nullable in the DB; non-null in practice for self-host ("Me" or
+            SELFHOST_USER_NAME) and local users (defaults to username); OIDC
+            users may have null.
+        email:
+          type: [string, "null"]
+          description: >-
+            Nullable in the DB. Defaults: self-host "<id>@localhost", local
+            "<username>@localhost"; OIDC users may have null.
+        avatar_url:
+          type: [string, "null"]
+          description: Null for self-host and local users; set only via OIDC.
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: The same HS256 JWT that is also set as the nightlio_token cookie.
+        user:
+          $ref: "#/components/schemas/AuthUser"
+
+    CreateMoodRequest:
+      type: object
+      required: [mood, date, content]
+      properties:
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: >-
+            Coerced with int(); non-integer strings 400. A falsy value (0)
+            fails the presence check first ("Missing required fields").
+        date:
+          type: string
+          description: >-
+            "YYYY-MM-DD" or US "M/D/YYYY"; stored VERBATIM (no
+            normalization). Must not be more than one day in the future
+            (server-local).
+        content:
+          type: string
+          description: Coerced with str(); must not be empty/whitespace.
+        time:
+          type: [string, "null"]
+          description: >-
+            Optional; when truthy it is written into the created_at column
+            verbatim (used for backdating).
+        selected_options:
+          type: array
+          items: { type: integer }
+          default: []
+          description: Group option ids to attach; null is treated as [].
+
+    CreateMoodResponse:
+      type: object
+      required: [status, entry_id, new_achievements, message]
+      properties:
+        status:
+          type: string
+          const: success
+        entry_id:
+          type: integer
+          description: SQLite autoincrement id of the new entry.
+        new_achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewAchievement"
+          description: >-
+            contract change: metadata objects ({achievement_type, name,
+            description, icon, rarity} — the unified NewAchievement shape
+            shared with POST /api/achievements/check) instead of the old
+            bare achievement_type strings. Newly unlocked by this entry's
+            post-create check; [] when nothing new. Only GET
+            /api/achievements returns full UnlockedAchievement rows.
+        message:
+          type: string
+          const: Mood entry created successfully
+
+    MoodEntry:
+      type: object
+      required: [id, date, mood, content, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          description: Echoed verbatim as stored — either "YYYY-MM-DD" or "M/D/YYYY".
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+        created_at:
+          type: string
+          description: >-
+            "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP, UTC) unless a
+            client-supplied "time" overwrote it — then whatever string the
+            client sent.
+        updated_at:
+          type: string
+          description: >-
+            NEVER null — the column defaults to CURRENT_TIMESTAMP at insert
+            and is refreshed on every PUT.
+
+    UpdateMoodRequest:
+      type: object
+      description: At least one property must be present, else 400.
+      properties:
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+        date:
+          type: string
+        time:
+          type: [string, "null"]
+          description: Truthy value overwrites created_at.
+        selected_options:
+          type: [array, "null"]
+          items: { type: integer }
+          description: REPLACES all selections; null clears them (treated as []).
+
+    UpdateMoodResponse:
+      type: object
+      required: [status, message, entry]
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+          const: Mood entry updated successfully
+        entry:
+          allOf:
+            - $ref: "#/components/schemas/MoodEntry"
+            - type: object
+              required: [selections]
+              properties:
+                selections:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/EntrySelection"
+          description: >-
+            Unlike GET /api/mood/{id}, the PUT response embeds the entry WITH
+            a selections array — same resource, two shapes.
+
+    DeleteMoodResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+          const: Mood entry deleted successfully
+
+    EntrySelection:
+      type: object
+      description: >-
+        Row shape of GET /api/mood/{entry_id}/selections and the selections
+        array embedded in UpdateMoodResponse: the option's id/name plus the
+        denormalized group_name; group_id is NOT included.
+      required: [id, name, group_name]
+      properties:
+        id:
+          type: integer
+          description: group_options autoincrement id.
+        name:
+          type: string
+          description: Option name.
+        group_name:
+          type: string
+          description: Name of the group the option belongs to.
+
+    StatisticsResponse:
+      type: object
+      required: [statistics, mood_distribution, current_streak]
+      properties:
+        statistics:
+          $ref: "#/components/schemas/CoreStatistics"
+        mood_distribution:
+          type: object
+          description: >-
+            Keys are the STRING form of logged mood values ("1".."5") —
+            Python int keys serialize as JSON strings. Only moods the user
+            actually logged appear — never a fixed 1..5 map. {} for an empty
+            account.
+          propertyNames:
+            pattern: "^[1-5]$"
+          additionalProperties:
+            type: integer
+        current_streak:
+          type: integer
+
+    StatisticsViewResponse:
+      type: object
+      required: [counted]
+      properties:
+        counted:
+          type: boolean
+          description: >-
+            True when this call incremented stats_views (first view of the
+            server-local day); false when today's view was already recorded.
+
+    CoreStatistics:
+      type: object
+      required: [total_entries, average_mood, lowest_mood, highest_mood, first_entry_date, last_entry_date]
+      properties:
+        total_entries:
+          type: integer
+        average_mood:
+          type: number
+          description: >-
+            round(AVG(mood), 2) — a float when entries exist, but the INTEGER
+            0 for an empty account (`round(x, 2) if x else 0`).
+        lowest_mood:
+          type: [integer, "null"]
+        highest_mood:
+          type: [integer, "null"]
+        first_entry_date:
+          type: [string, "null"]
+          description: >-
+            MIN(date) over the stored strings (ISO-normalized as of the rewrite — chronologically correct; formerly lexicographic, so with
+            mixed formats a US "M/D/YYYY" date sorts after every ISO date
+            regardless of chronology.
+        last_entry_date:
+          type: [string, "null"]
+          description: MAX(date) over the stored strings (same normalization note).
+
+    ExtendedStatisticsResponse:
+      type: object
+      required: [rolling_averages, weekday_averages, mood_volatility, tag_correlations, goal_correlations, monthly_digest]
+      properties:
+        rolling_averages:
+          type: object
+          required: [series, count]
+          properties:
+            series:
+              type: array
+              description: One row per normalized ISO day (US-format entries normalized), ascending.
+              items:
+                type: object
+                required: [date, average_mood, entry_count, rolling_7, rolling_30]
+                properties:
+                  date: { type: string, description: 'Normalized ISO "YYYY-MM-DD".' }
+                  average_mood: { type: number }
+                  entry_count: { type: integer }
+                  rolling_7: { type: number, description: Trailing mean over up to 7 logged days (ROWS BETWEEN, not calendar days). }
+                  rolling_30: { type: number }
+            count:
+              type: integer
+              description: len(series).
+        weekday_averages:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: Always exactly 7 rows, weekday 0=Sunday .. 6=Saturday.
+          items:
+            type: object
+            required: [weekday, name, average_mood, entry_count]
+            properties:
+              weekday: { type: integer, minimum: 0, maximum: 6 }
+              name:
+                type: string
+                enum: [Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday]
+              average_mood: { type: [number, "null"] }
+              entry_count: { type: integer }
+        mood_volatility:
+          type: object
+          required: [window_days, entry_count, average_mood, stddev]
+          properties:
+            window_days:
+              type: integer
+              const: 30
+            entry_count:
+              type: integer
+              description: Entries whose normalized day falls in the trailing 30 calendar days from server-LOCAL now.
+            average_mood: { type: [number, "null"], description: Null when entry_count is 0. }
+            stddev: { type: [number, "null"], description: Sample stddev; null when entry_count < 2. }
+        tag_correlations:
+          type: array
+          description: >-
+            Only options the user has selected at least once appear; ordered
+            by group_name then option_name. [] when the user has no entries.
+          items:
+            type: object
+            required: [option_id, option_name, group_id, group_name, average_mood_selected, entry_count_selected, average_mood_not_selected, entry_count_not_selected]
+            properties:
+              option_id: { type: integer }
+              option_name: { type: string }
+              group_id: { type: integer }
+              group_name: { type: string }
+              average_mood_selected: { type: [number, "null"] }
+              entry_count_selected: { type: integer }
+              average_mood_not_selected: { type: [number, "null"] }
+              entry_count_not_selected: { type: integer }
+        goal_correlations:
+          type: array
+          description: >-
+            Every goal of the user appears (null completed average, zero
+            count when never completed) — but [] when the user has no mood
+            entries. Ordered by goal_name then goal_id.
+          items:
+            type: object
+            required: [goal_id, goal_name, average_mood_completed, entry_count_completed, average_mood_not_completed, entry_count_not_completed]
+            properties:
+              goal_id: { type: integer }
+              goal_name: { type: string }
+              average_mood_completed: { type: [number, "null"] }
+              entry_count_completed: { type: integer }
+              average_mood_not_completed: { type: [number, "null"] }
+              entry_count_not_completed: { type: integer }
+        monthly_digest:
+          allOf:
+            - $ref: "#/components/schemas/MonthlyDigest"
+          description: Always the CURRENT server-local year/month.
+
+    HeatmapResponse:
+      type: object
+      required: [year, days, days_logged]
+      properties:
+        year:
+          type: integer
+        days:
+          type: array
+          description: Only logged days appear, ascending by normalized ISO date.
+          items:
+            type: object
+            required: [date, average_mood, entry_count]
+            properties:
+              date: { type: string, description: 'Normalized ISO "YYYY-MM-DD".' }
+              average_mood: { type: number }
+              entry_count: { type: integer }
+        days_logged:
+          type: integer
+          description: len(days).
+
+    MonthlyDigest:
+      type: object
+      required: [year, month, entries_logged, average_mood, previous_average_mood, mood_trend, top_tags, longest_streak]
+      properties:
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        entries_logged: { type: integer }
+        average_mood: { type: [number, "null"], description: Null when the month has no entries. }
+        previous_average_mood: { type: [number, "null"] }
+        mood_trend:
+          type: [number, "null"]
+          description: average_mood - previous_average_mood; null when either month is empty.
+        top_tags:
+          type: array
+          maxItems: 5
+          description: By times_selected DESC then option name ASC.
+          items:
+            type: object
+            required: [option_id, option_name, group_name, times_selected]
+            properties:
+              option_id: { type: integer }
+              option_name: { type: string }
+              group_name: { type: string }
+              times_selected: { type: integer }
+        longest_streak:
+          type: integer
+          description: Longest run of consecutive logged days within the month (normalized dates).
+
+    StreakResponse:
+      type: object
+      required: [current_streak, message]
+      properties:
+        current_streak:
+          type: integer
+        message:
+          type: string
+          description: >-
+            'Current streak: {n} day' when n == 1, otherwise
+            'Current streak: {n} days' (including 0).
+
+    GoalStatusOk:
+      type: object
+      description: Success body for goal update/delete — note the const is "ok", not "success".
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: ok
+
+    Goal:
+      type: object
+      description: >-
+        Row from the goals table with the weekly rollover projected (a pure
+        read since the rewrite — persisted only by write paths), plus the computed
+        already_completed_today flag. Serialized straight from sqlite3.Row.
+      required:
+        - id
+        - user_id
+        - title
+        - description
+        - frequency_per_week
+        - completed
+        - streak
+        - period_start
+        - last_completed_date
+        - created_at
+        - updated_at
+        - already_completed_today
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: [string, "null"]
+          description: >-
+            The API always writes a (possibly empty) trimmed string, but the
+            column is nullable so legacy rows can surface null.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        completed:
+          type: integer
+          description: >-
+            Completions counted in the current week's period; reset to 0 on
+            rollover, clamped to frequency_per_week.
+        streak:
+          type: integer
+          description: Consecutive fully-completed weeks; recomputed only at rollover.
+        period_start:
+          type: string
+          description: >-
+            ISO Monday of the current week (YYYY-MM-DD). Nullable in the DDL,
+            but every response projects the weekly rollover which populates
+            it, so responses always carry a non-null value (contract change: reads are
+            pure — the projected value is persisted only when a write path
+            runs).
+        last_completed_date:
+          type: [string, "null"]
+          description: ISO date of the latest logged completion; null until the first log.
+        created_at:
+          type: string
+          description: 'SQLite CURRENT_TIMESTAMP (UTC), "YYYY-MM-DD HH:MM:SS" — no timezone suffix.'
+        updated_at:
+          type: string
+          description: >-
+            Same format; bumped by updates and progress logging (which
+            persist the weekly rollover). Pure GETs never bump it.
+        already_completed_today:
+          type: boolean
+          description: Computed per request — last_completed_date == server-local today.
+
+    GoalProgress:
+      allOf:
+        - $ref: "#/components/schemas/Goal"
+        - type: object
+          required: [already_logged, logged_date]
+          properties:
+            already_logged:
+              type: boolean
+              description: >-
+                true when the (goal, date) pair was already in
+                goal_completions; the completed counter did not move.
+            logged_date:
+              type: string
+              description: The ISO date this call targeted (request date normalized, or today).
+
+    GoalCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Trimmed server-side; blank -> 400.
+        description:
+          type: string
+          description: Optional; null coerces to ""; trimmed.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        frequency:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: >-
+            Legacy alias consulted only when frequency_per_week is
+            absent/falsy. One of the two must yield 1..7 or the request 400s.
+
+    GoalUpdateRequest:
+      type: object
+      description: >-
+        All fields optional, but at least one must be present — an empty
+        object yields 404, not 200.
+      properties:
+        title:
+          type: string
+          description: Trimmed. The update path does NOT reject a blank title (unlike create).
+        description:
+          type: string
+          description: Trimmed.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Lowering it clamps completed to the new value.
+        frequency:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Legacy alias used only when frequency_per_week is absent.
+
+    GoalCompletion:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          description: ISO YYYY-MM-DD completion day.
+
+    Group:
+      type: object
+      description: Exactly three keys — no user_id, created_at, or counts are exposed.
+      required: [id, name, options]
+      properties:
+        id:
+          type: integer
+          description: Autoincrement id (seeded defaults occupy 1-3 on a fresh DB).
+        name:
+          type: string
+        options:
+          type: array
+          description: Ordered by option name; [] when the group has no options.
+          items:
+            $ref: "#/components/schemas/GroupOption"
+
+    GroupOption:
+      type: object
+      description: Exactly two keys; the parent group_id is NOT included.
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          description: Autoincrement id (seeded defaults occupy 1-27 on a fresh DB).
+        name:
+          type: string
+
+    CreateGroupResponse:
+      type: object
+      required: [status, group_id, message]
+      properties:
+        status:
+          type: string
+          const: success
+        group_id:
+          type: integer
+        message:
+          type: string
+          const: Group created successfully
+
+    CreateOptionResponse:
+      type: object
+      required: [status, option_id, message]
+      properties:
+        status:
+          type: string
+          const: success
+        option_id:
+          type: integer
+        message:
+          type: string
+          const: Option created successfully
+
+    StatusMessageResponse:
+      type: object
+      description: >-
+        Success body for the two DELETE endpoints in the groups family.
+        message is "Group deleted successfully" or "Option deleted
+        successfully".
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+
+    AchievementType:
+      type: string
+      enum: [first_entry, week_warrior, consistency_king, data_lover, mood_master]
+
+    AchievementRarity:
+      type: string
+      enum: [common, uncommon, rare, legendary]
+
+    UnlockedAchievement:
+      type: object
+      description: >-
+        SQLite achievements row merged (dict.update) with static metadata.
+        name/description/icon/rarity come from the metadata lookup and would
+        be ABSENT for an achievement_type unknown to
+        AchievementService.achievements (lookup falls back to {}); with the
+        current fixed 5-type set they are always present. The nft_* columns
+        are legacy (Web3 minting removed): nft_minted is SQLite integer 0/1 —
+        never JSON true/false — and nft_token_id/nft_tx_hash are null in
+        practice.
+      required: [id, achievement_type, earned_at, nft_minted, nft_token_id, nft_tx_hash]
+      properties:
+        id:
+          type: integer
+        achievement_type:
+          $ref: "#/components/schemas/AchievementType"
+        earned_at:
+          type: string
+          description: >-
+            SQLite CURRENT_TIMESTAMP text, "YYYY-MM-DD HH:MM:SS" (UTC).
+            Normalized to "<TS>" in fixtures.
+        nft_minted:
+          type: integer
+          description: SQLite boolean as integer; 0 unless legacy data set it.
+        nft_token_id:
+          type: [integer, "null"]
+        nft_tx_hash:
+          type: [string, "null"]
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+          description: >-
+            Lucide icon name. Backend emits consistency_king -> "Target"
+            and mood_master -> "Crown"; fixtures record the backend truth,
+            and the frontend's metadata (src/views/AchievementsView.tsx) was
+            aligned to it (resolved — see contract/DECISIONS.md "Other fixed
+            findings").
+        rarity:
+          $ref: "#/components/schemas/AchievementRarity"
+
+    NewAchievement:
+      type: object
+      description: >-
+        Metadata-only shape returned by POST /api/achievements/check and,
+        since the contract change, by POST /api/mood's new_achievements
+        field. No id and no earned_at — clients needing those must re-fetch
+        GET /api/achievements.
+      required: [achievement_type]
+      properties:
+        achievement_type:
+          $ref: "#/components/schemas/AchievementType"
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        rarity:
+          $ref: "#/components/schemas/AchievementRarity"
+
+    AchievementCheckResult:
+      type: object
+      required: [new_achievements, count]
+      properties:
+        new_achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewAchievement"
+        count:
+          type: integer
+          description: Always equal to new_achievements.length.
+
+    AchievementProgressEntry:
+      type: object
+      required: [current, max]
+      properties:
+        current:
+          type: integer
+          description: Clamped to [0, max].
+        max:
+          type: integer
+
+    AchievementsProgress:
+      type: object
+      description: >-
+        Exactly these five keys, always all present regardless of account
+        state. Fixed maxima: first_entry 1, week_warrior 7, consistency_king
+        30, data_lover 10, mood_master 100. week_warrior and consistency_king
+        share the same underlying current-streak value; first_entry and
+        mood_master share total_entries.
+      required: [first_entry, week_warrior, consistency_king, data_lover, mood_master]
+      properties:
+        first_entry:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        week_warrior:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        consistency_king:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        data_lover:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        mood_master:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+      additionalProperties: false
+
+    Health:
+      type: object
+      required: [status, message, timestamp]
+      properties:
+        status:
+          type: string
+          const: healthy
+        message:
+          type: string
+          const: Nightlio API is running
+        timestamp:
+          type: number
+          description: time.time() — float epoch seconds.
+
+    PublicConfig:
+      type: object
+      required: [enable_oidc, enable_mood_music, enable_local_login, signup_url]
+      properties:
+        enable_oidc:
+          type: boolean
+          description: True when OIDC_ISSUER_URL is set and non-blank.
+        enable_mood_music:
+          type: boolean
+          description: ENABLE_MOOD_MUSIC env flag (is_truthy parsing).
+        enable_local_login:
+          type: boolean
+          description: >-
+            not DISABLE_LOCAL_LOGIN. The flag defaults to the
+            OIDC-configured state when unset/empty (SSO-configured
+            deployments report false here by default); an explicit
+            DISABLE_LOCAL_LOGIN=0/1 always wins.
+        signup_url:
+          type: ["string", "null"]
+          description: >-
+            OIDC_SIGNUP_URL only when OIDC is enabled AND the value is an
+            absolute http(s) URL; null otherwise (even if the env var is
+            set).
+
+    ActivityPage:
+      type: object
+      required: [activities, next_cursor]
+      properties:
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+        next_cursor:
+          type: ["integer", "null"]
+          description: >-
+            id of the last row when the page is full (length == clamped
+            limit), else null. A full FINAL page yields a non-null cursor
+            whose follow-up page is empty.
+
+    ActivityEvent:
+      type: object
+      required: [id, user_id, event_type, metadata, created_at]
+      properties:
+        id:
+          type: integer
+          description: activity_log autoincrement row id (volatile in fixtures).
+        user_id:
+          type: integer
+        event_type:
+          type: string
+          description: >-
+            Known values: login, entry_created, entry_edited, entry_deleted,
+            achievement_unlocked, goal_completed. Open set — treat as string.
+        metadata:
+          type: ["object", "null"]
+          description: >-
+            Parsed JSON blob; null when absent or when the stored blob is
+            malformed (server logs and nulls it). Shape varies by
+            event_type, e.g. {method} for login, {date, entry_id} for
+            entry_created, {achievement_type} for achievement_unlocked.
+        created_at:
+          type: string
+          description: SQLite DATETIME "YYYY-MM-DD HH:MM:SS" (UTC, no zone suffix).
+
+    MusicTrack:
+      type: object
+      required: [audio_url, track_name, artist]
+      properties:
+        audio_url:
+          type: string
+        track_name:
+          type: string
+        artist:
+          type: string

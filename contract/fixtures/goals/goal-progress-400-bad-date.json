@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/goals/1/progress",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "date": "not-a-date"
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "date must be YYYY-MM-DD or M/D/YYYY"
+    }
+  },
+  "notes": "validate_completion_date rejects unparseable dates and dates more than 1 day in the future -> 400."
+}

@@ -1,0 +1,63 @@
+{
+  "_comment": "Pinned python-jose (api/venv) HS256 tokens, generated 2026-08-15 while the Flask venv still existed. python_jose_verdict is what Flask's exact decode call (jwt.decode(token, key, algorithms=['HS256'])) did at generation time. Rust-side expectations live in api/src/auth/jwt.rs tests.",
+  "secret": "test-cross-verification-secret",
+  "wrong_secret": "some-other-secret",
+  "tokens": [
+    {
+      "name": "valid",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxMzM3LCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTcwMDAwMDAwMH0._qNndGlVGL8Rqpe1hBZ3YaYn2kozv1Kw3pej6CBEdrs",
+      "claims_encoded": {
+        "user_id": 1337,
+        "exp": 4102444800,
+        "iat": 1700000000
+      },
+      "python_jose_verdict": "valid",
+      "note": "plain {user_id, exp, iat}, far-future exp"
+    },
+    {
+      "name": "expired",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJleHAiOjE3MDAwMDM2MDAsImlhdCI6MTcwMDAwMDAwMH0.2z1In0gEGpX7r5Oog0beyvja-GYoE3TfRSWFEUx2tco",
+      "claims_encoded": {
+        "user_id": 1,
+        "exp": 1700003600,
+        "iat": 1700000000
+      },
+      "python_jose_verdict": "expired",
+      "note": "exp in 2023; python-jose raises ExpiredSignatureError"
+    },
+    {
+      "name": "aud_bearing",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo1LCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTcwMDAwMDAwMCwiYXVkIjoic29tZW9uZS1lbHNlIn0.KH6zsUUPeQxZa_7igDyFNAjunMK7RpPdSpJ20he6pqo",
+      "claims_encoded": {
+        "user_id": 5,
+        "exp": 4102444800,
+        "iat": 1700000000,
+        "aud": "someone-else"
+      },
+      "python_jose_verdict": "invalid (JWTClaimsError: Invalid audience)",
+      "note": "carries aud; jose with no audience= rejects (JWTClaimsError -> Flask 'Invalid token'); Rust deliberately leaves aud validation off, guarding jsonwebtoken's validate_aud footgun"
+    },
+    {
+      "name": "float_exp_iat",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3LCJleHAiOjQxMDI0NDQ4MDAuNSwiaWF0IjoxNzAwMDAwMDAwLjV9.KdfnFvhQ8e5iuQjef65eP1u6GSQTL2gHcoflNI4pFgU",
+      "claims_encoded": {
+        "user_id": 7,
+        "exp": 4102444800.5,
+        "iat": 1700000000.5
+      },
+      "python_jose_verdict": "valid",
+      "note": "float exp/iat; python-jose accepts. Flask never emits floats (datetime -> int); Rust verdict pinned in the Rust test"
+    },
+    {
+      "name": "wrong_secret",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoyLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTcwMDAwMDAwMH0.WqfC9kshIrcEAS9Ts7rGjqdA7f8F05lz-5M96TOrus8",
+      "claims_encoded": {
+        "user_id": 2,
+        "exp": 4102444800,
+        "iat": 1700000000
+      },
+      "python_jose_verdict": "invalid (JWTError: Signature verification failed.)",
+      "note": "signed with 'some-other-secret', verified against the fixed secret"
+    }
+  ]
+}

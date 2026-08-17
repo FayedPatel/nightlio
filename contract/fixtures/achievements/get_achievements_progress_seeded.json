@@ -1,0 +1,37 @@
+{
+  "method": "GET",
+  "path": "/api/achievements/progress",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "consistency_king": {
+        "current": 7,
+        "max": 30
+      },
+      "data_lover": {
+        "current": 10,
+        "max": 10
+      },
+      "first_entry": {
+        "current": 1,
+        "max": 1
+      },
+      "mood_master": {
+        "current": 7,
+        "max": 100
+      },
+      "week_warrior": {
+        "current": 7,
+        "max": 7
+      }
+    }
+  },
+  "notes": "7 entries, 7-day streak, 10 stats views. current values are clamped to [0, max]; keys are the five fixed achievement types."
+}

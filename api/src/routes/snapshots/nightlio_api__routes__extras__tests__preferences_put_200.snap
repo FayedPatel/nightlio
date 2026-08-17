@@ -1,0 +1,11 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "status": "success",
+    "theme": "synthwave"
+  },
+  "status": 200
+}

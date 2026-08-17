@@ -1,0 +1,15 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "content": "Great workout day.",
+    "created_at": "<TS>",
+    "date": "2025-08-01",
+    "id": 1,
+    "mood": 4,
+    "updated_at": "<TS>"
+  },
+  "status": 200
+}

@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "path": "/api/auth/verify",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": [
+    "Error string says 'header' but the same body is returned when the nightlio_token cookie is also absent -- it means 'no credentials at all'."
+  ]
+}

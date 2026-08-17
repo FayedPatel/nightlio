@@ -1,50 +1,18 @@
-# API .dockerignore
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
+# api build context (docker-compose.yml api service: context ./api).
+#
+# target/ is a debug+release build cache that can reach multiple GB locally;
+# without this file every `docker build` sends it to the daemon as part of
+# the build context (slow, and irrelevant -- the Dockerfile builds fresh
+# inside the container anyway, it never reads the host's target/).
+target/
+
+# VCS / editor / OS cruft that has no business inside the image.
 .git/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
-
-# Development files
-.env
-.env.local
-.env.development
-.env.production
-
-# IDE
-.vscode/
-.idea/
+.gitignore
 *.swp
 *.swo
-*~
-
-# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
 
-# Test files
-test_*.py
-*_test.py
-tests/
+# Docker files themselves don't need to be in their own build context.
+Dockerfile
+.dockerignore

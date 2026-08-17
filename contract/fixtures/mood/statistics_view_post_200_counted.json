@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "path": "/api/statistics/view",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "counted": true
+    }
+  },
+  "notes": "contract change (owner-approved, supersedes DECISIONS.md #9): GET /api/statistics is now a pure read; this new endpoint records the statistics view instead. No request body required (body is ignored entirely). First view of the server-local calendar day: stats_views increments and counted is true. Feeds the data_lover achievement at 10 counted view days."
+}

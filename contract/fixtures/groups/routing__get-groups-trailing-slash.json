@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/groups/",
+  "scenario": "Trailing slash on a no-slash rule: Werkzeug 404 with HTML body",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "notes": "api/utils/error_handlers.py registers a global 404 handler, so even routing 404s are JSON {\"error\": \"Resource not found\"} — not the Werkzeug HTML page. The Rust port must return JSON 404 here."
+}

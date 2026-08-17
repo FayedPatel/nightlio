@@ -1,0 +1,10 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "error": "month must be between 1 and 12"
+  },
+  "status": 400
+}

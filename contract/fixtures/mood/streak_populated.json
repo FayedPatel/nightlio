@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/streak",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "current_streak": 2,
+      "message": "Current streak: 2 days"
+    }
+  },
+  "notes": "Seeded entries on <TODAY> and <YESTERDAY> -> current_streak 2. Streak counts consecutive calendar days ending today or yesterday; duplicate same-day entries (either date format) count once. message string is derived: 'Current streak: N day(s)'."
+}

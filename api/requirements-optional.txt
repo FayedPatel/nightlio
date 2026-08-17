@@ -1,5 +1,0 @@
-# Optional dependencies for Nightlio features
-# (authlib, the OIDC client, is a core dependency in requirements.txt)
-
-# Image processing tools for scripts
-Pillow

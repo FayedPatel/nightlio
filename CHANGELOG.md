@@ -76,7 +76,6 @@ Complete overhaul of authentication, security posture, deployment, and analytics
 
 - Compose rework: `build:` stanzas for from-source builds with `API_IMAGE`/`WEB_IMAGE` overrides, trustworthy stdlib healthchecks, full `.env` pass-through (CORS, proxy, OIDC, music vars), and the gated Pocket ID profile.
 - **GHCR publish workflow**: builds and pushes `nightlio-api` / `nightlio-frontend` images on pushes to `main` and `v*` tags, with `latest`, branch, `sha-*`, and semver tags.
-- Operational scripts: `scripts/upgrade-server.sh` (migrate an upstream-image deployment to this fork with volume backups), `scripts/relink-oidc-user.sh` (re-attach an account to a new OIDC identity, seeding default groups), `scripts/fix-group-ownership.sh` (one-time repair for the per-user groups migration).
 - **npm → Yarn** migration (`yarn.lock`, Node 24 engines requirement); Python requirements split into runtime/dev; eslint-plugin-jsx-a11y added.
 - Test suite expanded with coverage for cookie auth, group ownership, schema migrations, secret validation, extended statistics, rate limiting, PDF export, and more.
 - Docs refreshed throughout: README, `docs/DEPLOYMENT.md`, `docs/DOCKER.md`, and a new `docs/UPGRADING.md` for existing deployments.

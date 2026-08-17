@@ -1,0 +1,17 @@
+{
+  "method": "GET",
+  "path": "/api/mood/1/selections",
+  "scenario": "Entry still exists but the group owning its selected options was deleted: selections come back as an empty array",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": []
+  },
+  "notes": "DELETE /api/groups/{id} cascades: group_options has FOREIGN KEY (group_id) REFERENCES groups ON DELETE CASCADE and entry_selections cascades from group_options (api/database_schema.py). After deleting the 'Emotions' group, the entry recorded in get-mood-selections__happy.json returns [] instead of its two options."
+}

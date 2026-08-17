@@ -1,0 +1,19 @@
+{
+  "method": "DELETE",
+  "path": "/api/groups/5",
+  "scenario": "Delete an owned group (cascades to its options): 200 with JSON body, never 204",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "message": "Group deleted successfully",
+      "status": "success"
+    }
+  }
+}

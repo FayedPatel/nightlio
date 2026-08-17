@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/time/",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "note": "Werkzeug strict_slashes: a rule defined without trailing slash 404s when requested with one. JSON body comes from the app-level 404 handler."
+}

@@ -1,0 +1,9 @@
+---
+source: src/routes/extras.rs
+expression: result
+---
+{
+  "artist": "jamendo-123",
+  "audio_url": "https://cdn.example/track.mp3",
+  "track_name": "chill"
+}

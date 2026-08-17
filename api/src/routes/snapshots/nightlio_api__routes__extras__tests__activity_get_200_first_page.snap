@@ -1,0 +1,42 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "activities": [
+      {
+        "created_at": "<TS>",
+        "event_type": "entry_created",
+        "id": 7,
+        "metadata": {
+          "date": "2026-08-14",
+          "entry_id": 5
+        },
+        "user_id": 1
+      },
+      {
+        "created_at": "<TS>",
+        "event_type": "entry_created",
+        "id": 6,
+        "metadata": {
+          "date": "2026-08-13",
+          "entry_id": 4
+        },
+        "user_id": 1
+      },
+      {
+        "created_at": "<TS>",
+        "event_type": "entry_created",
+        "id": 5,
+        "metadata": {
+          "date": "2026-08-12",
+          "entry_id": 3
+        },
+        "user_id": 1
+      }
+    ],
+    "next_cursor": 5
+  },
+  "status": 200
+}

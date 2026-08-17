@@ -1,0 +1,23 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "current_streak": 0,
+    "mood_distribution": {
+      "2": 1,
+      "4": 1,
+      "5": 1
+    },
+    "statistics": {
+      "average_mood": 3.67,
+      "first_entry_date": "2025-08-01",
+      "highest_mood": 5,
+      "last_entry_date": "2025-08-03",
+      "lowest_mood": 2,
+      "total_entries": 3
+    }
+  },
+  "status": 200
+}

@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/time",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "time": "<TS>"
+    }
+  },
+  "note": "time is time.time() (float epoch seconds), normalized to <TS>."
+}

@@ -1,0 +1,10 @@
+---
+source: tests/auth_family.rs
+expression: "json!({\"status\": 403, \"body\": body})"
+---
+{
+  "body": {
+    "error": "Content-Type must be application/json"
+  },
+  "status": 403
+}

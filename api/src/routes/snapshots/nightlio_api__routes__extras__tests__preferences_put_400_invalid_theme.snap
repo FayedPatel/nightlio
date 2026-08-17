@@ -1,0 +1,10 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "error": "theme must be one of: dark, default, light, synthwave"
+  },
+  "status": 400
+}

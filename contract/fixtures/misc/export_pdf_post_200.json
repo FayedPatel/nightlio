@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/api/export/pdf",
+  "request": {
+    "headers_that_matter": {},
+    "body": {
+      "content": "# My Entry\n\nToday was a *good* day."
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/pdf",
+    "body": "<PDF_BINARY>",
+    "headers": {
+      "Content-Disposition": "attachment; filename=entry_export.pdf"
+    }
+  },
+  "note": "Unauthenticated route. Binary PDF via send_file: Content-Type application/pdf, Content-Disposition attachment; filename=entry_export.pdf. Body replaced with <PDF_BINARY>. If the markdown_pdf import failed at module load, the route instead returns 501 {\"error\": \"markdown-pdf module not installed\"} before reading the body (not recordable here: renderer is installed)."
+}

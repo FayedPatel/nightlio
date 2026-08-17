@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Missing required fields"
+    }
+  },
+  "notes": "Missing mood/date/content -> 400. NOTE: the check is `not all([mood, date, content])`, so a FALSY mood (0) or empty content string also lands here, not in the range validator."
+}

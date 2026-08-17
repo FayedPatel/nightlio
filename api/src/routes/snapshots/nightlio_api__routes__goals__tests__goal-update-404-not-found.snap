@@ -1,0 +1,10 @@
+---
+source: src/routes/goals.rs
+expression: "json!({ \"status\": expected_status, \"body\": actual })"
+---
+{
+  "body": {
+    "error": "No changes or goal not found"
+  },
+  "status": 404
+}

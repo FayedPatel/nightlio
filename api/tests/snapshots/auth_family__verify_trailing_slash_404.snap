@@ -1,0 +1,10 @@
+---
+source: tests/auth_family.rs
+expression: "json!({\"status\": 404, \"body\": body})"
+---
+{
+  "body": {
+    "error": "Resource not found"
+  },
+  "status": 404
+}

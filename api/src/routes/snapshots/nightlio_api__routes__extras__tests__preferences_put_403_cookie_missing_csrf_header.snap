@@ -1,0 +1,10 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "error": "Missing required request header"
+  },
+  "status": 403
+}

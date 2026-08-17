@@ -1,0 +1,17 @@
+{
+  "method": "GET",
+  "path": "/api/activity?limit=abc",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "limit must be an integer"
+    }
+  }
+}

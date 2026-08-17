@@ -1,0 +1,30 @@
+{
+  "method": "GET",
+  "path": "/api/activity?limit=0",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "activities": [
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 7,
+          "metadata": {
+            "date": "2026-08-14",
+            "entry_id": 5
+          },
+          "user_id": 1
+        }
+      ],
+      "next_cursor": 7
+    }
+  },
+  "note": "limit=0 clamps to 1: one row returned and \u2014 because older rows (6..1) exist past the page \u2014 next_cursor is set even at limit=0. Negative limits behave the same. contract change: the cursor's presence now depends on an older row existing (peek limit+1), not on the page being full; body unchanged here."
+}

@@ -1,4 +1,7 @@
 services:
+  # Rust API (see api/Dockerfile). Same volume, env contract, and port
+  # as the retired Flask image (legacy backend removed after real-data
+  # validation — see contract/DECISIONS.md, "Legacy removal").
   api:
     build:
       context: ./api
@@ -23,7 +26,10 @@ services:
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
       - OIDC_CALLBACK_URL=${OIDC_CALLBACK_URL:-}
       - OIDC_SIGNUP_URL=${OIDC_SIGNUP_URL:-}
-      - DISABLE_LOCAL_LOGIN=${DISABLE_LOCAL_LOGIN:-0}
+      # No compose-side default: unset/empty lets the api derive it from
+      # OIDC (OIDC configured -> local login disabled; otherwise enabled).
+      # Explicit 0/1 in .env always wins — see .env.docker.
+      - DISABLE_LOCAL_LOGIN=${DISABLE_LOCAL_LOGIN:-}
       - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-0}
       - FRONTEND_URL=${FRONTEND_URL:-}
       - ENABLE_MOOD_MUSIC=${ENABLE_MOOD_MUSIC:-0}
@@ -36,7 +42,11 @@ services:
     ports:
       - "5000:5000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/')"]
+      # No python (and no curl) in this image -- the Rust binary answers
+      # its own health check via a subcommand (see api/Dockerfile /
+      # src/main.rs). The old python one-liner only worked against the
+      # Flask image; it does not exist in this container.
+      test: ["CMD", "/usr/local/bin/nightlio-api", "--health-check"]
       interval: 30s
       timeout: 10s
       retries: 3

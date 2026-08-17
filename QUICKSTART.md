@@ -27,7 +27,7 @@ nano .env
 docker-compose up -d
 
 # 5. Test it works
-./test.sh
+cargo test --manifest-path api/Cargo.toml
 ```
 
 ## What You Get
@@ -40,7 +40,7 @@ docker-compose up -d
 ## Port Information
 
 - **Frontend**: `localhost:5173` (same port for both Docker and development!)
-- **API**: `localhost:5000` (Flask backend)
+- **API**: `localhost:5000` (Rust API)
 
 ## Next Steps
 

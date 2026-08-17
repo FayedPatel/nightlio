@@ -1,0 +1,10 @@
+---
+source: src/routes/achievements.rs
+expression: "json!({ \"status\": status.as_u16(), \"body\": body })"
+---
+{
+  "body": {
+    "error": "Invalid token"
+  },
+  "status": 401
+}

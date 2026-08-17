@@ -1,0 +1,389 @@
+# OpenAPI 3.1 fragment — groups family (api/routes/group_routes.py plus the
+# entry-selections read in api/routes/mood_routes.py that consumes group data).
+# Recorded against a live Flask instance; see contract/fixtures/groups/.
+#
+# Family-wide contract facts:
+# - GET /api/groups and GET /api/mood/{entry_id}/selections return BARE ARRAYS
+#   at the top level, not wrapped objects.
+# - No endpoint in this family ever returns 204: deletes return 200 with a
+#   JSON body {status, message}.
+# - All five group endpoints plus the selections read are behind require_auth
+#   (Bearer first, nightlio_token cookie fallback). Missing auth -> 401
+#   {"error": "Authorization header required"}. Cookie-authenticated
+#   mutations additionally require Content-Type: application/json and
+#   X-Requested-With: nightlio (403 otherwise); Bearer requests bypass CSRF.
+# - None of these routes has a trailing-slash alias: any trailing slash 404s.
+#   The app registers global JSON error handlers (api/utils/error_handlers.py),
+#   so routing 404s are {"error": "Resource not found"} with
+#   application/json — NOT the Werkzeug HTML page.
+# - The <int:> path converter rejects negative and non-numeric ids (404), but
+#   MATCHES integers beyond 64 bits (Python ints are unbounded); those reach
+#   the handler and blow up in sqlite3 -> 500 {"error": "<leaked str>"}.
+#   Grade overflow on status + error-shape only, never message text.
+# - A fresh self-host account is seeded with 3 default groups (Emotions,
+#   Sleep, Productivity; 27 options total), so ids on a fresh DB start at
+#   group_id 4 / option_id 28 and GET /api/groups is never empty until the
+#   user deletes the defaults.
+# - Error message strings below are documented for reference; parity grading
+#   compares status codes and shapes, never message text.
+
+openapi: 3.1.0
+info:
+  title: Nightlio API — groups family
+  version: 0.4.0
+
+paths:
+  /api/groups:
+    get:
+      operationId: getGroups
+      summary: List the authenticated user's groups with nested options
+      description: >
+        Returns a bare JSON array (not an object). Groups are ordered by name
+        (SQLite default collation: case-sensitive, uppercase before
+        lowercase), and each group's options are likewise ordered by name.
+        Empty list is only observable after the user deletes the seeded
+        default groups.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bare array of groups.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      operationId: createGroup
+      summary: Create a group owned by the authenticated user
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: >
+                    Stored trimmed. Empty string is rejected at the route
+                    layer ("Group name is required"); whitespace-only is
+                    rejected at the service layer ("Group name cannot be
+                    empty") — both 400.
+      responses:
+        "201":
+          description: Group created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateGroupResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{group_id}/options:
+    post:
+      operationId: createGroupOption
+      summary: Create an option under a group the user owns
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Stored trimmed; empty/whitespace-only -> 400.
+      responses:
+        "201":
+          description: Option created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOptionResponse"
+        "400":
+          description: >
+            Validation error — INCLUDING the unknown/foreign-group case.
+            A group_id that does not exist or belongs to another user is a
+            400 ("Group not found for user"), NOT a 404: the database layer
+            raises ValueError and the route maps every ValueError to 400.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{group_id}:
+    delete:
+      operationId: deleteGroup
+      summary: Delete a group the user owns, cascading to its options
+      description: >
+        Never 204 — success is 200 with a JSON body. Deleting a group
+        cascades to its group_options and to entry_selections referencing
+        those options (ON DELETE CASCADE), so past mood entries silently
+        lose those selections.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: Group deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusMessageResponse"
+        "404":
+          description: >
+            Group does not exist or belongs to another user
+            ({"error": "Group not found"}).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/options/{option_id}:
+    delete:
+      operationId: deleteOption
+      summary: Delete a group option belonging to one of the user's groups
+      description: Never 204 — success is 200 with a JSON body.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: option_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: >
+            Flask <int:> converter — negative or non-numeric 404s before the
+            handler; > 64-bit values reach the handler and 500.
+      responses:
+        "200":
+          description: Option deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusMessageResponse"
+        "404":
+          description: >
+            Option does not exist or is not reachable through one of the
+            user's groups ({"error": "Option not found"}).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/mood/{entry_id}/selections:
+    get:
+      operationId: getEntrySelections
+      summary: List the group options selected on a mood entry
+      description: >
+        Returns a bare JSON array. Rows are ordered by group name, then
+        option name. NEVER 404s for a missing entry: an entry_id that does
+        not exist or belongs to another user returns 200 with []. Selections
+        also come back empty after the owning group (or the option) is
+        deleted, because entry_selections cascade away.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+          description: Same <int:> converter semantics as the other id params.
+      responses:
+        "200":
+          description: Bare array of selected options (possibly empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntrySelection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: nightlio_token
+
+  parameters:
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: >
+        Flask <int:> converter — negative or non-numeric 404s before the
+        handler; > 64-bit values reach the handler and 500.
+
+  responses:
+    Unauthorized:
+      description: >
+        Missing/invalid/expired token. Bodies observed:
+        {"error": "Authorization header required"} (missing),
+        {"error": "Invalid token"}, {"error": "Token expired"}.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Missing or empty required field.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: >
+        Unhandled exception; body is {"error": str(exception)} — message
+        text is Python-specific and must not be graded.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Group:
+      type: object
+      description: >
+        Exactly three keys — no user_id, created_at, or counts are exposed.
+      required: [id, name, options]
+      properties:
+        id:
+          type: integer
+          description: Autoincrement id (seeded defaults occupy 1-3 on a fresh DB).
+        name:
+          type: string
+        options:
+          type: array
+          description: Ordered by option name; empty array when the group has no options.
+          items:
+            $ref: "#/components/schemas/GroupOption"
+
+    GroupOption:
+      type: object
+      description: Exactly two keys; the parent group_id is NOT included.
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          description: Autoincrement id (seeded defaults occupy 1-27 on a fresh DB).
+        name:
+          type: string
+
+    EntrySelection:
+      type: object
+      description: >
+        Row shape of GET /api/mood/{entry_id}/selections. Note the option's
+        id/name plus the denormalized group_name; group_id is NOT included.
+      required: [id, name, group_name]
+      properties:
+        id:
+          type: integer
+          description: group_options autoincrement id.
+        name:
+          type: string
+          description: Option name.
+        group_name:
+          type: string
+          description: Name of the group the option belongs to.
+
+    CreateGroupResponse:
+      type: object
+      required: [status, group_id, message]
+      properties:
+        status:
+          type: string
+          const: success
+        group_id:
+          type: integer
+          description: Autoincrement id of the new group.
+        message:
+          type: string
+          const: Group created successfully
+
+    CreateOptionResponse:
+      type: object
+      required: [status, option_id, message]
+      properties:
+        status:
+          type: string
+          const: success
+        option_id:
+          type: integer
+          description: Autoincrement id of the new option.
+        message:
+          type: string
+          const: Option created successfully
+
+    StatusMessageResponse:
+      type: object
+      description: >
+        Success body for both DELETE endpoints — {status: "success",
+        message}. message is "Group deleted successfully" or
+        "Option deleted successfully".
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          const: success
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      description: >
+        Every error body in the API is exactly {"error": "..."}.
+      required: [error]
+      properties:
+        error:
+          type: string

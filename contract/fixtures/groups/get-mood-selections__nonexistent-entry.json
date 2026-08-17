@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/mood/999/selections",
+  "scenario": "Entry does not exist (or belongs to another user): 404 with GET /api/mood/{id}'s not-found body",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Entry not found"
+    }
+  },
+  "notes": "contract change (owner-approved status-code consistency fix). Flask returned 200 [] (mood_service.get_entry_selections returns [] when the entry is not owned/found and the route never 404s); the Rust port now 404s to match GET /api/mood/{id}. The after-group-delete case (get-mood-selections__after-group-delete.json) is unchanged: the entry exists there, only its selections were cascaded away, so it stays 200 []."
+}

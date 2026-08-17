@@ -1,0 +1,427 @@
+# OpenAPI 3.1 fragment — misc / config / preferences / activity / music family.
+# Sources: api/routes/misc_routes.py, config_routes.py, preferences_routes.py,
+# activity_routes.py, mus_routes.py; cross-checked against recorded fixtures in
+# contract/fixtures/misc/. Merge into contract/openapi.yaml.
+#
+# Routing semantics this family encodes (see fixtures):
+#   - The health rule is registered as "/api/" (blueprint "/" under the /api
+#     prefix) — the ONLY rule in the app with a trailing slash. GET /api
+#     responds 308 Permanent Redirect (empty body, Location: /api/).
+#   - Every other rule here 404s on a trailing-slash variant
+#     (/api/time/, /api/config/, /api/activity/ → 404 JSON).
+#   - Unknown paths return the app-level JSON 404: {"error": "Resource not found"}.
+#   - 405 returns the standard JSON envelope {"error": "Method not allowed"}
+#     plus an Allow header (contract change; Werkzeug's text/html error
+#     page is gone). The only envelope exception left is the empty-body 308.
+#   - OPTIONS on any route answers 204 with an empty body and an Allow header
+#     (contract change; previously Flask's automatic OPTIONS answered
+#     200). A 204 carries no Content-Length. A CORS preflight (Origin +
+#     Access-Control-Request-Method) rides the same 204: the CORS layer is a
+#     non-short-circuiting after-request hook that appends the CORS headers.
+
+paths:
+  /api/:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      description: >-
+        Unauthenticated. Registered with a trailing slash; requesting /api
+        (no slash) yields a 308 Permanent Redirect with an empty body and
+        Location ending in /api/.
+      responses:
+        "200":
+          description: API is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /api/time:
+    get:
+      operationId: getCurrentTime
+      summary: Current server time
+      description: Unauthenticated. /api/time/ (trailing slash) is a 404.
+      responses:
+        "200":
+          description: Epoch time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [time]
+                properties:
+                  time:
+                    type: number
+                    description: time.time() — float epoch seconds.
+
+  /api/config:
+    get:
+      operationId: getPublicConfig
+      summary: Public feature flags
+      description: >-
+        Unauthenticated. Exactly four keys. signup_url is forced to null
+        whenever OIDC is disabled, even if OIDC_SIGNUP_URL is set.
+      responses:
+        "200":
+          description: Public configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicConfig"
+
+  /api/preferences:
+    get:
+      operationId: getPreferences
+      summary: Get theme preference
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: >-
+            Stored theme. null for a user who has never PUT a theme — the
+            users.theme_preference column has no default. The frontend treats
+            null as the "default" theme.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [theme]
+                properties:
+                  theme:
+                    type: ["string", "null"]
+                    description: >-
+                      One of default|light|dark|synthwave once set; null until
+                      the first successful PUT. Not constrained by an enum on
+                      read — any value already in the column is echoed back.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    put:
+      operationId: updatePreferences
+      summary: Set theme preference
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                theme:
+                  type: string
+                  enum: [default, light, dark, synthwave]
+              required: [theme]
+      responses:
+        "200":
+          description: Theme stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, theme]
+                properties:
+                  status:
+                    type: string
+                    const: success
+                  theme:
+                    type: string
+                    enum: [default, light, dark, synthwave]
+        "400":
+          description: >-
+            theme missing, non-string, or outside the allowed set. Error
+            message is "theme must be one of: " + the sorted, comma-joined
+            set — compare status/shape, not text.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >-
+            Cookie-authenticated request failing CSRF: Content-Type not
+            application/json → {"error": "Content-Type must be application/json"};
+            missing X-Requested-With: nightlio →
+            {"error": "Missing required request header"}. Bearer requests are
+            never CSRF-checked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/activity:
+    get:
+      operationId: getActivity
+      summary: Per-user activity feed (keyset-paginated)
+      description: >-
+        The only paginated endpoint in the API. Newest first, keyset on the
+        activity row id. Pass the previous page's next_cursor as `before` to
+        fetch older rows (strictly id < before). limit is clamped server-side
+        to 1..200 with NO error for out-of-range values (limit=0 and negative
+        clamp to 1; anything above 200 clamps to 200). next_cursor is the last
+        row's id when the page length equals the clamped limit, else null —
+        so a full final page still yields a non-null cursor and the follow-up
+        request returns an empty page.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Exclusive upper bound on row id (the previous next_cursor).
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Requested page size; silently clamped to 1..200.
+      responses:
+        "200":
+          description: A page of activity events. Empty page keeps the same shape.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityPage"
+        "400":
+          description: >-
+            before or limit not parseable as an integer
+            ("before must be an integer" / "limit must be an integer").
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          description: >-
+            Any handler exception → {"error": "Failed to load activity"}.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/export/pdf:
+    post:
+      operationId: exportPdf
+      summary: Render markdown to a PDF download
+      description: >-
+        Unauthenticated and un-rate-limited; the 1 MiB cap is the only guard.
+        Size is measured in UTF-8 encoded bytes of the content string, not
+        characters. The ONLY 2xx in the API whose response is not JSON — the
+        frontend uses a dedicated fetch path (ApiService.exportPdf) instead of
+        the JSON-only request() helper.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                  description: Markdown source, at most 1048576 UTF-8 bytes.
+      responses:
+        "200":
+          description: >-
+            Binary PDF. Content-Disposition: attachment; filename=entry_export.pdf.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: >-
+            Body missing the content key → {"error": "Content is required"}.
+            A non-JSON Content-Type makes request.get_json() raise, which the
+            app-level 400 handler turns into {"error": "Bad request"}.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: >-
+            content exceeds 1048576 bytes →
+            {"error": "Content is too large to export (max 1048576 bytes)"}.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501":
+          description: >-
+            markdown_pdf module not importable at process start →
+            {"error": "markdown-pdf module not installed"} before the body is
+            read. Code-level behavior; not reproducible in the recording
+            environment (renderer installed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/music/vibe:
+    get:
+      operationId: getMoodMusic
+      summary: Fetch a Jamendo track for a vibe tag
+      description: >-
+        CONDITIONAL ROUTE: the blueprint is registered only when
+        ENABLE_MOOD_MUSIC is truthy. When the flag is off the path does not
+        exist and returns the standard routing 404
+        {"error": "Resource not found"} — indistinguishable from any unknown
+        path (recorded fixture). Unauthenticated even when enabled. When
+        enabled: MusicService returns either a track object (200) or
+        {"error": ...} which the route passes through with status 400 — that
+        includes "Jamendo Client ID not configured", "No music found for this
+        vibe", and raw upstream exception text.
+      parameters:
+        - name: tag
+          in: query
+          required: false
+          schema:
+            type: string
+            default: chill
+      responses:
+        "200":
+          description: A playable track (only when the feature flag is on).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MusicTrack"
+        "400":
+          description: Service-level error passthrough (flag on).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Feature flag off — route not registered; app-level 404 JSON.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  responses:
+    Unauthorized:
+      description: >-
+        No Bearer token and no nightlio_token cookie →
+        {"error": "Authorization header required"}; expired token →
+        {"error": "Token expired"}; otherwise-invalid token →
+        {"error": "Invalid token"}. Compare status/shape, not text.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: >-
+        Handler catch-all. preferences handlers serialize the raw exception
+        string into the error field; compare status/shape only.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: >-
+        Uniform JSON error envelope. Since the contract change it covers
+        405 too ({"error": "Method not allowed"} + Allow header); the sole
+        exception left is the /api 308 redirect, whose body is empty.
+
+    Health:
+      type: object
+      required: [status, message, timestamp]
+      properties:
+        status:
+          type: string
+          const: healthy
+        message:
+          type: string
+          const: Nightlio API is running
+        timestamp:
+          type: number
+          description: time.time() — float epoch seconds.
+
+    PublicConfig:
+      type: object
+      required: [enable_oidc, enable_mood_music, enable_local_login, signup_url]
+      properties:
+        enable_oidc:
+          type: boolean
+          description: True when OIDC_ISSUER_URL is set and non-blank.
+        enable_mood_music:
+          type: boolean
+          description: ENABLE_MOOD_MUSIC env flag (is_truthy parsing).
+        enable_local_login:
+          type: boolean
+          description: not DISABLE_LOCAL_LOGIN.
+        signup_url:
+          type: ["string", "null"]
+          description: >-
+            OIDC_SIGNUP_URL only when OIDC is enabled AND the value is an
+            absolute http(s) URL; null otherwise (even if the env var is set).
+
+    ActivityPage:
+      type: object
+      required: [activities, next_cursor]
+      properties:
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEvent"
+        next_cursor:
+          type: ["integer", "null"]
+          description: >-
+            id of the last row when the page is full (length == clamped
+            limit), else null. A full final page yields a non-null cursor
+            whose follow-up page is empty.
+
+    ActivityEvent:
+      type: object
+      required: [id, user_id, event_type, metadata, created_at]
+      properties:
+        id:
+          type: integer
+          description: activity_log autoincrement row id (volatile in fixtures).
+        user_id:
+          type: integer
+        event_type:
+          type: string
+          description: >-
+            Known values: login, entry_created, entry_edited, entry_deleted,
+            achievement_unlocked, goal_completed. Open set — treat as string.
+        metadata:
+          type: ["object", "null"]
+          description: >-
+            Parsed JSON blob; null when absent or when the stored blob is
+            malformed (server logs and nulls it). Shape varies by event_type,
+            e.g. {method} for login, {date, entry_id} for entry_created,
+            {achievement_type} for achievement_unlocked.
+        created_at:
+          type: string
+          description: SQLite DATETIME "YYYY-MM-DD HH:MM:SS" (UTC, no zone suffix).
+
+    MusicTrack:
+      type: object
+      required: [audio_url, track_name, artist]
+      properties:
+        audio_url:
+          type: string
+        track_name:
+          type: string
+        artist:
+          type: string

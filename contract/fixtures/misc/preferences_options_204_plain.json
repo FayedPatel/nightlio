@@ -1,0 +1,17 @@
+{
+  "method": "OPTIONS",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "content_type": "text/html; charset=utf-8",
+    "body": "",
+    "headers": {
+      "Allow": "HEAD, GET, OPTIONS, PUT"
+    }
+  },
+  "note": "contract change: all OPTIONS responses are 204 with an empty body and an Allow header (previously Flask's automatic OPTIONS answered 200). A 204 carries no Content-Length."
+}

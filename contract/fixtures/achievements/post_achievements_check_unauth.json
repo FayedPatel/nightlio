@@ -1,0 +1,16 @@
+{
+  "method": "POST",
+  "path": "/api/achievements/check",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": "No Authorization header and no nightlio_token cookie. 401 is returned before any CSRF/Content-Type checks."
+}

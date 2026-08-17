@@ -1,0 +1,19 @@
+{
+  "method": "PUT",
+  "path": "/api/mood/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "No update fields provided"
+    }
+  },
+  "notes": "Empty JSON object body -> 400 No update fields provided."
+}

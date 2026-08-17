@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>",
+      "Content-Type": "text/plain",
+      "X-Requested-With": "nightlio"
+    },
+    "body": "{\"mood\":3,\"date\":\"2026-08-14\",\"content\":\"csrf test\"}"
+  },
+  "response": {
+    "status": 403,
+    "content_type": "application/json",
+    "body": {
+      "error": "Content-Type must be application/json"
+    }
+  },
+  "notes": [
+    "Cookie-authenticated state-changing request with non-JSON Content-Type. The exact error string matters and is checked before the X-Requested-With check (this request even had the correct X-Requested-With).",
+    "Content-Type matching strips parameters and lowercases: 'application/json; charset=utf-8' passes; 'text/plain' fails."
+  ]
+}

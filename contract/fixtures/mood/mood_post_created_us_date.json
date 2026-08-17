@@ -1,0 +1,27 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 2,
+      "date": "8/2/2025",
+      "content": "Rough day, US-format date.",
+      "selected_options": []
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "entry_id": 2,
+      "message": "Mood entry created successfully",
+      "new_achievements": [],
+      "status": "success"
+    }
+  },
+  "notes": "US locale date M/D/YYYY is accepted. new_achievements [] when nothing new unlocks. contract change: the US-format date is normalized to ISO ('2025-08-02') before storage instead of being stored verbatim; the response body is unchanged (it never echoed the date). contract change: when non-empty, new_achievements now carries metadata objects ({name, description, icon, rarity, achievement_type}) instead of achievement_type strings; the empty array shown here is unaffected."
+}

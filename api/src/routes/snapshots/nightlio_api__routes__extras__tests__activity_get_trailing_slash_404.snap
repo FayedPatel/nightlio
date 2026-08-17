@@ -1,0 +1,10 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "error": "Resource not found"
+  },
+  "status": 404
+}

@@ -1,0 +1,10 @@
+---
+source: src/routes/goals.rs
+expression: "json!({ \"status\": 400, \"body\": body })"
+---
+{
+  "body": {
+    "error": "Title is required"
+  },
+  "status": 400
+}

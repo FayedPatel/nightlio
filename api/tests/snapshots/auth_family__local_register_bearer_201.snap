@@ -1,0 +1,16 @@
+---
+source: tests/auth_family.rs
+expression: "json!({\"status\": 201, \"body\": body})"
+---
+{
+  "body": {
+    "status": "success",
+    "user": {
+      "avatar_url": null,
+      "email": "alice@example.com",
+      "id": "<ID>",
+      "name": "Alice"
+    }
+  },
+  "status": 201
+}

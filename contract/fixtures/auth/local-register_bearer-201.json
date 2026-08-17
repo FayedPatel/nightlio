@@ -1,0 +1,35 @@
+{
+  "method": "POST",
+  "path": "/api/auth/local/register",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "username": "alice",
+      "password": "hunter2secret",
+      "email": "alice@example.com",
+      "name": "Alice"
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "status": "success",
+      "user": {
+        "avatar_url": null,
+        "email": "alice@example.com",
+        "id": 5,
+        "name": "Alice"
+      }
+    }
+  },
+  "notes": [
+    "email and name are optional; when omitted the DB layer defaults them (api/database_users.py create_local_user): email -> '<username>@localhost', name -> username. They are never null in the response for a registered user.",
+    "user.id is autoincrement -- see local-login_credentialed.json note about burned ids.",
+    "No Set-Cookie: registering does not log the new user in.",
+    "Rate limited: 10 requests/minute -> 429 beyond that."
+  ]
+}

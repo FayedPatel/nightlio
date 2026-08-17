@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/api/groups",
+  "scenario": "Create a group; group_id is the SQLite autoincrement rowid (volatile across runs)",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "Activities"
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "group_id": 4,
+      "message": "Group created successfully",
+      "status": "success"
+    }
+  },
+  "notes": "group_id is an autoincrement id. It is 4 (not 1) on a fresh DB because init_database seeds 3 default groups (Emotions, Sleep, Productivity) for the self-host user."
+}

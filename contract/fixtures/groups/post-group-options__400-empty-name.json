@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/groups/1/options",
+  "scenario": "Empty-string option name rejected at the route layer",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": ""
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Option name is required"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "method": "GET",
+  "path": "/api/activity?before=4&limit=3",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "activities": [
+        {
+          "created_at": "<TS>",
+          "event_type": "achievement_unlocked",
+          "id": 3,
+          "metadata": {
+            "achievement_type": "first_entry"
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 2,
+          "metadata": {
+            "date": "2026-08-10",
+            "entry_id": 1
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "login",
+          "id": 1,
+          "metadata": {
+            "method": "selfhost"
+          },
+          "user_id": 1
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "note": "Full FINAL page: exactly limit rows returned and nothing older exists (id 1 is the oldest row). contract change: next_cursor on a full final page is now null (the server peeks limit+1 rows; the cursor is emitted only when an older row actually exists). The removed Flask backend returned next_cursor 1 here, forcing a wasted follow-up request that answered {activities: [], next_cursor: null}."
+}

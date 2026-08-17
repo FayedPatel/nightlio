@@ -1,0 +1,11 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "message": "Mood entry deleted successfully",
+    "status": "success"
+  },
+  "status": 200
+}

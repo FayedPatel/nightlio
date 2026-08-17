@@ -1,0 +1,17 @@
+{
+  "method": "POST",
+  "path": "/api/goals/999999/progress",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Not found"
+    }
+  }
+}

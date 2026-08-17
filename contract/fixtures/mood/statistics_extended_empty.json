@@ -1,0 +1,83 @@
+{
+  "method": "GET",
+  "path": "/api/statistics/extended",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "goal_correlations": [],
+      "monthly_digest": {
+        "average_mood": null,
+        "entries_logged": 0,
+        "longest_streak": 0,
+        "month": "<CURRENT_MONTH>",
+        "mood_trend": null,
+        "previous_average_mood": null,
+        "top_tags": [],
+        "year": "<CURRENT_YEAR>"
+      },
+      "mood_volatility": {
+        "average_mood": null,
+        "entry_count": 0,
+        "stddev": null,
+        "window_days": 30
+      },
+      "rolling_averages": {
+        "count": 0,
+        "series": []
+      },
+      "tag_correlations": [],
+      "weekday_averages": [
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Sunday",
+          "weekday": 0
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Monday",
+          "weekday": 1
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Tuesday",
+          "weekday": 2
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Wednesday",
+          "weekday": 3
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Thursday",
+          "weekday": 4
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Friday",
+          "weekday": 5
+        },
+        {
+          "average_mood": null,
+          "entry_count": 0,
+          "name": "Saturday",
+          "weekday": 6
+        }
+      ]
+    }
+  },
+  "notes": "Empty account: series [], weekday_averages always has all 7 rows (null average_mood, entry_count 0), volatility average_mood/stddev null, correlations []. monthly_digest is for the CURRENT server-local year/month; those two fields normalized to <CURRENT_YEAR>/<CURRENT_MONTH>."
+}

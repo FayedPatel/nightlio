@@ -1,0 +1,15 @@
+{
+  "method": "GET",
+  "path": "/api/config/",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  }
+}

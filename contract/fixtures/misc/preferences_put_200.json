@@ -1,0 +1,20 @@
+{
+  "method": "PUT",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": {
+      "theme": "synthwave"
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "success",
+      "theme": "synthwave"
+    }
+  }
+}

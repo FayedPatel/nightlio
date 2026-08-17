@@ -1,8 +1,8 @@
 # Security
 
-Nightlio is designed to be self-hosted: a small Flask API backed by a single SQLite file,
+Nightlio is designed to be self-hosted: a small Rust (Axum) API backed by a single SQLite file,
 served behind nginx, optionally exposed to the internet through a reverse proxy or tunnel
-(e.g. Caddy + a tunnel service) with OIDC login. The threat model below, and the fixes in this
+with OIDC login. The threat model below, and the fixes in this
 document, are written with that deployment shape in mind — a single operator running one
 instance for themselves or a small group, not a multi-tenant SaaS.
 
@@ -20,7 +20,7 @@ self-hoster upgrading past this point should read the "what you must do" line fo
 
 ### 1. API container ran as root (`api/Dockerfile`)
 
-**Old behavior:** no `USER` directive; the Flask process (and anything it spawns, e.g.
+**Old behavior:** no `USER` directive; the API process (and anything it spawns, e.g.
 `markdown-pdf`'s rendering) ran as `root` (uid 0) inside the container.
 **New behavior:** the image creates `appuser` (uid 1000), chowns `/app/data` to it, and
 switches to it with `USER appuser` before `CMD`. A compromised dependency or a bug reachable
