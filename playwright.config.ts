@@ -14,7 +14,9 @@ export default defineConfig({
   testDir: 'e2e',
   // Spec files fan out across workers; tests inside a file stay ordered.
   fullyParallel: false,
-  workers: process.env.CI ? 2 : 4,
+  // Public-repo ubuntu-latest runners have 4 vCPUs — match them; each
+  // worker's API process is cheap next to its chromium instance.
+  workers: 4,
   retries: process.env.CI ? 1 : 0,
   // HTML report is written locally too (playwright-report/, gitignored) so
   // `yarn playwright show-report` works after any run, not just on CI.
