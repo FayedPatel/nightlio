@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "path": "/api/goals",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "X",
+      "frequency_per_week": 1
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  }
+}

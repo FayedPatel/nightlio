@@ -1,0 +1,21 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "entry_id": 1,
+    "message": "Mood entry created successfully",
+    "new_achievements": [
+      {
+        "achievement_type": "first_entry",
+        "description": "Log your first mood entry",
+        "icon": "Zap",
+        "name": "First Entry",
+        "rarity": "common"
+      }
+    ],
+    "status": "success"
+  },
+  "status": 201
+}

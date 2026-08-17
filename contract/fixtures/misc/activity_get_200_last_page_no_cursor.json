@@ -1,0 +1,88 @@
+{
+  "method": "GET",
+  "path": "/api/activity?limit=200",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "activities": [
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 7,
+          "metadata": {
+            "date": "2026-08-14",
+            "entry_id": 5
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 6,
+          "metadata": {
+            "date": "2026-08-13",
+            "entry_id": 4
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 5,
+          "metadata": {
+            "date": "2026-08-12",
+            "entry_id": 3
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 4,
+          "metadata": {
+            "date": "2026-08-11",
+            "entry_id": 2
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "achievement_unlocked",
+          "id": 3,
+          "metadata": {
+            "achievement_type": "first_entry"
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 2,
+          "metadata": {
+            "date": "2026-08-10",
+            "entry_id": 1
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "login",
+          "id": 1,
+          "metadata": {
+            "method": "selfhost"
+          },
+          "user_id": 1
+        }
+      ],
+      "next_cursor": null
+    }
+  },
+  "note": "Short page (fewer rows than clamped limit) -> next_cursor null."
+}

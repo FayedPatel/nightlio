@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 7,
+      "date": "2025-08-01",
+      "content": "x"
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Mood must be between 1 and 5"
+    }
+  },
+  "notes": "Mood outside 1..5 -> ValueError from service -> 400."
+}

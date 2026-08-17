@@ -1,0 +1,39 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 3,
+      "date": "2026-08-14",
+      "content": "Bearer bypasses CSRF.",
+      "selected_options": []
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "entry_id": 1,
+      "message": "Mood entry created successfully",
+      "new_achievements": [
+        {
+          "achievement_type": "first_entry",
+          "description": "Log your first mood entry",
+          "icon": "Zap",
+          "name": "First Entry",
+          "rarity": "common"
+        }
+      ],
+      "status": "success"
+    }
+  },
+  "notes": [
+    "Bearer auth bypasses the CSRF checks entirely: no X-Requested-With header was sent and the request still succeeded. An Authorization header always wins over the cookie, so sending both still skips CSRF.",
+    "entry_id is autoincrement (1 here because this was the first entry).",
+    "contract change: new_achievements is now an array of metadata objects ({name, description, icon, rarity, achievement_type}) — the same shape POST /api/achievements/check returns — instead of achievement id strings; non-empty only when this write unlocked achievements (first_entry on the account's first entry)."
+  ]
+}

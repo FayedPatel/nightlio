@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/groups",
+  "scenario": "Whitespace-only name rejected at the service layer (ValueError), different error string",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "   "
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Group name cannot be empty"
+    }
+  }
+}

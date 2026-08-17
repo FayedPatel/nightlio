@@ -2,25 +2,33 @@ name: Tests
 
 on:
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+  # Lets publish.yml gate its build-push job on this workflow's outcome by
+  # calling it as a reusable workflow (`uses: ./.github/workflows/test.yml`
+  # + `needs: test`), rather than the flakier `workflow_run` trigger (which
+  # runs against the workflow file on the default branch and needs manual
+  # SHA/ref correlation to know what it actually tested). This does not
+  # change how test.yml runs on its own pull_request/push triggers above.
+  workflow_call:
 
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  api:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          # Matches api/Dockerfile (python:3.11-slim)
-          python-version: '3.11'
-          cache: pip
-      - run: pip install -r api/requirements-dev.txt
-      - run: ./test.sh --cov=api --cov-report=term
+  # The legacy Python api job is gone with the Flask backend itself
+  # (removed after real-data validation — contract/DECISIONS.md, "Legacy
+  # removal"). api is the only API: unit/parity coverage in the `rust`
+  # job below, end-to-end coverage in the `e2e` job via scripts/e2e-api.sh.
 
   frontend:
     runs-on: ubuntu-latest
@@ -32,27 +40,83 @@ jobs:
           cache: yarn
       - run: yarn install --frozen-lockfile
       - run: yarn lint
+      - run: yarn typecheck
       - run: yarn test:unit
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+        with:
+          # Matches api/Dockerfile (rust:1.90-slim) and Cargo.toml's
+          # rust-version, so a toolchain difference can never pass here and
+          # fail (or vice versa) in the Docker build.
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Scoped to api so this job's cache never collides with a
+          # future workspace crate elsewhere in the repo.
+          workspaces: api -> target
+          # Same shared key as the e2e shards — see the e2e job's cache
+          # step for why the default per-job keys would not be shared.
+          shared-key: api-target
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
 
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      # One shard failing should not cancel the others — each shard's
+      # result is independently useful.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: e2e (${{ matrix.shard }}/4)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: yarn
-      - uses: actions/setup-python@v5
+      # scripts/e2e-api.sh defaults to E2E_API_BACKEND=rust, which does a
+      # release `cargo build` of api/ before every run (see that
+      # script). Without a toolchain here this job would fail with
+      # "cargo: command not found" -- it never needed Rust before the
+      # cutover because the e2e API used to boot the Flask app directly.
+      # Same pinned ref as the `rust` job (its @1.90.0 IS the toolchain
+      # version with this action, matching api/Dockerfile's
+      # rust:1.90-slim); no clippy/rustfmt components needed here, this
+      # job only builds.
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: Swatinem/rust-cache@v2
         with:
-          python-version: '3.11'
-          cache: pip
+          workspaces: api -> target
+          # rust-cache keys include the job id and matrix values by
+          # default, which would give every e2e shard (and the rust job)
+          # its own disjoint cache. One explicit shared key makes them all
+          # restore the same target/ cache.
+          shared-key: api-target
       - run: yarn install --frozen-lockfile
-      - run: pip install -r api/requirements.txt
+      # Build the API binary in its own step, BEFORE Playwright runs: the
+      # per-worker e2e-api.sh build is a ~0.2s no-op once the release
+      # binary is fresh, but a cold compile takes minutes and would blow
+      # the apiPort fixture's 30s setup timeout (exactly what happened on
+      # the first sharded CI run).
+      - run: cargo build --release --manifest-path api/Cargo.toml --bin nightlio-api
+      # No python needed anywhere: PDF export renders in-process in the
+      # Rust binary (markdown2pdf crate, contract/DECISIONS.md #15).
       - run: yarn playwright install --with-deps chromium
-      - run: yarn test:e2e
+      # Shards split by spec file (fullyParallel is false), so each shard
+      # runs ~a quarter of the spec files with its own 4 workers.
+      - run: yarn test:e2e --shard=${{ matrix.shard }}/4
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7

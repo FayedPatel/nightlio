@@ -1,0 +1,26 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 3,
+      "date": "2026-08-14",
+      "content": "csrf test"
+    }
+  },
+  "response": {
+    "status": 403,
+    "content_type": "application/json",
+    "body": {
+      "error": "Missing required request header"
+    }
+  },
+  "notes": [
+    "X-Requested-With must equal exactly 'nightlio'; any other value gets this same 403.",
+    "Applies to every cookie-authenticated POST/PUT/PATCH/DELETE behind require_auth; GET/HEAD are exempt."
+  ]
+}

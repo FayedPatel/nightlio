@@ -1,0 +1,15 @@
+{
+  "method": "GET",
+  "path": "/api/goals/1/completions",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  }
+}

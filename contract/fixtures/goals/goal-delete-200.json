@@ -1,0 +1,18 @@
+{
+  "method": "DELETE",
+  "path": "/api/goals/2",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "ok"
+    }
+  },
+  "notes": "Deletes the row; ON DELETE CASCADE removes its goal_completions."
+}

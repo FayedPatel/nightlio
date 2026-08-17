@@ -1,0 +1,95 @@
+== table: achievements
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'user_id', 'INTEGER', 1, None, 0)
+   (2, 'achievement_type', 'TEXT', 1, None, 0)
+   (3, 'earned_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+   (4, 'nft_minted', 'BOOLEAN', 0, 'FALSE', 0)
+   (5, 'nft_token_id', 'INTEGER', 0, None, 0)
+   (6, 'nft_tx_hash', 'TEXT', 0, None, 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+   (0, 'sqlite_autoindex_achievements_1', 1, 'u', 0)
+-- PRAGMA index_info(sqlite_autoindex_achievements_1) columns: ['user_id', 'achievement_type']
+
+== table: entry_selections
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'entry_id', 'INTEGER', 1, None, 0)
+   (2, 'option_id', 'INTEGER', 1, None, 0)
+   (3, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+
+== table: goal_completions
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'user_id', 'INTEGER', 1, None, 0)
+   (2, 'goal_id', 'INTEGER', 1, None, 0)
+   (3, 'date', 'TEXT', 1, None, 0)
+   (4, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+   (0, 'sqlite_autoindex_goal_completions_1', 1, 'u', 0)
+-- PRAGMA index_info(sqlite_autoindex_goal_completions_1) columns: ['user_id', 'goal_id', 'date']
+
+== table: goals
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'user_id', 'INTEGER', 1, None, 0)
+   (2, 'title', 'TEXT', 1, None, 0)
+   (3, 'description', 'TEXT', 0, None, 0)
+   (4, 'frequency_per_week', 'INTEGER', 1, None, 0)
+   (5, 'completed', 'INTEGER', 1, '0', 0)
+   (6, 'streak', 'INTEGER', 1, '0', 0)
+   (7, 'period_start', 'TEXT', 0, None, 0)
+   (8, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+   (9, 'updated_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+
+== table: group_options
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'group_id', 'INTEGER', 1, None, 0)
+   (2, 'name', 'TEXT', 1, None, 0)
+   (3, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+
+== table: groups
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'name', 'TEXT', 1, None, 0)
+   (2, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+   (0, 'sqlite_autoindex_groups_1', 1, 'u', 0)
+-- PRAGMA index_info(sqlite_autoindex_groups_1) columns: ['name']
+
+== table: mood_entries
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'user_id', 'INTEGER', 1, None, 0)
+   (2, 'date', 'TEXT', 1, None, 0)
+   (3, 'mood', 'INTEGER', 1, None, 0)
+   (4, 'content', 'TEXT', 1, None, 0)
+   (5, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+   (6, 'updated_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+   (0, 'idx_mood_entries_date', 0, 'c', 0)
+-- PRAGMA index_info(idx_mood_entries_date) columns: ['date']
+
+== table: user_metrics
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'user_id', 'INTEGER', 0, None, 1)
+   (1, 'stats_views', 'INTEGER', 1, '0', 0)
+   (2, 'updated_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+
+== table: users
+-- PRAGMA table_info (cid, name, type, notnull, dflt_value, pk)
+   (0, 'id', 'INTEGER', 0, None, 1)
+   (1, 'google_id', 'TEXT', 1, None, 0)
+   (2, 'email', 'TEXT', 1, None, 0)
+   (3, 'name', 'TEXT', 1, None, 0)
+   (4, 'avatar_url', 'TEXT', 0, None, 0)
+   (5, 'created_at', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+   (6, 'last_login', 'TIMESTAMP', 0, 'CURRENT_TIMESTAMP', 0)
+-- PRAGMA index_list (seq, name, unique, origin, partial)
+   (0, 'sqlite_autoindex_users_1', 1, 'u', 0)
+-- PRAGMA index_info(sqlite_autoindex_users_1) columns: ['google_id']

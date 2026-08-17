@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/auth/local/login/",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "notes": [
+    "Routing semantics: auth rules are registered without trailing slash and Flask does not redirect POSTs to the non-slash rule; the app-level 404 handler (api/utils/error_handlers.py) answers.",
+    "NOT the Werkzeug default HTML 404: a global errorhandler rewrites every 404 to JSON {\"error\": \"Resource not found\"}."
+  ]
+}

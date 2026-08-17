@@ -1,0 +1,11 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "current_streak": 0,
+    "message": "Current streak: 0 days"
+  },
+  "status": 200
+}

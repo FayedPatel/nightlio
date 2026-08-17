@@ -1,0 +1,17 @@
+{
+  "method": "POST",
+  "path": "/api/time",
+  "request": {
+    "headers_that_matter": {},
+    "body": {}
+  },
+  "response": {
+    "status": 405,
+    "content_type": "application/json",
+    "body": { "error": "Method not allowed" },
+    "headers": {
+      "Allow": "GET,HEAD,OPTIONS"
+    }
+  },
+  "note": "contract change: 405 now carries the standard JSON error envelope (Flask/Werkzeug returned an HTML error page with Content-Type text/html — that drift was closed by unifying on the envelope). Allow is synthesized by axum from the registered methods and is comma-joined without spaces; method order may differ from Werkzeug's."
+}

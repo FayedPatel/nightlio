@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/nonexistent",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "note": "App-level 404 handler: always {\"error\": \"Resource not found\"} JSON."
+}

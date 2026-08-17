@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "path": "/api/achievements/check/",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "notes": "Same strict-slash 404 for the POST rule; auth is irrelevant because routing fails before any handler or decorator runs. Body is JSON via the app's global 404 handler (api/utils/error_handlers.py), not Werkzeug HTML."
+}

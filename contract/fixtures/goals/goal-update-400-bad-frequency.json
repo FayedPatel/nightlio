@@ -1,0 +1,21 @@
+{
+  "method": "PUT",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "frequency_per_week": 0
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "frequency_per_week must be between 1 and 7"
+    }
+  },
+  "notes": "ValueError from range check -> 400. Non-integer frequency (e.g. 'abc') also 400s via int() ValueError."
+}

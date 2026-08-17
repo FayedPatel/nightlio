@@ -1,6 +1,0 @@
-# Dev/test-only dependencies. Not installed into the production image
-# (api/Dockerfile installs requirements.txt only) -- keeps pytest and its
-# transitive deps out of what self-hosters run in production.
--r requirements.txt
-pytest==8.4.1
-pytest-cov==6.2.1

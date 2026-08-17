@@ -1,0 +1,16 @@
+{
+  "method": "DELETE",
+  "path": "/api/options/1",
+  "scenario": "No Authorization header on a protected route",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  }
+}

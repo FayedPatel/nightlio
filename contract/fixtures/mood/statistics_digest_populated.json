@@ -1,0 +1,32 @@
+{
+  "method": "GET",
+  "path": "/api/statistics/digest?year=2025&month=8",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "average_mood": 3.6666666666666665,
+      "entries_logged": 3,
+      "longest_streak": 3,
+      "month": 8,
+      "mood_trend": null,
+      "previous_average_mood": null,
+      "top_tags": [
+        {
+          "group_name": "Activities",
+          "option_id": 28,
+          "option_name": "Exercise",
+          "times_selected": 1
+        }
+      ],
+      "year": 2025
+    }
+  },
+  "notes": "entries_logged int, average_mood float, previous_average_mood/mood_trend null when the previous month has no entries. top_tags max 5 by times_selected DESC then option name ASC. longest_streak counts consecutive logged days within the month (normalized dates)."
+}

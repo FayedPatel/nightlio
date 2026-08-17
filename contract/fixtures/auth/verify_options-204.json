@@ -1,0 +1,26 @@
+{
+  "method": "OPTIONS",
+  "path": "/api/auth/verify",
+  "request": {
+    "headers_that_matter": {
+      "Origin": "http://localhost:5000",
+      "Access-Control-Request-Method": "POST"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "content_type": "text/html; charset=utf-8",
+    "headers_that_matter": {
+      "Allow": "POST, OPTIONS",
+      "Access-Control-Allow-Origin": "http://localhost:5000",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
+    },
+    "body": ""
+  },
+  "notes": [
+    "contract change: all OPTIONS responses are 204 with an empty body and an Allow header (previously Flask's automatic OPTIONS answered 200). A 204 carries no Content-Length.",
+    "Same 204-empty response with or without CORS preflight request headers; the Access-Control-Allow-* headers appear only when Origin matches CORS_ORIGINS (the CORS layer is a non-short-circuiting after-request hook, so preflights ride the router's 204)."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "method": "PATCH",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "description": "15 minutes"
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "ok"
+    }
+  },
+  "notes": "ROUTING: PATCH is the same Werkzeug rule/handler as PUT; partial updates allowed, identical response body."
+}

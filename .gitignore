@@ -25,7 +25,7 @@ docker-compose.override.yml
 *.sln
 *.sw?
 
-# Flask
+# Python (legacy, kept for stray local artifacts)
 venv/
 .venv/
 instance/
@@ -38,7 +38,7 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
-data/
+data
 
 # Pytest
 *.pytest_cache/
@@ -46,9 +46,12 @@ data/
 # Prod Test
 docker-compose.prod.yml
 Caddyfile
+old
 
-api/.env
-old/
+# Personal server-admin scripts — local only, not part of the public repo
+scripts/upgrade-server.sh
+scripts/relink-oidc-user.sh
+scripts/fix-group-ownership.sh
 
 # Claude Code working files — keep local only
 .claude/
@@ -65,3 +68,12 @@ playwright-report/
 test-results/
 coverage/
 screenshots/
+
+# Rust API rewrite
+api/target/
+
+# Contract corpus: the committed golden .db snapshots must override the
+# global *.db ignore above — cargo's bootstrap-parity tests read them.
+# Real production snapshots stay ignored (personal data, never commit).
+!contract/corpus/*.db
+contract/corpus/prod/

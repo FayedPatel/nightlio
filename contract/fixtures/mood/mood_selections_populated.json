@@ -1,0 +1,22 @@
+{
+  "method": "GET",
+  "path": "/api/mood/1/selections",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "group_name": "Activities",
+        "id": 28,
+        "name": "Exercise"
+      }
+    ]
+  },
+  "notes": "Bare array of {id, name, group_name}, ordered by group name then option name."
+}

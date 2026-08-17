@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "path": "/api/groups/999/options",
+  "scenario": "Group id that does not exist (or is not owned) yields 404 matching the resource-not-found convention",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "X"
+    }
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Group not found"
+    }
+  },
+  "notes": "contract change (owner-approved status-code consistency fix). Flask mapped GroupsMixin.create_group_option's ValueError('Group not found for user') to 400; the Rust port now returns 404 with the same body DELETE /api/groups/{id} uses for a missing/foreign group. The data layer's error is untouched; the route remaps it. Filename kept for history; the recorded status is now 404."
+}

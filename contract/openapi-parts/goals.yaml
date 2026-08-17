@@ -1,0 +1,501 @@
+# OpenAPI 3.1 fragment — goals family (api/routes/goal_routes.py).
+# Recorded against live Flask on 2026-08-15; fixtures in contract/fixtures/goals/.
+# Merge into contract/openapi.yaml. All routes below require bearer auth
+# (Authorization: Bearer <JWT>, or nightlio_token cookie fallback) except the
+# OPTIONS preflight on completions, which short-circuits to 204 before auth.
+#
+# Routing semantics the Rust port must reproduce (encoded as fixtures):
+#   - GET /api/goals returns a BARE JSON ARRAY, not an object envelope.
+#   - /api/goals/ (trailing slash) does NOT match: 404, no 308 redirect.
+#   - {goal_id} is Werkzeug <int:>: negative or non-integer segments never match
+#     any route -> 404. The app's global error handler makes even these
+#     framework 404s JSON: {"error": "Resource not found"} (api/utils/error_handlers.py).
+#   - PUT and PATCH /api/goals/{goal_id} are one rule bound to one handler with
+#     identical semantics; both accept partial bodies.
+#   - Completions is reachable at three equivalent paths returning byte-identical
+#     bodies: /api/goals/{id}/completions, /api/goals/{id}/completions/ and
+#     /api/goal/{id}/completions (all registered strict_slashes=False).
+#   - OPTIONS on any route in the family -> 204 empty body with an Allow header
+#     (Content-Type text/html kept), no auth required (contract change:
+#     the old two-regime split between automatic-200 and explicit-204 OPTIONS
+#     is gone).
+# Error bodies are always {"error": "..."}; compare status + shape, never the
+# message text (Python exception strings are not reproducible in Rust).
+
+paths:
+  /api/goals:
+    get:
+      operationId: listGoals
+      summary: List the authenticated user's goals
+      description: |
+        Returns a bare array ordered by created_at DESC. contract change
+        (owner-approved): reading is pure — each row's weekly rollover (if its
+        period_start is not the current ISO week's Monday, completed resets to
+        0 and streak is incremented or zeroed) is projected into the response
+        only; it is persisted solely by the write paths (progress, update).
+        Every row gains the computed key already_completed_today.
+      responses:
+        "200":
+          description: Bare array of goals (empty account -> []).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Goal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: createGoal
+      summary: Create a goal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalCreateRequest"
+      responses:
+        "201":
+          description: Created; body carries only the new autoincrement id.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+        "400":
+          description: |
+            Blank/missing title, or effective frequency outside 1..7. A body
+            with neither frequency_per_week nor the legacy alias `frequency`
+            coerces to 0 and 400s. Non-numeric frequency 400s via ValueError.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/goals/{goal_id}:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoal
+      summary: Fetch one goal
+      description: Same projected rollover (pure read) and row shape as the list endpoint.
+      responses:
+        "200":
+          description: The goal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateGoal
+      summary: Update a goal (partial)
+      description: |
+        PUT and PATCH share one handler; both are partial updates. Only
+        provided fields change. Lowering frequency_per_week also clamps
+        completed to MIN(completed, new frequency). contract change: an empty body
+        (no recognized fields) returns 400 "No fields to update", a blank
+        title returns 400 "Title is required" (matching create), and 404
+        now only means missing/foreign goal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalUpdateRequest"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          description: frequency_per_week outside 1..7 or not coercible to int.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Goal not found for this user, or body contained no updatable fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: patchGoal
+      summary: Update a goal (alias of PUT)
+      description: Identical to PUT — same Werkzeug rule, same handler, same responses.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalUpdateRequest"
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "400":
+          description: frequency_per_week outside 1..7 or not coercible to int.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Goal not found for this user, or body contained no updatable fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteGoal
+      summary: Delete a goal
+      description: goal_completions rows cascade-delete with the goal.
+      responses:
+        "200":
+          description: Deleted (200 with a body, never 204).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusOk"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/goals/{goal_id}/progress:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    post:
+      operationId: incrementGoalProgress
+      summary: Log a goal completion for today or a past day
+      description: |
+        Body is optional (parsed with get_json(silent=True), so a missing or
+        even malformed body is tolerated and means "today"). {date} logs a
+        backdated completion; accepted formats are YYYY-MM-DD or M/D/YYYY,
+        normalized to ISO, at most 1 day in the future. Logging is idempotent
+        per (goal, day) via a UNIQUE constraint: a duplicate day returns 200
+        with already_logged=true and does not move the completed counter.
+        The counter only increments for dates inside the current week's period
+        and while completed < frequency_per_week; older dates still land in the
+        completions log. Response is the full post-update goal row plus
+        already_completed_today, already_logged and logged_date.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date:
+                  type: string
+                  description: "YYYY-MM-DD or M/D/YYYY; normalized to YYYY-MM-DD."
+      responses:
+        "200":
+          description: Updated goal with logging metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalProgress"
+        "400":
+          description: Unparseable date or date more than 1 day in the future.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/goals/{goal_id}/completions:
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletions
+      summary: List completion dates for a goal
+      description: |
+        Bare array of {date} objects ascending. Without start & end (both are
+        required together, else the default kicks in) the window is the last
+        90 days ending today. start/end are passed to SQL BETWEEN verbatim —
+        no validation. There is NO existence/ownership check on goal_id: a
+        nonexistent or foreign goal id returns 200 [] (rows are filtered by the
+        caller's user_id, so nothing leaks), never 404.
+        Aliases: /api/goals/{id}/completions/ and /api/goal/{id}/completions
+        return the identical body.
+      parameters:
+        - name: start
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Inclusive ISO start date; effective only when end is also present.
+        - name: end
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Inclusive ISO end date; effective only when start is also present.
+      responses:
+        "200":
+          description: Bare array of completion dates (possibly empty; never 404).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsPreflight
+      summary: CORS preflight (no auth)
+      description: |
+        Empty 204 before any token check, with an Allow header (contract
+        change: every OPTIONS in the app answers 204 now, so this is no longer
+        a special case). Content-Type text/html kept for the empty body. Every
+        data response remains JSON with a body.
+      security: []
+      responses:
+        "204":
+          description: Empty preflight response.
+
+  /api/goals/{goal_id}/completions/:
+    description: Trailing-slash alias of /api/goals/{goal_id}/completions (strict_slashes=False; same handler, identical body, no redirect).
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletionsSlashAlias
+      summary: Alias of getGoalCompletions
+      responses:
+        "200":
+          description: Identical to /api/goals/{goal_id}/completions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsSlashAliasPreflight
+      summary: CORS preflight (no auth)
+      security: []
+      responses:
+        "204":
+          description: Empty preflight response.
+
+  /api/goal/{goal_id}/completions:
+    description: Singular-noun alias of /api/goals/{goal_id}/completions kept for old clients; same handler, identical body.
+    parameters:
+      - $ref: "#/components/parameters/GoalId"
+    get:
+      operationId: getGoalCompletionsSingularAlias
+      summary: Alias of getGoalCompletions
+      responses:
+        "200":
+          description: Identical to /api/goals/{goal_id}/completions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalCompletion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    options:
+      operationId: goalCompletionsSingularAliasPreflight
+      summary: CORS preflight (no auth)
+      security: []
+      responses:
+        "204":
+          description: Empty preflight response.
+
+components:
+  parameters:
+    GoalId:
+      name: goal_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 0
+      description: |
+        Werkzeug <int:> converter — matches only non-negative integer path
+        segments. Negative ids or non-numeric segments match no route and
+        produce the app-level JSON 404 {"error": "Resource not found"}.
+
+  responses:
+    Unauthorized:
+      description: Missing/expired/invalid bearer token and no valid cookie.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No such goal for the authenticated user.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: Universal error envelope. Message text is informational only — parity is judged on status code and this shape.
+
+    StatusOk:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          const: "ok"
+
+    Goal:
+      type: object
+      description: |
+        Row from the goals table after weekly rollover, plus the computed
+        already_completed_today flag. Serialized straight from sqlite3.Row.
+      required:
+        - id
+        - user_id
+        - title
+        - description
+        - frequency_per_week
+        - completed
+        - streak
+        - period_start
+        - last_completed_date
+        - created_at
+        - updated_at
+        - already_completed_today
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        title:
+          type: string
+        description:
+          type:
+            - string
+            - "null"
+          description: |
+            The API always writes a (possibly empty) trimmed string, but the
+            column is nullable so legacy rows can surface null.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        completed:
+          type: integer
+          description: Completions counted in the current week's period; reset to 0 on rollover, clamped to frequency_per_week.
+        streak:
+          type: integer
+          description: Consecutive fully-completed weeks; recomputed only at rollover.
+        period_start:
+          type: string
+          description: |
+            ISO Monday of the current week (YYYY-MM-DD). Nullable in the DDL,
+            but every response projects the weekly rollover which populates
+            it, so responses carry a non-null value (contract change: reads are pure —
+            the projected value is persisted only when a write path runs).
+        last_completed_date:
+          type:
+            - string
+            - "null"
+          description: ISO date of the latest logged completion; null until the first log.
+        created_at:
+          type: string
+          description: "SQLite CURRENT_TIMESTAMP (UTC), format 'YYYY-MM-DD HH:MM:SS' — no timezone suffix."
+        updated_at:
+          type: string
+          description: Same format as created_at; bumped by updates and progress logging (which persist the weekly rollover). Pure GETs never bump it.
+        already_completed_today:
+          type: boolean
+          description: Computed per request — last_completed_date == server-local today.
+
+    GoalProgress:
+      allOf:
+        - $ref: "#/components/schemas/Goal"
+        - type: object
+          required: [already_logged, logged_date]
+          properties:
+            already_logged:
+              type: boolean
+              description: true when the (goal, date) pair was already in goal_completions; the completed counter did not move.
+            logged_date:
+              type: string
+              description: The ISO date this call targeted (request date normalized, or today).
+
+    GoalCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          description: Trimmed server-side; blank -> 400.
+        description:
+          type: string
+          description: Optional; null coerces to ""; trimmed.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        frequency:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Legacy alias consulted only when frequency_per_week is absent/falsy. One of the two must yield 1..7 or the request 400s.
+
+    GoalUpdateRequest:
+      type: object
+      description: All fields optional, but at least one must be present — an empty object yields 404, not 200.
+      properties:
+        title:
+          type: string
+          description: Trimmed. Note the update path does NOT reject a blank title (unlike create).
+        description:
+          type: string
+          description: Trimmed.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Lowering it clamps completed to the new value.
+        frequency:
+          type: integer
+          minimum: 1
+          maximum: 7
+          description: Legacy alias used only when frequency_per_week is absent.
+
+    GoalCompletion:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+          description: ISO YYYY-MM-DD completion day.

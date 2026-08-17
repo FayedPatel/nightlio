@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "path": "/api/export/pdf",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "content": "# My Entry\n\nToday was a *good* day."
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "note": "contract change: POST /api/export/pdf now requires auth. It was unauthenticated through the whole Flask era and was kept that way for parity until 2026-08-17, when the rule gained the AuthUser extractor (see contract/DECISIONS.md, 2026-08-17, and SECURITY.md — this closes the old risk-accepted follow-up). No credentials at all -> 401 before any body validation, with the same body every require_auth rule returns. A cookie-authenticated call must also carry Content-Type: application/json + X-Requested-With: nightlio or it takes the standard CSRF 403 {\"error\": \"Missing required request header\"}; Bearer callers bypass CSRF. Still no rate limit: with auth required, request-volume abuse is an authenticated user's self-harm."
+}

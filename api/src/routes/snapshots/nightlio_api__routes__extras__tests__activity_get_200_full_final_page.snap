@@ -1,0 +1,40 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "activities": [
+      {
+        "created_at": "<TS>",
+        "event_type": "achievement_unlocked",
+        "id": 3,
+        "metadata": {
+          "achievement_type": "first_entry"
+        },
+        "user_id": 1
+      },
+      {
+        "created_at": "<TS>",
+        "event_type": "entry_created",
+        "id": 2,
+        "metadata": {
+          "date": "2026-08-10",
+          "entry_id": 1
+        },
+        "user_id": 1
+      },
+      {
+        "created_at": "<TS>",
+        "event_type": "login",
+        "id": 1,
+        "metadata": {
+          "method": "selfhost"
+        },
+        "user_id": 1
+      }
+    ],
+    "next_cursor": null
+  },
+  "status": 200
+}

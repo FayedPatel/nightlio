@@ -1,0 +1,20 @@
+{
+  "method": "GET",
+  "path": "/api/statistics/heatmap?year=2025",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "days": [],
+      "days_logged": 0,
+      "year": 2025
+    }
+  },
+  "notes": "Empty account: days [], days_logged 0. Without ?year the server defaults to the current local year."
+}

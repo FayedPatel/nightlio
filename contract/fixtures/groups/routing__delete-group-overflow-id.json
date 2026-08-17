@@ -1,0 +1,19 @@
+{
+  "method": "DELETE",
+  "path": "/api/groups/99999999999999999999999999",
+  "scenario": "Id beyond 64-bit range: Werkzeug's <int:> converter MATCHES it (Python ints are unbounded), the handler then 500s when SQLite rejects the oversized integer",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 500,
+    "content_type": "application/json",
+    "body": {
+      "error": "Python int too large to convert to SQLite INTEGER"
+    }
+  },
+  "notes": "SURPRISE: the contract doc claims the <int:> converter 404s overflowing values, but Werkzeug's IntegerConverter accepts any \\d+ (Python ints are unbounded); sqlite3 then raises OverflowError, caught by the route's blanket except -> 500 with the leaked str(exception). Grade on status 500 + {error: string} shape only, never the message text. A Rust port whose path param is i64 will naturally 404 here instead; this fixture records the Python behavior for the parity decision."
+}

@@ -1,0 +1,10 @@
+---
+source: src/routes/goals.rs
+expression: "json!({ \"status\": expected_status, \"body\": actual })"
+---
+{
+  "body": {
+    "error": "frequency_per_week must be 1..7"
+  },
+  "status": 400
+}

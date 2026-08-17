@@ -1,0 +1,16 @@
+{
+  "method": "PUT",
+  "path": "/api/mood/1",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": "No Authorization header and no nightlio_token cookie."
+}

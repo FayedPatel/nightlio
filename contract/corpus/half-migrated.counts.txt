@@ -1,0 +1,10 @@
+achievements	1
+activity_log	3
+entry_selections	4
+goal_completions	1
+goals	1
+group_options	27
+groups	3
+mood_entries	3
+user_metrics	1
+users	2

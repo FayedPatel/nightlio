@@ -1,5 +1,6 @@
-# Build the api and frontend images and push them to GHCR under the repo
-# owner's namespace (ghcr.io/<owner>/nightlio-api, .../nightlio-frontend).
+# Build the api and frontend images and push them to GHCR
+# under the repo owner's namespace (ghcr.io/<owner>/nightlio-api,
+# .../nightlio-frontend).
 #
 # Publishing with the workflow's GITHUB_TOKEN links each package to this
 # repository. Because the repository is private, the packages are created
@@ -26,25 +27,59 @@ permissions:
   packages: write
 
 jobs:
+  # Gate publishing on the test suite passing for this exact commit. Calling
+  # test.yml as a reusable workflow (it declares `workflow_call` in its
+  # `on:`) gives real `needs:`-style job dependency semantics -- publishing
+  # cannot start until this finishes, and it runs against the same SHA that
+  # triggered this workflow. Previously publish.yml had no such gate at all:
+  # a red `main` could still publish new "latest" images.
+  test:
+    uses: ./.github/workflows/test.yml
+
   build-push:
+    needs: test
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
+          # This is the Rust cutover: publishing under the SAME image name
+          # (nightlio-api) that used to be the Flask build means a
+          # self-hoster who deploys from published images (rather than
+          # `docker compose up --build`) gets the swap just by pulling the
+          # new tag -- docker-compose.yml and nginx are unchanged, see
+          # docs/UPGRADING.md.
           - image: nightlio-api
             context: ./api
             dockerfile: ./api/Dockerfile
+          # NOTE: the legacy Python backend is removed from the repo
+          # (contract/DECISIONS.md, "Legacy removal"), so no Flask image is
+          # built or published. Rollback for image-based deployments means
+          # running a previously published pre-v0.4.0 nightlio-api tag —
+          # see docs/UPGRADING.md.
+          # PDF export renders in-process via the markdown2pdf crate
+          # (contract/DECISIONS.md #15) — no sidecar image to publish.
           - image: nightlio-frontend
             context: .
             dockerfile: ./Dockerfile
     steps:
       - uses: actions/checkout@v4
 
-      # buildx for multi-stage builds and GHA layer caching. amd64-only:
-      # every deploy target is x86. If an ARM host ever appears (Raspberry
-      # Pi, Oracle ARM, Apple Silicon), add a setup-qemu-action step and
-      # "linux/arm64" to platforms below.
+      # QEMU registers binfmt_misc handlers for foreign-arch binaries so the
+      # arm64 leg below can run under emulation on this amd64 runner --
+      # needed by BOTH matrix legs: nightlio-frontend's build stage runs
+      # node/yarn for arm64, and nightlio-api's build stage runs `cargo
+      # build --release` (plus `apt-get install build-essential`, for
+      # rusqlite's bundled SQLite C sources) for arm64. See api/Dockerfile
+      # for why the Rust image uses full per-platform emulation rather than
+      # a cross-compiling builder (`cross`/`cargo-zigbuild`), and for the
+      # local verification steps that proved this works before it was wired
+      # into CI.
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      # buildx for multi-stage builds and GHA layer caching.
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -65,11 +100,30 @@ jobs:
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
+      # Cargo registry + target caching for the nightlio-api (Rust) build:
+      # `cache-from/cache-to: type=gha` on its own only caches finished
+      # Docker LAYERS, not cargo's own registry/target dirs, so a naive
+      # single-stage `COPY . . && cargo build` here would recompile every
+      # dependency (rusqlite's bundled sqlite3, openidconnect's TLS stack,
+      # ...) from scratch on every source change regardless of this cache
+      # -- CI times would regress sharply. api/Dockerfile avoids that by
+      # using cargo-chef to split the build into a deps-only layer (keyed
+      # on Cargo.toml/Cargo.lock only) and a source layer: the expensive
+      # `cargo chef cook` layer IS what ends up cached below, scoped per
+      # matrix.image, so it survives source-only changes across builds and
+      # only reinvalidates when dependencies actually change.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64
+          # linux/arm64 build for both legs runs under QEMU emulation (the
+          # setup-qemu-action step above), not cross-compilation -- see
+          # api/Dockerfile's top-of-file comment for why, and for how this
+          # was verified locally (buildx build --platform linux/arm64 +
+          # run + --health-check) before landing here. This is a real
+          # multi-arch proof, not just a platforms: list edit: the arm64
+          # nightlio-api image was actually built and run.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

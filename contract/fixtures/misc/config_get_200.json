@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/config",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "enable_local_login": true,
+      "enable_mood_music": false,
+      "enable_oidc": false,
+      "signup_url": null
+    }
+  },
+  "note": "OIDC env blanked and ENABLE_MOOD_MUSIC unset: the four public flags are enable_oidc=false, enable_mood_music=false, enable_local_login=true, signup_url=null (signup_url is forced null whenever OIDC is disabled)."
+}

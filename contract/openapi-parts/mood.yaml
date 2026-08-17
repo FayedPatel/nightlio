@@ -1,0 +1,748 @@
+# OpenAPI 3.1 fragment — mood + statistics family (api/routes/mood_routes.py).
+# Cross-checked against Python source (api/routes/mood_routes.py,
+# api/services/mood_service.py, api/database_moods.py, api/database_stats.py,
+# api/database_achievements.py) and the recorded fixtures in
+# contract/fixtures/mood/. Merge into contract/openapi.yaml.
+#
+# Family-wide invariants:
+# - Every response body is JSON (application/json). No endpoint ever returns
+#   204/empty — the frontend client throws on any 2xx whose Content-Type is
+#   not application/json. DELETE returns 200 with a JSON body.
+# - Error bodies are always {"error": "..."}. Compare status codes and shapes,
+#   never error-message text (Python exception __str__ is not reproducible).
+# - All twelve operations require auth (Bearer first, nightlio_token cookie
+#   fallback). Missing/invalid credentials -> 401 {"error": "..."}.
+# - GET /api/moods and GET /api/mood/{id}/selections return BARE ARRAYS.
+# - Routing: rules are registered without trailing slashes (strict_slashes
+#   default), so /api/moods/ is 404. <int:entry_id> rejects negative and
+#   non-numeric ids at routing time -> 404 {"error": "Resource not found"}
+#   (the app-level JSON 404 handler) BEFORE auth runs. But the converter is
+#   UNBOUNDED: an id beyond SQLite's i64 range matches the route and the
+#   sqlite3 bind raises -> observed 500 (see routing_mood_overflow_id fixture).
+
+paths:
+  /api/mood:
+    post:
+      operationId: createMoodEntry
+      summary: Create a mood entry and run achievement checks.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMoodRequest'
+      responses:
+        '201':
+          description: Entry created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMoodResponse'
+        '400':
+          description: >
+            Validation failure: missing/falsy mood, date or content (a mood of
+            0 or an all-whitespace content string hits the "Missing required
+            fields" branch); mood not an integer; mood outside 1..5; date not
+            YYYY-MM-DD or M/D/YYYY; date more than one day in the future;
+            selected_options not an array of integers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/moods:
+    get:
+      operationId: listMoodEntries
+      summary: List the user's mood entries, newest journaled day first.
+      description: >
+        Returns a BARE ARRAY (not an object). Ordered by the normalized ISO
+        day DESC (both stored date shapes are normalized via _ISO_DAY_EXPR),
+        then created_at DESC; entries with unparseable dates sort last.
+        CAUTION: the optional start_date/end_date filter runs a raw-string SQL
+        BETWEEN on the stored date column with NO normalization, so entries
+        stored in US M/D/YYYY format fall outside ISO-formatted ranges even
+        when chronologically inside them (see moods_get_date_range fixture).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: start_date
+          in: query
+          required: false
+          schema: { type: string }
+          description: Raw-string lower bound; only applied when end_date is also present and both are non-empty.
+        - name: end_date
+          in: query
+          required: false
+          schema: { type: string }
+          description: Raw-string upper bound (inclusive, lexicographic).
+      responses:
+        '200':
+          description: Bare array of entries; [] for an empty account.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoodEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/mood/{entry_id}:
+    parameters:
+      - $ref: '#/components/parameters/EntryId'
+    get:
+      operationId: getMoodEntry
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: The entry. No selections key here (unlike the PUT response).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoodEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 'Entry missing or owned by another user ({"error": "Entry not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      operationId: updateMoodEntry
+      summary: Partially update an entry; returns the updated record with selections.
+      description: >
+        All fields optional but at least one of mood/content/date/time/
+        selected_options must be present. selected_options, when present,
+        REPLACES the entry's selections (null is treated as []). "time", when
+        present and truthy, overwrites the row's created_at column.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMoodRequest'
+      responses:
+        '200':
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMoodResponse'
+        '400':
+          description: >
+            No update fields provided; mood not an integer; mood outside 1..5;
+            all-whitespace content; invalid/future date; selected_options not
+            an array of integers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: 'Entry not found ({"error": "Entry not found or no changes made"}).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      operationId: deleteMoodEntry
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: >
+            Deleted. ALWAYS 200 with a JSON body — never 204/empty (the
+            frontend client throws on non-JSON 2xx).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteMoodResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Entry not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/mood/{entry_id}/selections:
+    get:
+      operationId: getEntrySelections
+      summary: Selected group options for an entry.
+      description: >
+        Returns a BARE ARRAY of {id, name, group_name}, ordered by group name
+        then option name. CAUTION: a nonexistent entry id (or another user's
+        entry) returns 200 with [] — NOT 404 (mood_service returns [] when
+        ownership verification fails).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/EntryId'
+      responses:
+        '200':
+          description: Bare array; [] when the entry has no selections or does not exist.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SelectionOption'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/statistics:
+    get:
+      operationId: getMoodStatistics
+      summary: Core statistics, mood distribution, and current streak.
+      description: >
+        contract change: a PURE READ with no side effects. The old
+        per-call stats_views increment (which fed the data_lover achievement)
+        moved to the explicit POST /api/statistics/view endpoint; repeated
+        GETs no longer advance data_lover progress.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Statistics bundle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/statistics/view:
+    post:
+      operationId: recordStatisticsView
+      summary: Record a statistics view for the data_lover achievement.
+      description: >
+        contract change (new endpoint): records that the user viewed
+        their statistics today. Per-day idempotent — "counted" is true only
+        when this call incremented the server-side stats_views metric (first
+        view of the server-local day); later calls the same day return
+        counted=false and change nothing. data_lover unlocks once stats_views
+        reaches 10 (i.e. views on 10 different days), surfacing in the NEXT
+        achievement check (a later POST /api/mood or POST
+        /api/achievements/check). No request body. As a mutation, cookie-auth
+        callers must satisfy the CSRF requirements; Bearer callers are
+        exempt. Strict-slash: /api/statistics/view/ is 404.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: View recorded (or deduplicated for today).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatisticsViewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/statistics/extended:
+    get:
+      operationId: getExtendedStatistics
+      summary: Rolling averages, weekday averages, volatility, correlations, current-month digest.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Extended statistics bundle.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtendedStatisticsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/statistics/heatmap:
+    get:
+      operationId: getStatisticsHeatmap
+      summary: Average mood and entry count for every logged day of a year.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Defaults to the current server-local year. Must parse as an integer in 1970..2100.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2100
+      responses:
+        '200':
+          description: Heatmap for the year.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatmapResponse'
+        '400':
+          description: year not an integer or outside 1970..2100.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/statistics/digest:
+    get:
+      operationId: getStatisticsDigest
+      summary: Month-in-review digest for an explicit (or current) year/month.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: Defaults to the current server-local year; integer in 1970..2100.
+          schema:
+            type: integer
+            minimum: 1970
+            maximum: 2100
+        - name: month
+          in: query
+          required: false
+          description: Defaults to the current server-local month; integer in 1..12.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+      responses:
+        '200':
+          description: Monthly digest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyDigest'
+        '400':
+          description: year/month not an integer or out of range.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/streak:
+    get:
+      operationId: getCurrentStreak
+      summary: Current consecutive-day logging streak.
+      description: >
+        Streak counts consecutive calendar days ending today or yesterday;
+        both stored date formats parse, duplicate same-day entries count once,
+        unparseable dates are skipped. The message string pluralizes
+        ("1 day" / "N days").
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Streak.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreakResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  parameters:
+    EntryId:
+      name: entry_id
+      in: path
+      required: true
+      description: >
+        Matched by Flask's <int:> converter: non-negative integers only.
+        Negative or non-numeric values 404 at routing time (before auth) with
+        the app-level JSON body {"error": "Resource not found"}. Values beyond
+        SQLite's i64 range still match the route and produce an observed 500
+        (see routing_mood_overflow_id fixture).
+      schema:
+        type: integer
+        minimum: 0
+
+  responses:
+    Unauthorized:
+      description: >
+        Missing Authorization header and cookie ({"error": "Authorization
+        header required"}), expired token ({"error": "Token expired"}), or
+        invalid token ({"error": "Invalid token"}).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable message. Contract-compare status/shape only, never this text.
+
+    CreateMoodRequest:
+      type: object
+      required: [mood, date, content]
+      properties:
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: >
+            Coerced with int(); non-integer strings 400. A falsy value (0)
+            fails the presence check first ("Missing required fields").
+        date:
+          type: string
+          description: >
+            "YYYY-MM-DD" or US "M/D/YYYY"; stored VERBATIM (no normalization).
+            Must not be more than one day in the future (server-local).
+        content:
+          type: string
+          description: Coerced with str(); must not be empty/whitespace.
+        time:
+          type: [string, 'null']
+          description: >
+            Optional; when truthy it is written into the created_at column
+            verbatim (used for backdating).
+        selected_options:
+          type: array
+          items: { type: integer }
+          default: []
+          description: Group option ids to attach; null is treated as [].
+
+    CreateMoodResponse:
+      type: object
+      required: [status, entry_id, new_achievements, message]
+      properties:
+        status:
+          const: success
+        entry_id:
+          type: integer
+          description: SQLite autoincrement id of the new entry.
+        new_achievements:
+          type: array
+          items:
+            $ref: '#/components/schemas/NewAchievement'
+          description: >
+            contract change: metadata objects ({name, description, icon,
+            rarity, achievement_type} — the unified NewAchievement shape
+            shared with POST /api/achievements/check, defined in
+            achievements.yaml) instead of bare achievement_type strings.
+            Newly unlocked by this entry's post-create check; [] when nothing
+            new. First-ever entry yields the first_entry object.
+        message:
+          const: Mood entry created successfully
+
+    MoodEntry:
+      type: object
+      required: [id, date, mood, content, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          description: Echoed verbatim as stored — either "YYYY-MM-DD" or "M/D/YYYY".
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+        created_at:
+          type: string
+          description: >
+            "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP, UTC) unless a
+            client-supplied "time" overwrote it — then whatever string the
+            client sent.
+        updated_at:
+          type: string
+          description: >
+            Never null — the column defaults to CURRENT_TIMESTAMP at insert
+            and is refreshed on every PUT.
+
+    UpdateMoodRequest:
+      type: object
+      description: At least one property must be present, else 400.
+      properties:
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+        date:
+          type: string
+        time:
+          type: [string, 'null']
+          description: Truthy value overwrites created_at.
+        selected_options:
+          type: [array, 'null']
+          items: { type: integer }
+          description: REPLACES all selections; null clears them (treated as []).
+
+    UpdateMoodResponse:
+      type: object
+      required: [status, message, entry]
+      properties:
+        status:
+          const: success
+        message:
+          const: Mood entry updated successfully
+        entry:
+          allOf:
+            - $ref: '#/components/schemas/MoodEntry'
+            - type: object
+              required: [selections]
+              properties:
+                selections:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SelectionOption'
+          description: >
+            Unlike GET /api/mood/{id}, the PUT response embeds the entry WITH
+            a selections array.
+
+    DeleteMoodResponse:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          const: success
+        message:
+          const: Mood entry deleted successfully
+
+    SelectionOption:
+      type: object
+      required: [id, name, group_name]
+      properties:
+        id:
+          type: integer
+          description: group_options.id
+        name:
+          type: string
+        group_name:
+          type: string
+
+    StatisticsResponse:
+      type: object
+      required: [statistics, mood_distribution, current_streak]
+      properties:
+        statistics:
+          $ref: '#/components/schemas/CoreStatistics'
+        mood_distribution:
+          type: object
+          description: >
+            Keys are the STRING form of logged mood values ("1".."5"); only
+            moods the user actually logged appear — never a fixed 1..5 map.
+            {} for an empty account.
+          propertyNames:
+            pattern: '^[1-5]$'
+          additionalProperties:
+            type: integer
+        current_streak:
+          type: integer
+
+    StatisticsViewResponse:
+      type: object
+      required: [counted]
+      properties:
+        counted:
+          type: boolean
+          description: >
+            True when this call incremented stats_views (first view of the
+            server-local day); false when today's view was already recorded.
+
+    CoreStatistics:
+      type: object
+      required: [total_entries, average_mood, lowest_mood, highest_mood, first_entry_date, last_entry_date]
+      properties:
+        total_entries:
+          type: integer
+        average_mood:
+          type: number
+          description: >
+            round(AVG(mood), 2) — a float when entries exist, but the INTEGER
+            0 when the average is falsy (empty account): `round(x, 2) if x
+            else 0`.
+        lowest_mood:
+          type: [integer, 'null']
+        highest_mood:
+          type: [integer, 'null']
+        first_entry_date:
+          type: [string, 'null']
+          description: >
+            MIN(date) over the RAW stored strings — lexicographic, so with
+            mixed formats a US "M/D/YYYY" date sorts after every ISO date
+            regardless of chronology.
+        last_entry_date:
+          type: [string, 'null']
+          description: MAX(date) over the raw strings (same lexicographic caveat).
+
+    ExtendedStatisticsResponse:
+      type: object
+      required: [rolling_averages, weekday_averages, mood_volatility, tag_correlations, goal_correlations, monthly_digest]
+      properties:
+        rolling_averages:
+          type: object
+          required: [series, count]
+          properties:
+            series:
+              type: array
+              description: One row per normalized ISO day (US-format entries normalized), ascending.
+              items:
+                type: object
+                required: [date, average_mood, entry_count, rolling_7, rolling_30]
+                properties:
+                  date: { type: string, description: 'Normalized ISO "YYYY-MM-DD".' }
+                  average_mood: { type: number }
+                  entry_count: { type: integer }
+                  rolling_7: { type: number, description: Trailing mean over up to 7 logged days (ROWS BETWEEN, not calendar days). }
+                  rolling_30: { type: number }
+            count:
+              type: integer
+              description: len(series).
+        weekday_averages:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: Always exactly 7 rows, weekday 0=Sunday .. 6=Saturday.
+          items:
+            type: object
+            required: [weekday, name, average_mood, entry_count]
+            properties:
+              weekday: { type: integer, minimum: 0, maximum: 6 }
+              name:
+                type: string
+                enum: [Sunday, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday]
+              average_mood: { type: [number, 'null'] }
+              entry_count: { type: integer }
+        mood_volatility:
+          type: object
+          required: [window_days, entry_count, average_mood, stddev]
+          properties:
+            window_days: { const: 30 }
+            entry_count:
+              type: integer
+              description: Entries whose normalized day falls in the trailing 30 calendar days from server-LOCAL now.
+            average_mood: { type: [number, 'null'], description: Null when entry_count is 0. }
+            stddev: { type: [number, 'null'], description: Sample stddev; null when entry_count < 2. }
+        tag_correlations:
+          type: array
+          description: >
+            Only options the user has selected at least once appear; ordered
+            by group_name then option_name. [] when the user has no entries.
+          items:
+            type: object
+            required: [option_id, option_name, group_id, group_name, average_mood_selected, entry_count_selected, average_mood_not_selected, entry_count_not_selected]
+            properties:
+              option_id: { type: integer }
+              option_name: { type: string }
+              group_id: { type: integer }
+              group_name: { type: string }
+              average_mood_selected: { type: [number, 'null'] }
+              entry_count_selected: { type: integer }
+              average_mood_not_selected: { type: [number, 'null'] }
+              entry_count_not_selected: { type: integer }
+        goal_correlations:
+          type: array
+          description: >
+            Every goal of the user appears (null completed average, zero count
+            when never completed) — but [] when the user has no mood entries.
+            Ordered by goal_name then goal_id.
+          items:
+            type: object
+            required: [goal_id, goal_name, average_mood_completed, entry_count_completed, average_mood_not_completed, entry_count_not_completed]
+            properties:
+              goal_id: { type: integer }
+              goal_name: { type: string }
+              average_mood_completed: { type: [number, 'null'] }
+              entry_count_completed: { type: integer }
+              average_mood_not_completed: { type: [number, 'null'] }
+              entry_count_not_completed: { type: integer }
+        monthly_digest:
+          allOf:
+            - $ref: '#/components/schemas/MonthlyDigest'
+          description: Always the CURRENT server-local year/month.
+
+    HeatmapResponse:
+      type: object
+      required: [year, days, days_logged]
+      properties:
+        year:
+          type: integer
+        days:
+          type: array
+          description: Only logged days appear, ascending by normalized ISO date.
+          items:
+            type: object
+            required: [date, average_mood, entry_count]
+            properties:
+              date: { type: string, description: 'Normalized ISO "YYYY-MM-DD".' }
+              average_mood: { type: number }
+              entry_count: { type: integer }
+        days_logged:
+          type: integer
+          description: len(days).
+
+    MonthlyDigest:
+      type: object
+      required: [year, month, entries_logged, average_mood, previous_average_mood, mood_trend, top_tags, longest_streak]
+      properties:
+        year: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        entries_logged: { type: integer }
+        average_mood: { type: [number, 'null'], description: Null when the month has no entries. }
+        previous_average_mood: { type: [number, 'null'] }
+        mood_trend:
+          type: [number, 'null']
+          description: average_mood - previous_average_mood; null when either month is empty.
+        top_tags:
+          type: array
+          maxItems: 5
+          description: By times_selected DESC then option name ASC.
+          items:
+            type: object
+            required: [option_id, option_name, group_name, times_selected]
+            properties:
+              option_id: { type: integer }
+              option_name: { type: string }
+              group_name: { type: string }
+              times_selected: { type: integer }
+        longest_streak:
+          type: integer
+          description: Longest run of consecutive logged days within the month (normalized dates).
+
+    StreakResponse:
+      type: object
+      required: [current_streak, message]
+      properties:
+        current_streak:
+          type: integer
+        message:
+          type: string
+          description: >
+            'Current streak: {n} day' when n == 1, otherwise
+            'Current streak: {n} days' (including 0).

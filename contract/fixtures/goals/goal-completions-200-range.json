@@ -1,0 +1,23 @@
+{
+  "method": "GET",
+  "path": "/api/goals/1/completions?start=2000-01-01&end=2100-01-01",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "date": "<DATE>"
+      },
+      {
+        "date": "<DATE>"
+      }
+    ]
+  },
+  "notes": "Explicit start/end query params are passed to SQL BETWEEN verbatim (no validation of the date strings)."
+}

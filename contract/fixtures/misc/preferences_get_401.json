@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "note": "No Authorization header and no nightlio_token cookie. Beware: a browser session holding the cookie is authenticated via the cookie fallback instead."
+}

@@ -1,0 +1,10 @@
+---
+source: tests/mood_routes.rs
+expression: "json!({ \"status\": status, \"body\": actual })"
+---
+{
+  "body": {
+    "error": "Missing required fields"
+  },
+  "status": 400
+}

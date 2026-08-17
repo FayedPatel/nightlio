@@ -1,0 +1,36 @@
+{
+  "method": "GET",
+  "path": "/api/statistics/heatmap?year=2025",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "days": [
+        {
+          "average_mood": 4.0,
+          "date": "2025-08-01",
+          "entry_count": 1
+        },
+        {
+          "average_mood": 2.0,
+          "date": "2025-08-02",
+          "entry_count": 1
+        },
+        {
+          "average_mood": 5.0,
+          "date": "2025-08-03",
+          "entry_count": 1
+        }
+      ],
+      "days_logged": 3,
+      "year": 2025
+    }
+  },
+  "notes": "days keyed by normalized ISO date (US-format entries normalized), ordered ascending; average_mood is a float (SQL AVG), entry_count int."
+}

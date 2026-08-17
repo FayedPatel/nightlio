@@ -1,0 +1,10 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "error": "limit must be an integer"
+  },
+  "status": 400
+}

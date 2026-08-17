@@ -1,0 +1,16 @@
+{
+  "method": "POST",
+  "path": "/api/statistics/view",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": "contract change (new endpoint): No Authorization header and no nightlio_token cookie. require_auth semantics identical to every other rule; cookie-authenticated callers additionally need the X-Requested-With CSRF header like every mutation."
+}

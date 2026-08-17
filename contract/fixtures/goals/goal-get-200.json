@@ -1,0 +1,29 @@
+{
+  "method": "GET",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "already_completed_today": false,
+      "completed": 0,
+      "created_at": "<TS>",
+      "description": "10 minutes",
+      "frequency_per_week": 3,
+      "id": 1,
+      "last_completed_date": null,
+      "period_start": "<DATE>",
+      "streak": 0,
+      "title": "Meditate",
+      "updated_at": "<TS>",
+      "user_id": 1
+    }
+  },
+  "notes": "Single goal object, same row shape as list items including already_completed_today. Volatile values normalized: 'YYYY-MM-DD HH:MM:SS' timestamps -> <TS>, bare 'YYYY-MM-DD' dates -> <DATE>. Autoincrement ids kept as recorded (first rows of a fresh database)."
+}

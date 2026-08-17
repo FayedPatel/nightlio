@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/api/export/pdf",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Content is required"
+    }
+  },
+  "note": "Body without a 'content' key (or empty/non-JSON body) -> 400. A non-JSON Content-Type takes the app-level 400 handler {\"error\": \"Bad request\"} instead. contract change 2026-08-17: the route now requires auth, so this 400 is only reachable with credentials — a credential-less call takes the 401 in export_pdf_post_401.json first."
+}

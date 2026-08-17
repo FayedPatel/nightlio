@@ -1,0 +1,315 @@
+# OpenAPI 3.1 fragment — achievements family.
+# Source of truth: api/routes/achievement_routes.py, api/services/achievement_service.py,
+# api/database_achievements.py, cross-checked against contract/fixtures/achievements/.
+#
+# Cross-family note (contract change): POST /api/mood (moods family) also
+# awards achievements as a side effect, and its `new_achievements` field now
+# carries the SAME unified metadata-object shape (NewAchievement below) as
+# POST /api/achievements/check — the pre-rewrite bare array of achievement_type
+# strings is gone. GET /api/achievements remains the only endpoint returning
+# full DB rows (id/earned_at/nft columns). See fixture
+# post_mood_unlocks_first_entry.json (owned by the moods family).
+#
+# Routing semantics this fragment encodes (Werkzeug behavior the port must match):
+# - /api/achievements and /api/achievements/check are strict-slash rules: the
+#   trailing-slash forms 404 (JSON body {"error": "Resource not found"} via the
+#   app-wide 404 handler in api/utils/error_handlers.py — never HTML, no redirect).
+# - /api/achievements/progress is registered at BOTH slash variants
+#   (strict_slashes=False on both decorators); the two paths below are therefore
+#   both real, identically-behaving rules.
+# - OPTIONS on every achievements rule (progress slash variants included) is
+#   the app-wide automatic OPTIONS since the rewrite: unauthenticated, 204 with an
+#   empty body and an Allow header — the old dedicated-204-vs-automatic-200
+#   split is gone.
+# - No path in this family uses an <int:...> converter, so the negative-id /
+#   overflow-id 404 semantics do not apply here.
+
+openapi: 3.1.0
+info:
+  title: Nightlio API — achievements family (fragment)
+  version: 0.0.0
+
+paths:
+  /api/achievements:
+    get:
+      summary: List the authenticated user's unlocked achievements
+      description: >
+        Returns a BARE JSON ARRAY (not an object) of the user's unlocked
+        achievements, ordered by earned_at DESC. Each element is the SQLite
+        `achievements` row merged with the static metadata table in
+        AchievementService.achievements. Empty account returns `[]`.
+        The trailing-slash form `/api/achievements/` is NOT registered and
+        returns 404 `{"error": "Resource not found"}`.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Bare array of unlocked achievements (empty array when none).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UnlockedAchievement"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/achievements/check:
+    post:
+      summary: Evaluate achievement conditions and award any newly met ones
+      description: >
+        The request body is entirely ignored — no Content-Type or body is
+        required when authenticating with a Bearer token. (Cookie-authenticated
+        requests, like all cookie-auth mutations, must send
+        `Content-Type: application/json` and `X-Requested-With: nightlio` or
+        receive a 403.) Awarding is idempotent: an achievement type already held
+        is skipped via the DB UNIQUE constraint, so a second call immediately
+        after returns an empty list. Returned items are metadata objects WITHOUT
+        `id`/`earned_at` — since the rewrite this is the ONE unified `new_achievements`
+        shape, shared with POST /api/mood's side-effect awards; only GET
+        /api/achievements returns full rows with `id`/`earned_at`.
+        The trailing-slash form 404s.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Newly awarded achievements (possibly empty) plus their count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementCheckResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: >
+            Cookie-authenticated request failing the CSRF checks
+            (wrong/missing Content-Type, or missing X-Requested-With header).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/achievements/progress:
+    get:
+      summary: Progress toward every achievement (slashless variant)
+      description: >
+        Fixed-key object mapping all five achievement types to
+        `{current, max}`. `current` is clamped to `[0, max]` — e.g. 45 total
+        entries reports `mood_master.current == 45` but 120 entries reports
+        `100`. Registered with strict_slashes=False at BOTH `/progress` and
+        `/progress/`; the two variants return identical bodies.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Progress map with exactly the five known achievement types as keys.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    options:
+      summary: CORS preflight (no auth)
+      description: >
+        App-wide automatic OPTIONS (contract change): returns 204 with an empty body and
+        an `Allow: HEAD, GET, OPTIONS` header before any token check. Observed
+        Content-Type is `text/html; charset=utf-8`, but clients must not
+        depend on it — the frontend client only enforces JSON Content-Type on
+        2xx responses that are NOT the OPTIONS short-circuits.
+      security: []
+      responses:
+        "204":
+          description: Empty body, no authentication required.
+
+  /api/achievements/progress/:
+    get:
+      summary: Progress toward every achievement (trailing-slash alias)
+      description: >
+        Identical to GET /api/achievements/progress — a separately registered
+        Werkzeug rule, not a redirect. The Rust port must serve both without a
+        3xx.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Same body as the slashless variant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsProgress"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/ServerError"
+    options:
+      summary: CORS preflight, trailing-slash alias (no auth)
+      security: []
+      responses:
+        "204":
+          description: Empty body, no authentication required.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: nightlio_token
+
+  responses:
+    Unauthorized:
+      description: >
+        Missing token -> {"error": "Authorization header required"};
+        malformed/invalid token -> {"error": "Invalid token"};
+        expired token -> {"error": "Token expired"}. Compare status and shape,
+        never message text.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: >
+        Unhandled exception; body is {"error": "<python exception str>"} — the
+        text is not part of the contract.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    AchievementType:
+      type: string
+      enum: [first_entry, week_warrior, consistency_king, data_lover, mood_master]
+
+    AchievementRarity:
+      type: string
+      enum: [common, uncommon, rare, legendary]
+
+    UnlockedAchievement:
+      type: object
+      description: >
+        SQLite achievements row merged (dict.update) with static metadata.
+        The name/description/icon/rarity keys come from the metadata lookup and
+        would be ABSENT for an achievement_type unknown to
+        AchievementService.achievements (lookup falls back to {}); with the
+        current fixed set they are always present. The nft_* columns are legacy
+        (Web3 minting removed): nft_minted is SQLite integer 0/1 — observed 0,
+        never JSON true/false — and nft_token_id/nft_tx_hash are null in
+        practice since nothing writes them anymore.
+      required: [id, achievement_type, earned_at, nft_minted, nft_token_id, nft_tx_hash]
+      properties:
+        id:
+          type: integer
+          description: Autoincrement primary key; value depends on DB history.
+        achievement_type:
+          $ref: "#/components/schemas/AchievementType"
+        earned_at:
+          type: string
+          description: >
+            SQLite CURRENT_TIMESTAMP text, "YYYY-MM-DD HH:MM:SS" (UTC, space
+            separator, no timezone suffix). Normalized to "<TS>" in fixtures.
+        nft_minted:
+          type: integer
+          description: SQLite boolean as integer; 0 unless legacy data set it.
+        nft_token_id:
+          type: [integer, "null"]
+        nft_tx_hash:
+          type: [string, "null"]
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+          description: >
+            Lucide icon name. NOTE: backend emits consistency_king -> "Target"
+            and mood_master -> "Crown", the OPPOSITE of the frontend's own
+            hardcoded metadata in src/views/AchievementsView.jsx (Crown/Target).
+            The fixtures record the backend truth.
+        rarity:
+          $ref: "#/components/schemas/AchievementRarity"
+
+    NewAchievement:
+      type: object
+      description: >
+        Metadata-only shape returned by POST /api/achievements/check and, since
+        the rewrite, by POST /api/mood's `new_achievements` side-effect field. No id
+        and no earned_at — clients needing those must re-fetch
+        GET /api/achievements.
+      required: [achievement_type]
+      properties:
+        achievement_type:
+          $ref: "#/components/schemas/AchievementType"
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        rarity:
+          $ref: "#/components/schemas/AchievementRarity"
+
+    AchievementCheckResult:
+      type: object
+      required: [new_achievements, count]
+      properties:
+        new_achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/NewAchievement"
+        count:
+          type: integer
+          description: Always equal to new_achievements.length.
+
+    AchievementProgressEntry:
+      type: object
+      required: [current, max]
+      properties:
+        current:
+          type: integer
+          description: Clamped to [0, max].
+        max:
+          type: integer
+
+    AchievementsProgress:
+      type: object
+      description: >
+        Exactly these five keys, always all present regardless of account state.
+        Fixed maxima: first_entry 1, week_warrior 7, consistency_king 30,
+        data_lover 10, mood_master 100. week_warrior and consistency_king share
+        the same underlying current-streak value; first_entry and mood_master
+        share total_entries.
+      required: [first_entry, week_warrior, consistency_king, data_lover, mood_master]
+      properties:
+        first_entry:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        week_warrior:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        consistency_king:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        data_lover:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+        mood_master:
+          $ref: "#/components/schemas/AchievementProgressEntry"
+      additionalProperties: false

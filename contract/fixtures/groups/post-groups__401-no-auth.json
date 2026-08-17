@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "path": "/api/groups",
+  "scenario": "No Authorization header on a protected route",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "X"
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  }
+}

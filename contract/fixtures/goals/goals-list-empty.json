@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/goals",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": []
+  },
+  "notes": "Bare JSON array (not an object envelope). Empty account -> []."
+}

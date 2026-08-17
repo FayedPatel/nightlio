@@ -1,0 +1,19 @@
+{
+  "method": "DELETE",
+  "path": "/api/mood/4",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "message": "Mood entry deleted successfully",
+      "status": "success"
+    }
+  },
+  "notes": "MUST be 200 with a JSON body, never 204/empty \u2014 the frontend client throws on any 2xx whose Content-Type is not application/json."
+}

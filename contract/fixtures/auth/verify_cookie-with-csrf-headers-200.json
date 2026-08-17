@@ -1,0 +1,27 @@
+{
+  "method": "POST",
+  "path": "/api/auth/verify",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>",
+      "Content-Type": "application/json",
+      "X-Requested-With": "nightlio"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "user": {
+        "avatar_url": null,
+        "email": "selfhost_default_user@localhost",
+        "id": 1,
+        "name": "Me"
+      }
+    }
+  },
+  "notes": [
+    "Cookie-only session restore path (page reload with no token in JS memory)."
+  ]
+}

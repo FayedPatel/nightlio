@@ -1,0 +1,32 @@
+{
+  "method": "PUT",
+  "path": "/api/mood/2",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 3,
+      "content": "Updated content."
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "entry": {
+        "content": "Updated content.",
+        "created_at": "<TS>",
+        "date": "2025-08-02",
+        "id": 2,
+        "mood": 3,
+        "selections": [],
+        "updated_at": "<TS>"
+      },
+      "message": "Mood entry updated successfully",
+      "status": "success"
+    }
+  },
+  "notes": "Partial update. Response embeds the updated entry WITH a 'selections' array (unlike GET /api/mood/{id}, which has no selections key). updated_at is set by the update. Sending 'time' overwrites created_at. contract change: the embedded entry's date is '2025-08-02' — the US-format '8/2/2025' it was created with is normalized to ISO on write (PUT date fields normalize the same way)."
+}

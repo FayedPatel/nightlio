@@ -1,0 +1,10 @@
+---
+source: tests/groups_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "error": "Authorization header required"
+  },
+  "status": 401
+}

@@ -1,0 +1,18 @@
+{
+  "method": "GET",
+  "path": "/api/",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "message": "Nightlio API is running",
+      "status": "healthy",
+      "timestamp": "<TS>"
+    }
+  },
+  "note": "timestamp is time.time() (float epoch seconds), normalized to <TS>."
+}

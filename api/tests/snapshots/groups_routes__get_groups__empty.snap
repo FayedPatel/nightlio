@@ -1,0 +1,8 @@
+---
+source: tests/groups_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": [],
+  "status": 200
+}

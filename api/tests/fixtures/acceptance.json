@@ -1,0 +1,29 @@
+{
+  "_comment": "Rust-generated artifacts verified by the real Flask-side libraries (api/venv: werkzeug, python-jose) at generation time (2026-08-15) — rollback-safety records.",
+  "werkzeug": [
+    {
+      "name": "rust_scrypt_default",
+      "hash": "scrypt:32768:8:1$aQxCu1nsNPavmym7$8a4beaa1f309d61a8a9cf25199725785b948aa5ac2942f14ea3580ede8a373f9b49165f7170af5d7a20bab6de868d0f3b4da8934c30b86fbc1b12a62b6ed20f6",
+      "password": "röund-trip pw ✓",
+      "werkzeug_accepted": true,
+      "werkzeug_rejected_wrong_password": true
+    },
+    {
+      "name": "rust_pbkdf2_1000",
+      "hash": "pbkdf2:sha256:1000$hK8U8c66heyIC33c$ba74d3aa50fed4559f098301b2657c3900fa7d5b2efb1eb17380d38d43830ba5",
+      "password": "another pw",
+      "werkzeug_accepted": true,
+      "werkzeug_rejected_wrong_password": true
+    }
+  ],
+  "python_jose_jwt": {
+    "secret": "test-cross-verification-secret",
+    "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VyX2lkIjo5OSwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjQxMDI0NDEyMDB9._wm2Cmj8hsf6lmM-EXRMbqp1chGskeWKUnyfBNX6sxY",
+    "claims": {
+      "user_id": 99,
+      "exp": 4102444800,
+      "iat": 4102441200
+    },
+    "python_jose_accepted": true
+  }
+}

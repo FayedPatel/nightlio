@@ -1,0 +1,19 @@
+{
+  "method": "PUT",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "No fields to update"
+    }
+  },
+  "notes": "Empty update -> update_goal returns False -> 404 even though the goal exists. contract change: an empty PUT/PATCH body (no updatable fields) now returns 400 {\"error\": \"No fields to update\"} instead of the ambiguous 404 'No changes or goal not found'; a genuinely missing/foreign goal id still returns 404 (see goal-update-404-not-found.json). File name keeps the original recording's slug."
+}

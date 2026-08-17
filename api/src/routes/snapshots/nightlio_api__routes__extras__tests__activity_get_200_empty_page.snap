@@ -1,0 +1,11 @@
+---
+source: src/routes/extras.rs
+expression: value
+---
+{
+  "body": {
+    "activities": [],
+    "next_cursor": null
+  },
+  "status": 200
+}
