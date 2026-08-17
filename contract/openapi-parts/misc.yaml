@@ -215,11 +215,19 @@ paths:
       operationId: exportPdf
       summary: Render markdown to a PDF download
       description: >-
-        Unauthenticated and un-rate-limited; the 1 MiB cap is the only guard.
-        Size is measured in UTF-8 encoded bytes of the content string, not
-        characters. The ONLY 2xx in the API whose response is not JSON — the
-        frontend uses a dedicated fetch path (ApiService.exportPdf) instead of
-        the JSON-only request() helper.
+        contract change 2026-08-17: requires auth (the rule carried Flask's
+        missing @require_auth as parity until then; the frontend always sent
+        credentials, so no client broke). Cookie callers must satisfy the
+        CSRF predicate like every other mutation. Deliberately still
+        un-rate-limited: with auth required, request-volume abuse is an
+        authenticated user's self-harm, and the 1 MiB content cap bounds the
+        per-request cost. Size is measured in UTF-8 encoded bytes of the
+        content string, not characters. The ONLY 2xx in the API whose
+        response is not JSON — the frontend uses a dedicated fetch path
+        (ApiService.exportPdf) instead of the JSON-only request() helper.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
       requestBody:
         required: true
         content:
@@ -249,20 +257,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "413":
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
           description: >-
-            content exceeds 1048576 bytes →
-            {"error": "Content is too large to export (max 1048576 bytes)"}.
+            Cookie-authenticated request failing CSRF: Content-Type not
+            application/json → {"error": "Content-Type must be application/json"};
+            missing X-Requested-With: nightlio →
+            {"error": "Missing required request header"}. Bearer requests are
+            never CSRF-checked.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "501":
+        "413":
           description: >-
-            markdown_pdf module not importable at process start →
-            {"error": "markdown-pdf module not installed"} before the body is
-            read. Code-level behavior; not reproducible in the recording
-            environment (renderer installed).
+            content exceeds 1048576 bytes →
+            {"error": "Content is too large to export (max 1048576 bytes)"}.
           content:
             application/json:
               schema:

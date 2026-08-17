@@ -2,7 +2,10 @@
   "method": "POST",
   "path": "/api/export/pdf",
   "request": {
-    "headers_that_matter": {},
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
     "body": {
       "content": "# My Entry\n\nToday was a *good* day."
     }
@@ -15,5 +18,5 @@
       "Content-Disposition": "attachment; filename=entry_export.pdf"
     }
   },
-  "note": "Unauthenticated route. Binary PDF via send_file: Content-Type application/pdf, Content-Disposition attachment; filename=entry_export.pdf. Body replaced with <PDF_BINARY>. If the markdown_pdf import failed at module load, the route instead returns 501 {\"error\": \"markdown-pdf module not installed\"} before reading the body (not recordable here: renderer is installed)."
+  "note": "contract change: the route requires auth as of 2026-08-17 (it was unauthenticated when this response was recorded; see export_pdf_post_401.json and contract/DECISIONS.md). Response is unchanged — only the credential requirement is new. Binary PDF: Content-Type application/pdf, Content-Disposition attachment; filename=entry_export.pdf. Body replaced with <PDF_BINARY>. The old renderer-missing 501 branch is retired (contract/DECISIONS.md #15: markdown2pdf is compiled into the binary)."
 }

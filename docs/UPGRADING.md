@@ -118,7 +118,17 @@ origin — you must now set `CORS_ORIGINS` explicitly in `.env`
 Also new in v0.4.0: PDF export (`POST /api/export/pdf`) is rendered
 in-process by the Rust API (`markdown2pdf` crate) — no extra service, no
 `.env` change; output styling differs from the old Python renderer but the
-endpoint contract is unchanged (`contract/DECISIONS.md` #15).
+response contract is unchanged (`contract/DECISIONS.md` #15).
+
+PDF export now requires authentication. The endpoint was unauthenticated in
+every earlier release (an oversight inherited from the Flask backend, see
+`SECURITY.md`); it now behaves like every other data route — send
+`Authorization: Bearer <jwt>`, or the `nightlio_token` cookie together with
+`Content-Type: application/json` and `X-Requested-With: nightlio`. The
+Nightlio web UI always sent credentials, so nothing changes for normal use;
+only a custom script or integration that called `/api/export/pdf` anonymously
+needs updating (it will now get `401 {"error": "Authorization header
+required"}`).
 
 ## Upgrading v0.2.0 → v0.3.0
 

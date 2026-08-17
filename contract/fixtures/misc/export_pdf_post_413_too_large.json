@@ -2,7 +2,10 @@
   "method": "POST",
   "path": "/api/export/pdf",
   "request": {
-    "headers_that_matter": {},
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
     "body": {
       "content": "<1048577 bytes of 'A'>"
     }
@@ -14,5 +17,5 @@
       "error": "Content is too large to export (max 1048576 bytes)"
     }
   },
-  "note": "Size measured in UTF-8 encoded bytes, cap 1048576 (1 MiB). Request body elided here: content was 'A' * 1048577."
+  "note": "Size measured in UTF-8 encoded bytes, cap 1048576 (1 MiB). Request body elided here: content was 'A' * 1048577. contract change 2026-08-17: the route now requires auth, so this 413 is only reachable with credentials — a credential-less call takes the 401 in export_pdf_post_401.json first. The transport-level DefaultBodyLimit (8 MiB) sits above this content cap so the recorded 413 body is what an over-cap payload actually gets."
 }

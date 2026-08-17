@@ -47,7 +47,7 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `GET /api/` → health payload
 * `GET /api/time` → { time }
 * `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
-* `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`), rendered in-process (see `contract/DECISIONS.md` #15)
+* `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`) — **requires auth** (since 2026-08-17; see `contract/DECISIONS.md`); rendered in-process (see `contract/DECISIONS.md` #15), `content` capped at 1 MiB of UTF-8 bytes → 413
 * `GET /api/music/vibe[?tag=chill]` → track suggestion for the given mood tag (requires `ENABLE_MOOD_MUSIC=1` and `JAMENDO_CLIENT_ID`)
 
 **Moods & Statistics**

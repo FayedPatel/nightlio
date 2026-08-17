@@ -15,6 +15,12 @@
 //! unchanged). Flask's renderer-missing 501 branch is retired: the
 //! renderer is compiled into the binary and cannot be absent.
 //!
+//! `POST /export/pdf` **requires auth** (contract change 2026-08-17): the
+//! rule carried Flask's missing `@require_auth` as parity until then. The
+//! success/400/413 bodies are untouched; a credential-less call now takes
+//! the standard 401, and a cookie-authenticated call must satisfy the CSRF
+//! predicate like every other mutation.
+//!
 //! # Conditional mounting — music
 //!
 //! The music blueprint is only registered in Flask when `ENABLE_MOOD_MUSIC`
@@ -314,9 +320,16 @@ async fn get_activity(
 // PDF export
 // ---------------------------------------------------------------------------
 
-/// `POST /api/export/pdf` — unauthenticated, no rate limit (the 1 MiB cap
-/// is the only DoS control, exactly as in Flask).
-async fn export_pdf(headers: HeaderMap, body: Bytes) -> Response {
+/// `POST /api/export/pdf` — authenticated (contract change 2026-08-17;
+/// Flask left this rule without `@require_auth`). Cookie-auth CSRF is
+/// enforced by the [`AuthUser`] extractor before this body runs, exactly
+/// like the sibling mutations.
+///
+/// Still deliberately un-rate-limited: with auth required, request-volume
+/// abuse is an authenticated user's self-harm on a single-operator
+/// self-hosted instance, and the 1 MiB content cap bounds the per-request
+/// cost. See `SECURITY.md`.
+async fn export_pdf(_user: AuthUser, headers: HeaderMap, body: Bytes) -> Response {
     export_pdf_impl(&headers, &body).await
 }
 
@@ -973,6 +986,10 @@ mod tests {
 
     // -- export/pdf ---------------------------------------------------------
 
+    /// The body-shape tests below drive `export_pdf_impl` directly, i.e.
+    /// downstream of the `AuthUser` extractor — they grade the 400/413/200
+    /// bodies only. The auth requirement itself is graded by the
+    /// router-level 401/403/200 tests further down.
     fn json_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1056,8 +1073,92 @@ mod tests {
         assert!(body_bytes(response).await.starts_with(b"%PDF"));
     }
 
-    /// Unauthenticated route: no Authorization header anywhere near it, and
-    /// the router-level 501/OPTIONS/405 regimes hold.
+    /// contract change 2026-08-17: the rule requires auth. A credential-less
+    /// POST takes the standard 401 (fixture `export_pdf_post_401`) before any body
+    /// validation — the same ordering as every other protected rule.
+    #[tokio::test]
+    async fn export_pdf_post_401_without_credentials() {
+        let app = make_app(&[]);
+        let recorded = fixture("export_pdf_post_401.json");
+        let response = send(
+            &app.app,
+            req("POST", "/api/export/pdf")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&recorded["request"]["body"]).unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await;
+        assert_fixture("export_pdf_post_401", response).await;
+
+        // Auth runs before body validation: a body that would 400 with
+        // credentials still 401s without them.
+        let response = send(
+            &app.app,
+            req("POST", "/api/export/pdf")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{}"))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            body_json(response).await,
+            recorded["response"]["body"],
+            "auth precedes the missing-content 400"
+        );
+    }
+
+    /// Cookie-authenticated mutation without `X-Requested-With: nightlio`
+    /// takes the shared CSRF 403 — the extractor enforces it before token
+    /// verification, exactly like `PUT /api/preferences`.
+    #[tokio::test]
+    async fn export_pdf_403_cookie_missing_csrf_header() {
+        let app = make_app(&[]);
+        let response = send(
+            &app.app,
+            req("POST", "/api/export/pdf")
+                .header(header::COOKIE, format!("nightlio_token={}", app.token))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"content": "hello"}"#))
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            body_json(response).await,
+            fixture("preferences_put_403_cookie_missing_csrf_header.json")["response"]["body"],
+            "same CSRF 403 body as every other cookie-auth mutation"
+        );
+    }
+
+    /// End-to-end through the router with credentials: the extractor is
+    /// actually wired and a Bearer caller still gets the recorded PDF.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn export_pdf_200_through_router_with_bearer() {
+        let app = make_app(&[]);
+        let recorded = fixture("export_pdf_post_200.json");
+        let response = bearer(
+            &app,
+            "POST",
+            "/api/export/pdf",
+            Some(recorded["request"]["body"].clone()),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CONTENT_DISPOSITION)
+                .and_then(|value| value.to_str().ok()),
+            recorded["response"]["headers"]["Content-Disposition"].as_str()
+        );
+        assert!(body_bytes(response).await.starts_with(b"%PDF"));
+    }
+
+    /// Router-level regimes that sit in front of the auth extractor:
+    /// OPTIONS/405/strict-slash all answer before any credential check.
     #[tokio::test]
     async fn export_pdf_route_registration() {
         let app = make_app(&[]);

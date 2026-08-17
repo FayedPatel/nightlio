@@ -55,7 +55,8 @@ info:
       variants — answered 204 while Flask's automatic OPTIONS answered
       200-empty. Fixture auth/verify_options-204.json records the unified
       behavior.)
-    - **Auth.** 32 rules sit behind require_auth: `Authorization: Bearer <jwt>`
+    - **Auth.** 33 rules sit behind require_auth (`POST /api/export/pdf`
+      joined them on 2026-08-17 — contract change): `Authorization: Bearer <jwt>`
       is checked first; the `nightlio_token` httpOnly cookie is the fallback.
       Missing credentials -> 401 `{"error": "Authorization header required"}`
       (same body even when the missing credential is the cookie); expired ->
@@ -1566,11 +1567,20 @@ paths:
       operationId: exportPdf
       summary: Render markdown to a PDF download.
       description: >-
-        Unauthenticated and un-rate-limited; the 1 MiB cap is the only guard
-        (measured in UTF-8 encoded bytes of the content string). The ONLY 2xx
-        in the API whose body is not JSON — the frontend uses a dedicated
-        fetch path (ApiService.exportPdf) instead of the JSON-only request()
-        helper.
+        contract change 2026-08-17: requires auth (the rule carried Flask's
+        missing @require_auth as parity until then; the frontend always sent
+        credentials, so no client broke — see contract/DECISIONS.md and
+        SECURITY.md). Deliberately still un-rate-limited: with auth required,
+        request-volume abuse is an authenticated user's self-harm, and the
+        1 MiB content cap (measured in UTF-8 encoded bytes of the content
+        string) bounds the per-request cost. The ONLY 2xx in the API whose
+        body is not JSON — the frontend uses a dedicated fetch path
+        (ApiService.exportPdf) instead of the JSON-only request() helper.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
       requestBody:
         required: true
         content:
@@ -1601,22 +1611,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
         "413":
           description: content exceeds 1048576 bytes.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "501":
-          description: >-
-            markdown_pdf module not importable at process start. CODE-DERIVED
-            ONLY — not reproducible in the recording environment (renderer
-            installed); no fixture exists.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-
   /api/music/vibe:
     x-nightlio-conditional:
       env: ENABLE_MOOD_MUSIC
