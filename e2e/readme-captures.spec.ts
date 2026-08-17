@@ -6,6 +6,8 @@
 // into GIFs by scripts/build-readme-gifs.mjs). Stills use the synthwave
 // theme; long pages and interactive flows are captured as GIF frame
 // sequences instead of tall stills. Skipped in normal runs/CI.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import type { Page } from '@playwright/test';
 import { test, expect } from './support/fixtures';
 import {
   apiContext,
@@ -39,6 +41,35 @@ const setTheme = async (theme: string) => {
   const { ctx, headers } = await apiContext();
   await ctx.put('/api/preferences', { headers, data: { theme } });
   await ctx.dispose();
+};
+
+// Real-motion capture via Chrome's CDP screencast: Chromium streams a frame
+// on every visual change, so flows and scrolls come out smooth instead of a
+// keyframe slideshow. Frames are written as NNNN-<ms offset>.png; the GIF
+// assembler turns the timestamp gaps into per-frame delays.
+const startScreencast = async (page: Page, dir: string) => {
+  mkdirSync(dir, { recursive: true });
+  const cdp = await page.context().newCDPSession(page);
+  const frames: Array<{ data: string; ts: number }> = [];
+  cdp.on('Page.screencastFrame', ev => {
+    frames.push({ data: ev.data, ts: ev.metadata.timestamp ?? 0 });
+    cdp.send('Page.screencastFrameAck', { sessionId: ev.sessionId }).catch(() => {});
+  });
+  await cdp.send('Page.startScreencast', {
+    format: 'png',
+    maxWidth: 880,
+    maxHeight: 560,
+    everyNthFrame: 1,
+  });
+  return async () => {
+    await cdp.send('Page.stopScreencast').catch(() => {});
+    await cdp.detach().catch(() => {});
+    const t0 = frames[0]?.ts ?? 0;
+    frames.forEach((f, i) => {
+      const ms = Math.max(0, Math.round((f.ts - t0) * 1000));
+      writeFileSync(`${dir}/${String(i).padStart(4, '0')}-${ms}.png`, Buffer.from(f.data, 'base64'));
+    });
+  };
 };
 
 test.beforeAll(async () => {
@@ -92,51 +123,53 @@ test('phone still (synthwave)', async ({ page }) => {
 });
 
 test('gif frames: statistics scroll', async ({ page }) => {
-  // The stats page is the longest in the app — a scroll-through GIF shows
-  // the whole thing without a skyscraper still.
+  // The stats page is the longest in the app — a smooth scroll-through GIF
+  // shows the whole thing without a skyscraper still.
   test.setTimeout(180_000);
   await page.setViewportSize(GIF_VIEW);
   await page.goto('/dashboard/stats');
   await expect(page.locator('.recharts-surface').first()).toBeVisible({ timeout: 15_000 });
-  await page.waitForTimeout(600);
-  const total = await page.evaluate(() => document.documentElement.scrollHeight);
-  const step = Math.floor(GIF_VIEW.height * 0.8);
-  let n = 0;
-  for (let y = 0; y < total; y += step) {
-    await page.evaluate(top => window.scrollTo({ top, behavior: 'instant' as ScrollBehavior }), y);
-    await page.waitForTimeout(350);
-    await page.screenshot({
-      path: `${FRAME_DIR}/stats-scroll/${String(n++).padStart(2, '0')}.png`,
-    });
+  await page.waitForTimeout(800);
+  const stop = await startScreencast(page, `${FRAME_DIR}/stats-scroll`);
+  await page.waitForTimeout(700);
+  // Steady glide to the bottom: many small instant steps at screencast rate
+  // read as continuous motion (CSS smooth-scroll would overshoot per step).
+  const total = await page.evaluate(
+    () => document.documentElement.scrollHeight - window.innerHeight,
+  );
+  const STEPS = 90;
+  for (let i = 1; i <= STEPS; i += 1) {
+    await page.evaluate(top => window.scrollTo(0, top), Math.round((total * i) / STEPS));
+    await page.waitForTimeout(55);
   }
+  await page.waitForTimeout(1000);
+  await stop();
 });
 
 test('gif frames: log a mood', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize(GIF_VIEW);
-  let n = 0;
-  const frame = () =>
-    page.screenshot({ path: `${FRAME_DIR}/log-mood/${String(n++).padStart(2, '0')}.png` });
-
   await page.goto('/dashboard');
   await expect(page.locator('.mood-grid').first()).toBeVisible();
-  await frame();
+  const stop = await startScreencast(page, `${FRAME_DIR}/log-mood`);
+  await page.waitForTimeout(800);
   await page.locator('.mood-grid').first().getByTitle('Good').hover();
-  await frame();
+  await page.waitForTimeout(500);
   await page.locator('.mood-grid').first().getByTitle('Good').click();
   await expect(page).toHaveURL(/\/dashboard\/entry$/);
   const editor = page.locator('.mdx-editor [contenteditable]').first();
   await expect(editor).toBeVisible();
-  await frame();
+  await page.waitForTimeout(600);
   await editor.click();
-  await page.keyboard.type('Evening walk. Cold air, clear head.');
-  await frame();
+  // Per-keystroke delay makes the typing legible in the capture.
+  await page.keyboard.type('Evening walk. Cold air, clear head.', { delay: 45 });
   // Autosave debounce is 1200ms; the status pill flips to "Saved at ...".
   await expect(page.getByText(/Saved at|All changes saved/)).toBeVisible({ timeout: 10_000 });
-  await frame();
+  await page.waitForTimeout(700);
   await page.goto('/dashboard/history');
   await expect(page.getByRole('button', { name: /Open entry from/ }).first()).toBeVisible();
-  await frame();
+  await page.waitForTimeout(1200);
+  await stop();
 });
 
 test('gif frames: themes', async ({ page }) => {
