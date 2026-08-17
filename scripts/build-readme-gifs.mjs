@@ -28,7 +28,10 @@ const FRAME_ROOT = 'screenshots/readme-frames';
 const OUT_DIR = 'docs/assets';
 const SLIDESHOW_DELAYS = { themes: 1600 };
 const MIN_DELAY = 70; // ms — merge screencast frames arriving faster than this
-const LAST_FRAME_LINGER = 1800;
+// How long the final frame holds before the loop restarts. The entry flows
+// park on the dashboard ~3s; scroll-throughs rest briefly at the bottom.
+const LINGER = { 'log-mood': 3000, 'mobile-log-mood': 3000 };
+const DEFAULT_LINGER = 1800;
 
 for (const name of readdirSync(FRAME_ROOT)) {
   const dir = join(FRAME_ROOT, name);
@@ -72,7 +75,7 @@ for (const name of readdirSync(FRAME_ROOT)) {
       delay = i === picked.length - 1 ? p.fixed * 2 : p.fixed;
     } else {
       const next = picked[i + 1];
-      delay = next ? Math.min(next.ms - p.ms, 2500) : LAST_FRAME_LINGER;
+      delay = next ? Math.min(next.ms - p.ms, 2500) : (LINGER[name] ?? DEFAULT_LINGER);
     }
     gif.writeFrame(indexed, png.width, png.height, { palette, delay });
   }

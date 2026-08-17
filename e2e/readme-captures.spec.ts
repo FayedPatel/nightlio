@@ -1,11 +1,12 @@
 // README capture utility, not a test: README_CAPTURES=1 yarn playwright test
 // e2e/readme-captures.spec.ts --project=chromium
 // Seeds a presentable account (a week of markdown entries, goals with
-// progress, unlocked achievements), then saves the README's still shots to
-// docs/assets/ and GIF keyframes to screenshots/readme-frames/ (assembled
-// into GIFs by scripts/build-readme-gifs.mjs). Stills use the synthwave
-// theme; long pages and interactive flows are captured as GIF frame
-// sequences instead of tall stills. Skipped in normal runs/CI.
+// progress, unlocked achievements), then captures the README's six GIFs
+// as real motion via Chrome's CDP screencast — desktop at 720p (1280x720),
+// mobile at the S25-Ultra-class 620x1340 viewport, synthwave theme. Raw
+// frames land in screenshots/readme-frames/ and are assembled into
+// docs/assets/*.gif by scripts/build-readme-gifs.mjs. Skipped in normal
+// runs/CI.
 import { mkdirSync, writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 import { test, expect } from './support/fixtures';
@@ -17,15 +18,13 @@ import {
   seedGoal,
   isoDaysAgo,
 } from './support/api';
-import type { MoodValue } from '../src/types/api';
+import type { Group, MoodValue } from '../src/types/api';
 
 test.skip(!process.env.README_CAPTURES, 'set README_CAPTURES=1 to capture');
 
-const STILL_DIR = 'docs/assets';
 const FRAME_DIR = 'screenshots/readme-frames';
-const DESKTOP = { width: 1360, height: 850 };
-const GIF_VIEW = { width: 960, height: 600 };
-const PHONE = { width: 412, height: 915 };
+const DESKTOP = { width: 1280, height: 720 }; // 720p
+const MOBILE = { width: 620, height: 1340 }; // S25-Ultra class
 
 const ENTRIES: Array<{ day: number; mood: MoodValue; content: string }> = [
   { day: 0, mood: 5, content: '# Shipped the rewrite\nEverything green on the first run. Celebrated with a long walk and *way* too much coffee.' },
@@ -37,17 +36,33 @@ const ENTRIES: Array<{ day: number; mood: MoodValue; content: string }> = [
   { day: 6, mood: 5, content: '# Hike day\nTwelve kilometres of forest trail and zero notifications.' },
 ];
 
+const GOALS: Array<{ title: string; description: string; frequency: number; progress: number }> = [
+  { title: 'Train 3x a week', description: 'Any workout counts.', frequency: 3, progress: 2 },
+  { title: 'Read before bed', description: 'Twenty minutes, no phone.', frequency: 5, progress: 3 },
+  { title: 'Cook at home', description: 'Takeout is for Fridays.', frequency: 4, progress: 1 },
+  { title: 'Morning pages', description: 'Three sentences before coffee.', frequency: 7, progress: 5 },
+  { title: 'Walk outside', description: 'Daylight before noon.', frequency: 5, progress: 0 },
+  { title: 'Call someone', description: 'Family or an old friend.', frequency: 2, progress: 1 },
+];
+
 const setTheme = async (theme: string) => {
   const { ctx, headers } = await apiContext();
   await ctx.put('/api/preferences', { headers, data: { theme } });
   await ctx.dispose();
 };
 
+const listGroups = async (): Promise<Group[]> => {
+  const { ctx, headers } = await apiContext();
+  const groups: Group[] = await (await ctx.get('/api/groups', { headers })).json();
+  await ctx.dispose();
+  return groups;
+};
+
 // Real-motion capture via Chrome's CDP screencast: Chromium streams a frame
 // on every visual change, so flows and scrolls come out smooth instead of a
 // keyframe slideshow. Frames are written as NNNN-<ms offset>.png; the GIF
 // assembler turns the timestamp gaps into per-frame delays.
-const startScreencast = async (page: Page, dir: string) => {
+const startScreencast = async (page: Page, dir: string, maxWidth: number, maxHeight: number) => {
   mkdirSync(dir, { recursive: true });
   const cdp = await page.context().newCDPSession(page);
   const frames: Array<{ data: string; ts: number }> = [];
@@ -55,12 +70,7 @@ const startScreencast = async (page: Page, dir: string) => {
     frames.push({ data: ev.data, ts: ev.metadata.timestamp ?? 0 });
     cdp.send('Page.screencastFrameAck', { sessionId: ev.sessionId }).catch(() => {});
   });
-  await cdp.send('Page.startScreencast', {
-    format: 'png',
-    maxWidth: 880,
-    maxHeight: 560,
-    everyNthFrame: 1,
-  });
+  await cdp.send('Page.startScreencast', { format: 'png', maxWidth, maxHeight, everyNthFrame: 1 });
   return async () => {
     await cdp.send('Page.stopScreencast').catch(() => {});
     await cdp.detach().catch(() => {});
@@ -72,119 +82,184 @@ const startScreencast = async (page: Page, dir: string) => {
   };
 };
 
+// Steady glide to the bottom of the page: many small instant steps at
+// screencast rate read as continuous motion.
+const glideToBottom = async (page: Page, steps = 90, stepMs = 55) => {
+  const total = await page.evaluate(
+    () => document.documentElement.scrollHeight - window.innerHeight,
+  );
+  for (let i = 1; i <= steps; i += 1) {
+    await page.evaluate(top => window.scrollTo(0, top), Math.round((total * i) / steps));
+    await page.waitForTimeout(stepMs);
+  }
+};
+
+// The full "log a mood" story, shared by the desktop and mobile GIFs:
+// dashboard → pick a mood → clear the placeholder → write → tag categories
+// → scroll back up to the Saved pill → return to the dashboard (which now
+// shows the new entry; the assembler holds that last frame ~3s).
+const logMoodFlow = async (page: Page) => {
+  // The desktop and mobile captures both run this flow against the shared
+  // DB — drop any earlier take's entry so the dashboard shows exactly one.
+  {
+    const { ctx, headers } = await apiContext();
+    const entries: Array<{ id: number; content?: string }> = await (
+      await ctx.get('/api/moods', { headers })
+    ).json();
+    for (const e of entries) {
+      if (e.content?.includes('Evening walk')) {
+        await ctx.delete(`/api/mood/${e.id}`, { headers });
+      }
+    }
+    await ctx.dispose();
+  }
+  // Tags should match the upbeat entry — prefer positive options, fall
+  // back to the first few if the defaults ever change.
+  const groups = await listGroups();
+  const available = groups.flatMap(g => g.options.map(o => o.name));
+  const preferred = ['happy', 'relaxed', 'excited'].filter(n => available.includes(n));
+  const optionNames = preferred.length >= 2 ? preferred : available.slice(0, 3);
+
+  await page.waitForTimeout(900);
+  await page.locator('.mood-grid').first().getByTitle('Good').hover();
+  await page.waitForTimeout(450);
+  await page.locator('.mood-grid').first().getByTitle('Good').click();
+  await expect(page).toHaveURL(/\/dashboard\/entry$/);
+  const editor = page.locator('.mdx-editor [contenteditable]').first();
+  await expect(editor).toBeVisible();
+  await page.waitForTimeout(700);
+
+  // Clear the "How was your day?" placeholder before writing, then write
+  // the way a person would: a short heading, Enter, then body text (the
+  // cleared block keeps the placeholder's H1 format, so the first line IS
+  // the heading and Enter drops into a paragraph).
+  await editor.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.waitForTimeout(250);
+  await page.keyboard.press('Delete');
+  await page.waitForTimeout(400);
+  await page.keyboard.type('Evening walk', { delay: 55 });
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  await page.keyboard.type('Cold air, clear head. Twenty minutes around the block and the day made sense again.', { delay: 35 });
+  await page.waitForTimeout(400);
+
+  // Tag the entry: scroll the category groups into view and pick a few.
+  for (const name of optionNames) {
+    const option = page.getByRole('button', { name, exact: true }).first();
+    await option.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(350);
+    await option.click();
+    await page.waitForTimeout(350);
+  }
+
+  // Autosave debounce is 1200ms; the pill flips to "Saved at ..." — glide
+  // back up so the capture shows the change landed.
+  await expect(page.getByText(/Saved at|All changes saved/)).toBeVisible({ timeout: 10_000 });
+  const top = await page.evaluate(() => window.scrollY);
+  const steps = Math.max(6, Math.round(top / 120));
+  for (let i = steps - 1; i >= 0; i -= 1) {
+    await page.evaluate(y => window.scrollTo(0, y), Math.round((top * i) / steps));
+    await page.waitForTimeout(50);
+  }
+  await page.waitForTimeout(900);
+
+  // Client-side return — a hard goto() would paint a white frame.
+  await page.getByRole('button', { name: 'Return to dashboard' }).click();
+  await expect(page.locator('.mood-grid').first()).toBeVisible();
+  await expect(page.getByText('Evening walk').first()).toBeVisible();
+  await page.waitForTimeout(1000);
+};
+
 test.beforeAll(async () => {
   await wipeEntries();
   await wipeGoals();
   for (const e of ENTRIES) {
     await seedEntry({ date: isoDaysAgo(e.day), mood: e.mood, content: e.content });
   }
-  const gym = await seedGoal({ title: 'Train 3x a week', description: 'Any workout counts.', frequency: 3 });
-  await seedGoal({ title: 'Read before bed', description: 'Twenty minutes, no phone.', frequency: 5 });
   const { ctx, headers } = await apiContext();
-  await ctx.post(`/api/goals/${gym.goal_id}/progress`, { headers, data: {} });
+  for (const g of GOALS) {
+    const created = await seedGoal({ title: g.title, description: g.description, frequency: g.frequency });
+    for (let i = 0; i < g.progress; i += 1) {
+      await ctx.post(`/api/goals/${created.goal_id}/progress`, { headers, data: {} });
+    }
+  }
   await ctx.post('/api/achievements/check', { headers, data: {} });
   await ctx.dispose();
-  // README stills are captured in the synthwave theme.
+  // README media is captured in the synthwave theme.
   await setTheme('synthwave');
 });
 
-test('desktop stills (synthwave)', async ({ page }) => {
+
+test('desktop gif: log a mood', async ({ page }) => {
   test.setTimeout(180_000);
   await page.setViewportSize(DESKTOP);
-  const shot = (name: string) => page.screenshot({ path: `${STILL_DIR}/${name}.png` });
-
-  await page.goto('/');
-  await expect(page.getByRole('heading', { name: /your moods/i })).toBeVisible();
-  await shot('landing');
-
   await page.goto('/dashboard');
   await expect(page.locator('.mood-grid').first()).toBeVisible();
-  await shot('dashboard');
+  const stop = await startScreencast(page, `${FRAME_DIR}/log-mood`, 880, 495);
+  await logMoodFlow(page);
+  await stop();
+});
 
-  await page.goto('/dashboard/history');
-  await expect(page.getByRole('button', { name: /Open entry from/ }).first()).toBeVisible();
-  await shot('history');
-
+test('desktop gif: goals scroll', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize(DESKTOP);
   await page.goto('/dashboard/goals');
   await expect(page.getByText('Train 3x a week')).toBeVisible();
-  await shot('goals');
-
-  await page.goto('/dashboard/achievements');
-  await expect(page.getByText(/Week Warrior/i).first()).toBeVisible();
-  await shot('achievements');
-});
-
-test('phone still (synthwave)', async ({ page }) => {
-  test.setTimeout(120_000);
-  await page.setViewportSize(PHONE);
-  await page.goto('/dashboard');
-  await expect(page.locator('.mood-grid').first()).toBeVisible();
-  await page.screenshot({ path: `${STILL_DIR}/mobile-dashboard.png` });
-});
-
-test('gif frames: statistics scroll', async ({ page }) => {
-  // The stats page is the longest in the app — a smooth scroll-through GIF
-  // shows the whole thing without a skyscraper still.
-  test.setTimeout(180_000);
-  await page.setViewportSize(GIF_VIEW);
-  await page.goto('/dashboard/stats');
-  await expect(page.locator('.recharts-surface').first()).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(800);
-  const stop = await startScreencast(page, `${FRAME_DIR}/stats-scroll`);
+  const stop = await startScreencast(page, `${FRAME_DIR}/goals-scroll`, 880, 495);
   await page.waitForTimeout(700);
-  // Steady glide to the bottom: many small instant steps at screencast rate
-  // read as continuous motion (CSS smooth-scroll would overshoot per step).
-  const total = await page.evaluate(
-    () => document.documentElement.scrollHeight - window.innerHeight,
-  );
-  const STEPS = 90;
-  for (let i = 1; i <= STEPS; i += 1) {
-    await page.evaluate(top => window.scrollTo(0, top), Math.round((total * i) / STEPS));
-    await page.waitForTimeout(55);
-  }
+  await glideToBottom(page, 70, 55);
   await page.waitForTimeout(1000);
   await stop();
 });
 
-test('gif frames: log a mood', async ({ page }) => {
+test('desktop gif: statistics scroll', async ({ page }) => {
   test.setTimeout(180_000);
-  await page.setViewportSize(GIF_VIEW);
-  await page.goto('/dashboard');
-  await expect(page.locator('.mood-grid').first()).toBeVisible();
-  const stop = await startScreencast(page, `${FRAME_DIR}/log-mood`);
+  await page.setViewportSize(DESKTOP);
+  await page.goto('/dashboard/stats');
+  await expect(page.locator('.recharts-surface').first()).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(800);
-  await page.locator('.mood-grid').first().getByTitle('Good').hover();
-  await page.waitForTimeout(500);
-  await page.locator('.mood-grid').first().getByTitle('Good').click();
-  await expect(page).toHaveURL(/\/dashboard\/entry$/);
-  const editor = page.locator('.mdx-editor [contenteditable]').first();
-  await expect(editor).toBeVisible();
-  await page.waitForTimeout(600);
-  await editor.click();
-  // Per-keystroke delay makes the typing legible in the capture.
-  await page.keyboard.type('Evening walk. Cold air, clear head.', { delay: 45 });
-  // Autosave debounce is 1200ms; the status pill flips to "Saved at ...".
-  await expect(page.getByText(/Saved at|All changes saved/)).toBeVisible({ timeout: 10_000 });
+  const stop = await startScreencast(page, `${FRAME_DIR}/stats-scroll`, 880, 495);
   await page.waitForTimeout(700);
-  await page.goto('/dashboard/history');
-  await expect(page.getByRole('button', { name: /Open entry from/ }).first()).toBeVisible();
-  await page.waitForTimeout(1200);
+  await glideToBottom(page, 100, 55);
+  await page.waitForTimeout(1000);
   await stop();
 });
 
-test('gif frames: themes', async ({ page }) => {
+test('mobile gif: log a mood', async ({ page }) => {
   test.setTimeout(180_000);
-  await page.setViewportSize(GIF_VIEW);
-  let n = 0;
-  for (const theme of ['default', 'light', 'dark', 'synthwave']) {
-    await setTheme(theme);
-    await page.goto('/dashboard');
-    await expect(page.locator('.mood-grid').first()).toBeVisible();
-    // Let the theme class settle before the shot.
-    await page.waitForTimeout(400);
-    await page.screenshot({
-      path: `${FRAME_DIR}/themes/${String(n++).padStart(2, '0')}-${theme}.png`,
-    });
-  }
-  await setTheme('synthwave');
+  await page.setViewportSize(MOBILE);
+  await page.goto('/dashboard');
+  await expect(page.locator('.mood-grid').first()).toBeVisible();
+  const stop = await startScreencast(page, `${FRAME_DIR}/mobile-log-mood`, 420, 908);
+  await logMoodFlow(page);
+  await stop();
 });
+
+test('mobile gif: goals scroll', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize(MOBILE);
+  await page.goto('/dashboard/goals');
+  await expect(page.getByText('Train 3x a week')).toBeVisible();
+  await page.waitForTimeout(800);
+  const stop = await startScreencast(page, `${FRAME_DIR}/mobile-goals`, 420, 908);
+  await page.waitForTimeout(700);
+  await glideToBottom(page, 90, 55);
+  await page.waitForTimeout(1000);
+  await stop();
+});
+
+test('mobile gif: statistics scroll', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize(MOBILE);
+  await page.goto('/dashboard/stats');
+  await expect(page.locator('.recharts-surface').first()).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(800);
+  const stop = await startScreencast(page, `${FRAME_DIR}/mobile-stats`, 420, 908);
+  await page.waitForTimeout(700);
+  await glideToBottom(page, 120, 55);
+  await page.waitForTimeout(1000);
+  await stop();
+});
+
