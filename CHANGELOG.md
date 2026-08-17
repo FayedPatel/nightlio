@@ -2,6 +2,56 @@
 
 Notable changes to this fork of [shirsakm/nightlio](https://github.com/shirsakm/nightlio).
 
+## [0.4.0] - 2026-08-16
+
+The full rewrite: the Flask/Python backend is replaced by a Rust API (Axum + rusqlite) and the entire frontend and browser-test suite is converted to strict TypeScript. Same app, same data, same wire contract where it made sense — and a deliberately better one where it didn't.
+
+### The Rust API
+
+- Complete port of the backend as a single Rust binary: routes with Flask-parity semantics (slash aliases, int-converter 404s, response envelopes), the versioned SQLite bootstrap and migrations, JWT + `nightlio_token` cookie auth, CSRF checks, OIDC, and the login rate limiter.
+- **Argon2 rehash-on-login**: new password hashes are argon2id; legacy Werkzeug scrypt/pbkdf2 hashes keep verifying and are transparently upgraded on the next successful login.
+- **PDF export renders in-process** (the Python pdf-sidecar container and `PDF_SERVICE_URL` are gone).
+- **WAL journal mode**, size-bounded with checkpoint-truncate on shutdown.
+- Correctness fixes along the way: correctly-rounded float JSON parsing, a latent stale-week clamp bug in goal updates, and schema-legal REAL mood values no longer 500.
+
+### Measured against the v0.3.0 image (same host, side by side)
+
+- API image: 624 MB → **158 MB** on disk (161 MB → 41 MB compressed) — and the 614 MB pdf-sidecar image is eliminated entirely.
+- API memory under load: ~290 MiB (gunicorn worker pool) → **~7.5 MiB** (single process).
+- Tail latency at 20 concurrent requests: p99 12 ms → **6 ms** on health, 19 ms → **8 ms** on authenticated statistics, at equal-or-better throughput.
+
+### Contract changes (the full ledger lives in `contract/DECISIONS.md`)
+
+- **Reads are pure now.** `GET /api/goals` no longer writes the weekly rollover (it is projected into the response and persisted only by write operations), and `GET /api/statistics` no longer increments anything.
+- **Data Lover counts days, not page loads**: the new `POST /api/statistics/view` records at most one statistics view per day, and the achievement means "viewed statistics on 10 different days". Existing progress counters reset under the fairer rule; already-earned badges are kept.
+- **One `new_achievements` shape**: `POST /api/mood` returns the same metadata objects as `/api/achievements/check` instead of bare strings.
+- Every `OPTIONS` answers `204` with an `Allow` header; `405`s use the standard JSON error envelope; `GET /api/mood/{id}/selections`, goal completions, and group options return consistent `404`s; `%m/%d/%Y` dates are normalized to ISO by a startup migration; `next_cursor` is `null` on an exactly-full final page.
+- The default CORS origins no longer include a third-party domain — deployments relying on the implicit `nightlio.vercel.app` grant must set `CORS_ORIGINS`.
+
+### TypeScript frontend
+
+- All of `src/` and every Playwright spec converted to strict TypeScript under a 4-project tsconfig (app, node, e2e, service worker), with a typed `ApiService` derived from the OpenAPI document.
+- The statistics view no longer double-fetches on entry (one route-owner effect replaces duplicate Sidebar/BottomNav effects); accessibility lint (`jsx-a11y`) is at error severity.
+
+### Contract oracle & testing
+
+- New `contract/` directory: golden request/response fixtures for all 46 URL rules recorded against the live Flask app before its removal, a hand-written OpenAPI 3.1 document, corpus database snapshots for migration byte-parity, and `contract/DECISIONS.md` — the closed ledger of every deliberate behavior decision.
+- Backend: 400 unit + 109 integration tests (fixture-graded, insta snapshots), `clippy -D warnings` clean. Migration parity asserted byte-for-byte against three generations of real production databases before the Flask code was deleted.
+- CI: the e2e suite is sharded 4-way with the API binary pre-built per shard and a shared cargo cache; cargo fmt/clippy/test run alongside the yarn gates.
+- Docker images publish for **linux/amd64 and linux/arm64**.
+
+### Removed
+
+- The entire Flask/Python backend, its requirements files, `test.sh`, and the pytest suite (−9,432 lines).
+- The pdf-sidecar service and image.
+- The Python demo-data seeder and assorted personal operational scripts (now local-only).
+
+### Upgrading
+
+`git pull` / `docker compose up -d --build` as usual — the startup migration handles the schema change automatically. Ship the API and frontend images together, and see `docs/UPGRADING.md` for the Data Lover counter reset and the OPTIONS `200 → 204` note.
+
+[0.4.0]: https://github.com/FayedPatel/nightlio/releases/tag/v0.4.0
+
 ## [0.3.0] - 2026-08-14
 
 Themes, backdating, a redesigned welcome page, and a full browser test suite.
