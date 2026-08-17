@@ -62,7 +62,7 @@ html[data-theme="synthwave"] .header {
 /* Phase 9f: at mobile widths (see the max-width: 640px block below) the
    badge drops the "Day Streak" label and shows just the flame + count —
    the number is the only part that changes day to day, and the full
-   meaning stays available via the badge's aria-label/title (Header.jsx). */
+   meaning stays available via the badge's aria-label/title (Header.tsx). */
 .header__streakBadge-label {
   display: inline;
 }
@@ -163,7 +163,7 @@ html[data-theme="synthwave"] .header {
   }
 
   /* Streak badge collapses to icon + number only — see the aria-label on
-     the badge itself (Header.jsx) for the full "N day streak" text. */
+     the badge itself (Header.tsx) for the full "N day streak" text. */
   .header__streakBadge-label {
     display: none;
   }
