@@ -65,10 +65,6 @@ jobs:
         with:
           node-version: 24
           cache: yarn
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: pip
       # scripts/e2e-api.sh defaults to E2E_API_BACKEND=rust, which does a
       # release `cargo build` of api/ before every run (see that
       # script). Without a toolchain here this job would fail with
