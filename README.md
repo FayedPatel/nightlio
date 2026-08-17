@@ -240,7 +240,7 @@ unless you set `DISABLE_LOCAL_LOGIN=1`.
 
 ## Developer Reference
 
-Interested in contributing or running the project without Docker? Here's what you need to know.
+Interested in contributing or running the project without Docker? Here's what you need to know. For the measured before/after of the v0.4.0 Rust rewrite (image size, memory, latency, contract), see [`docs/REWRITE.md`](docs/REWRITE.md).
 
 <details>
 <summary><strong>Architecture Overview</strong></summary>
