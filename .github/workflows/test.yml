@@ -53,6 +53,9 @@ jobs:
           # Scoped to api so this job's cache never collides with a
           # future workspace crate elsewhere in the repo.
           workspaces: api -> target
+          # Same shared key as the e2e shards — see the e2e job's cache
+          # step for why the default per-job keys would not be shared.
+          shared-key: api-target
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
@@ -84,12 +87,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.90.0
       - uses: Swatinem/rust-cache@v2
         with:
-          # Same scoping as the `rust` job's cache -- these two jobs share
-          # the api -> target cache key, so this job's warm build reuses
-          # whatever the `rust` job already compiled for this ref (and vice
-          # versa) instead of paying a second full compile in the same run.
           workspaces: api -> target
+          # rust-cache keys include the job id and matrix values by
+          # default, which would give every e2e shard (and the rust job)
+          # its own disjoint cache. One explicit shared key makes them all
+          # restore the same target/ cache.
+          shared-key: api-target
       - run: yarn install --frozen-lockfile
+      # Build the API binary in its own step, BEFORE Playwright runs: the
+      # per-worker e2e-api.sh build is a ~0.2s no-op once the release
+      # binary is fresh, but a cold compile takes minutes and would blow
+      # the apiPort fixture's 30s setup timeout (exactly what happened on
+      # the first sharded CI run).
+      - run: cargo build --release --manifest-path api/Cargo.toml --bin nightlio-api
       # No python needed anywhere: PDF export renders in-process in the
       # Rust binary (markdown2pdf crate, contract/DECISIONS.md #15).
       - run: yarn playwright install --with-deps chromium
