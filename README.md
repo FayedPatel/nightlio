@@ -152,7 +152,6 @@ You can customize your Nightlio instance using environment variables in the `.en
 ```
 # Core
 APP_ENV=production          # was RAILWAY_ENVIRONMENT; still honored as a fallback
-FLASK_ENV=production
 SECRET_KEY=change-this-to-a-long-random-string
 JWT_SECRET=change-this-too
 DATABASE_PATH=/app/data/nightlio.db
@@ -167,9 +166,11 @@ OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
 # Optional: signup/invite URL at the provider, shown as "Create account"
 # OIDC_SIGNUP_URL=
-# Optional, for SSO-only deployments: 1 hard-disables ALL local logins
-# (password form and credential-free mode) so SSO is the only door
-# DISABLE_LOCAL_LOGIN=0
+# Optional: 1 hard-disables ALL local logins (password form and
+# credential-free mode) so SSO is the only door; 0 keeps local login on.
+# Unset/empty defaults to SSO-only whenever OIDC_ISSUER_URL is configured
+# (and to enabled when it is not); an explicit 0 or 1 always wins.
+# DISABLE_LOCAL_LOGIN=
 
 # Mood music (if enabled)
 JAMENDO_CLIENT_ID=
@@ -227,10 +228,13 @@ docker compose --profile oidc up -d
    `enable_oidc: true` once `OIDC_ISSUER_URL` is set, and the frontend's
    login page picks up the SSO button automatically.
 
-Setting `OIDC_ISSUER_URL` also disables credential-free single-user login
-(`POST /api/auth/local/login` with no body starts failing closed with 403) —
-local username/password accounts (`/api/auth/local/register`) keep working
-alongside OIDC.
+Setting `OIDC_ISSUER_URL` also disables local login entirely by default —
+with SSO configured, user management is delegated to the identity provider,
+so `POST /api/auth/local/login` (both the username/password form and the
+credential-free single-user mode) fails closed with 403. To keep local
+username/password accounts working alongside OIDC, set
+`DISABLE_LOCAL_LOGIN=0` explicitly; without OIDC, local login stays enabled
+unless you set `DISABLE_LOCAL_LOGIN=1`.
 
 <div align="center">🌙</div>
 
@@ -241,34 +245,32 @@ Interested in contributing or running the project without Docker? Here's what yo
 <details>
 <summary><strong>Architecture Overview</strong></summary>
 
-* **Frontend:** React 19 + Vite, served by Nginx.
-* **Backend:** Flask (Python) serving a JSON API.
-* **Database:** SQLite, with auto-migrations on startup.
-* **Database layer:** Modular mixins live in `api/database_*.py` with `api/database.py` acting as the facade.
+* **Frontend:** React 19 + Vite, written in strict TypeScript, served by Nginx.
+* **Backend:** Rust (Axum) JSON API in `api/`, shipped as a single static binary. The wire contract is pinned by `contract/openapi.yaml` plus golden request/response fixtures in `contract/fixtures/`, and mirrored in `src/types/api.ts`.
+* **PDF export:** rendered in-process by the Rust API via the `markdown2pdf` crate (see `contract/DECISIONS.md` #15) — no extra service required.
+* **Database:** SQLite, with auto-migrations on startup (`api/src/db/`).
 * **Authentication:** JWT-based (Bearer header or httpOnly cookie). Supports credential-free single-user self-host mode, local username/password accounts, and optional generic OIDC single sign-on (Pocket ID recommended).
 </details>
 
 <details>
 <summary><strong>Local Development Setup</strong></summary>
 
-**Prerequisites:** Node.js v18+, Yarn, Python v3.11+
+**Prerequisites:** Node.js v18+, Yarn, Rust (stable toolchain with `cargo`)
 
 ```bash
 # Install frontend dependencies
 yarn install
 
-# Setup and activate backend virtual environment
-cd api
-python -m venv venv
-source venv/bin/activate   # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cd ..
+# Terminal 1: Vite frontend dev server
+yarn dev
 
-# Run both servers concurrently
-yarn dev # Starts Vite frontend dev server
-yarn api:dev   # Starts Flask backend API server
+# Terminal 2: Rust API dev server (dev-mode secrets, SQLite in api/data/)
+cd api
+APP_ENV=development cargo run
 ```
-The frontend will be available at `http://localhost:5173`.
+The frontend will be available at `http://localhost:5173`, the API at
+`http://localhost:5000`. PDF export works out of the box — the API
+renders it in-process (`markdown2pdf` crate), no extra service needed.
 </details>
 
 <details>
@@ -290,7 +292,7 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `GET /api/` → health payload
 * `GET /api/time` → { time }
 * `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
-* `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`); 501 if the optional `markdown-pdf` module is not installed
+* `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`), rendered in-process (see `contract/DECISIONS.md` #15)
 * `GET /api/music/vibe[?tag=chill]` → track suggestion for the given mood tag (requires `ENABLE_MOOD_MUSIC=1` and `JAMENDO_CLIENT_ID`)
 
 **Moods**
@@ -356,14 +358,17 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 Please ensure you run the tests before opening a PR:
 
 ```bash
-yarn test:api    # backend (pytest)
+cd api && cargo test && cargo clippy -- -D warnings && cd ..
+                 # backend (includes contract snapshot tests
+                 # against contract/fixtures/)
+yarn typecheck   # frontend type check (tsc)
 yarn test:unit   # frontend unit tests (Vitest)
 yarn test:e2e    # browser tests (Playwright; runs its own servers —
                  # stop any docker compose stack on ports 5000/5173 first)
 ```
 
-CI runs all three suites on every pull request. Please add tests for any new
-API functionality or user-facing behavior.
+CI runs all of these suites on every pull request. Please add tests for any
+new API functionality or user-facing behavior.
 
 ## License
 

@@ -1,11 +1,21 @@
-# Purging `watch-history.json` from git history
+# Purging files from git history
 
-`watch-history.json` (a ~4.5 MB Google Takeout export containing personal
-data) was committed in `25359a4` ("feat: fix sidebar styling") and has been
-removed from the working tree as of this change. Removing the file in a new
-commit does **not** remove it from git history — anyone with the repository
-can still retrieve it from commit `25359a4` or any later commit up to this
-one.
+> **Executed 2026-08-16.** The full history was rewritten with git
+> filter-branch (index-filter) to remove `watch-history.json` (a ~4.5 MB
+> Google Takeout export, originally committed in `25359a4`) and the
+> personal server-admin scripts `scripts/upgrade-server.sh`,
+> `scripts/relink-oidc-user.sh`, and `scripts/fix-group-ownership.sh`, and
+> to scrub a tunnel-provider domain mention from the historical
+> `SECURITY.md` blob.
+> The rewritten branches (`v0.4.0`) and tags (`v0.2.0`, `v0.3.0`) were
+> force-pushed; every commit hash after the earliest touched commit
+> changed. Existing clones and forks retain the old history — the purge
+> only cleans the canonical remote. The playbook below is kept for any
+> future purge.
+
+Removing a file in a new commit does **not** remove it from git history —
+anyone with the repository can still retrieve it from any commit that
+contained it.
 
 ## Warning before you run anything below
 

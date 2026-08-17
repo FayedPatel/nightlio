@@ -41,12 +41,12 @@ This guide will help you get Nightlio running with Docker in just a few minutes.
 ## Port Information
 
 - **Frontend**: `http://localhost:5173` - Same port for both Docker and development (consistency!)
-- **API**: `http://localhost:5000` - Flask backend (same in both Docker and development)
+- **API**: `http://localhost:5000` - Rust backend (same in both Docker and development)
 
 ## Environment Configuration
 
 ### Required Settings
-- `SECRET_KEY`: Flask secret key (change this!)
+- `SECRET_KEY`: API secret key, signs the OIDC state cookie (change this!)
 - `JWT_SECRET`: JWT signing secret (change this!)
 
 ### Optional Features

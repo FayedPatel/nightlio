@@ -1,8 +1,124 @@
 # Upgrading an existing Nightlio deployment
 
-This doc is for self-hosters who already have a running Nightlio (any version
-before the Phase 5 compose rework). It covers what changes, why your data is
-safe, and the exact commands to run.
+This doc is for self-hosters who already have a running Nightlio. It covers
+what changes, why your data is safe, and the exact commands to run. Sections
+are newest-first; older sections are kept as history for anyone upgrading
+across several versions.
+
+## Upgrading to the Rust rewrite (statistics view tracking, OPTIONS 204)
+
+Nothing manual — the standard `git pull` / `docker compose up -d --build`
+flow applies, and the startup migration handles the schema change
+automatically. What to expect:
+
+- **The "Data Lover" achievement now counts *days*, not page loads.** It
+  used to increment a counter on every statistics fetch (so one visit could
+  count several times); it now counts at most one statistics view per day,
+  and unlocks after viewing statistics on 10 different days. As part of
+  this change the migration **resets the in-progress counter to 0** for
+  every user — progress toward Data Lover restarts under the fairer
+  per-day rule. **Already-earned badges are kept**; nothing you have
+  unlocked disappears.
+- **Upgrade the API and frontend images together.** An older frontend
+  running against a rewritten API keeps working, but it does not call the new
+  `POST /api/statistics/view` endpoint, so Data Lover progress stops
+  accruing until the frontend is updated. The normal compose flow rebuilds
+  both at once — this only matters if you pin the two images to different
+  versions.
+- **OPTIONS responses changed from 200 to 204.** Browsers and the shipped
+  frontend do not care (CORS preflights work identically, with the same
+  CORS headers). Only non-browser clients that literally assert
+  `status == 200` on an OPTIONS request will notice.
+- Under the hood the schema migration adds `user_metrics.last_view_date`
+  and stamps `PRAGMA user_version = 3`. Rolling back the images after this
+  migration is safe for the API (older code ignores the extra column), but
+  the Data Lover counter reset is not reversible.
+
+## Upgrading v0.3.x → v0.4.0 (Rust API cutover)
+
+v0.4.0 replaces the Python/Flask API with a Rust binary (`api/`). From
+the outside nothing moves: same `nightlio_data` volume, same
+`DATABASE_PATH` default, same port `5000`, same `.env` contract, and both
+images run as uid-1000 `appuser`, so file ownership in the volume is
+unchanged. Live sessions survive the swap (same JWT format and secrets),
+and the wire contract was held to the recorded Flask behavior via the
+golden fixtures in `contract/fixtures/` (accepted, documented differences:
+`contract/DECISIONS.md`).
+
+Upgrade is the standard flow:
+
+```bash
+git pull
+docker compose pull        # if using published images
+docker compose up -d --build
+```
+
+Startup schema migrations run exactly as before, ported 1:1 — the cutover
+was validated by running the migration plus full endpoint parity against
+three generations of real production databases before removing the legacy
+backend (see the "Legacy removal" entry in `contract/DECISIONS.md`).
+
+Cheap insurance before upgrading — take a backup while the old (still
+Python-based) container is running:
+
+```bash
+docker compose exec api python -c "import sqlite3; sqlite3.connect('/app/data/nightlio.db').backup(sqlite3.connect('/app/data/pre-v0.4.0.db'))"
+```
+
+After the upgrade the api image contains no Python or sqlite3 CLI; back up
+with the volume-level command instead:
+
+```bash
+docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup alpine tar czf /backup/nightlio-backup.tar.gz -C /data .
+```
+
+WAL journal mode (new): the Rust API switches the main database to SQLite's
+WAL journal mode, so you may now see `nightlio.db-wal` and `nightlio.db-shm`
+files next to `nightlio.db` in the volume. This is normal. The `-wal` file
+is bounded — SQLite's default 1000-page auto-checkpoint folds it back into
+the main file during normal writes, `journal_size_limit` truncates it to at
+most 4 MB after checkpoints, and the API truncates it to zero bytes at
+startup and on graceful shutdown — it will not grow without limit.
+
+This changes how you should take backups: copying `nightlio.db` alone while
+the container is running can miss recent writes still sitting in the `-wal`
+file. Either stop the container first (`docker compose stop api` — the
+graceful shutdown folds the WAL into `nightlio.db`), or archive the whole
+data directory including the `-wal`/`-shm` files, as the `tar` command above
+already does (it copies `-C /data .`, i.e. everything).
+
+Rollback:
+
+- The main database now uses WAL journal mode (see above), which any
+  SQLite from 3.7.0 (2010) onward — including the one bundled with the old
+  Python image — can open. Stop the Rust container gracefully before
+  rolling back so the `-wal` file is folded and truncated; if you want the
+  file returned to the pre-v0.4.0 rollback journal mode entirely, run
+  `PRAGMA journal_mode=DELETE` against it with any sqlite3 client while
+  nothing else has it open.
+- The legacy Python source and its compose rollback profile have been
+  removed from the repository (removal was gated on the real-data
+  validation described above). To roll back anyway, run a previously
+  published pre-v0.4.0 `nightlio-api` image tag against the same volume:
+  `docker compose stop api && docker run -d --name nightlio-api --network
+  nightlio_nightlio-network --network-alias api -v
+  nightlio_nightlio_data:/app/data --env-file .env
+  ghcr.io/<owner>/nightlio-api:v0.3.0`. Do not run it alongside the Rust
+  api service — both claim the `api` hostname.
+
+CORS default change: the old Flask API's built-in `CORS_ORIGINS` default
+included `https://nightlio.vercel.app`, which granted credentialed
+cross-origin access to that third-party domain on any deployment that never
+set `CORS_ORIGINS`. The v0.4.0 default is
+`http://localhost:5173,http://localhost:5000` (localhost only). If your
+deployment relied on the implicit vercel origin — or any non-localhost
+origin — you must now set `CORS_ORIGINS` explicitly in `.env`
+(comma-separated, no spaces around commas).
+
+Also new in v0.4.0: PDF export (`POST /api/export/pdf`) is rendered
+in-process by the Rust API (`markdown2pdf` crate) — no extra service, no
+`.env` change; output styling differs from the old Python renderer but the
+endpoint contract is unchanged (`contract/DECISIONS.md` #15).
 
 ## Upgrading v0.2.0 → v0.3.0
 

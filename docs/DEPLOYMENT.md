@@ -240,10 +240,10 @@ Add to `/etc/logrotate.d/docker-nightlio`:
 
 ### Docker Security
 
-Both images already run as non-root users out of the box: the api as
-`appuser` (uid 1000, see `api/Dockerfile`) and the frontend on the
-`nginxinc/nginx-unprivileged` base (uid 101, listening on 8080). No
-Dockerfile edits needed.
+All images already run as non-root users out of the box: the api as
+`appuser` (uid 1000, see `api/Dockerfile`), the frontend on the
+`nginxinc/nginx-unprivileged` base (uid 101, listening on 8080), and the
+No Dockerfile edits needed.
 
 Optional extra hardening in `docker-compose.yml`:
 
@@ -290,19 +290,23 @@ docker compose up -d
 docker image prune -f
 ```
 
+For version-specific upgrade notes — including the v0.4.0 cutover that
+replaced the Python API with the Rust binary on the same data volume — see
+[UPGRADING.md](UPGRADING.md).
+
 ## Performance Optimization
 
 ### Database Optimization
 
-```bash
-# Enable WAL mode for better concurrency
-docker compose exec api python -c "
-import sqlite3
-conn = sqlite3.connect('/app/data/nightlio.db')
-conn.execute('PRAGMA journal_mode=WAL;')
-conn.close()
-"
-```
+The database deliberately stays in SQLite's default (rollback-journal) mode
+— do **not** enable WAL. Switching to WAL leaves `-wal`/`-shm` companion
+files next to the database that older API images cannot safely coexist
+with, which would break rolling back to a pre-v0.4.0 (Flask) image.
+Enabling WAL is deferred until the legacy rollback path is permanently
+retired (a separate owner decision — see the "Legacy removal" entry in
+`contract/DECISIONS.md`). The api image intentionally ships no Python or
+sqlite3 CLI, so there is no supported in-container way to flip pragmas by
+hand anyway.
 
 ### Nginx Caching
 
