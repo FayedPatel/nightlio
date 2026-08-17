@@ -5,14 +5,14 @@ Technical reference for contributors: architecture, local setup, the API surface
 ## Architecture Overview
 
 * **Frontend:** React 19 + Vite, written in strict TypeScript, served by Nginx.
-* **Backend:** Rust (Axum) JSON API in `api/`, shipped as a single static binary. The wire contract is pinned by `contract/openapi.yaml` plus golden request/response fixtures in `contract/fixtures/`, and mirrored in `src/types/api.ts`.
+* **Backend:** Rust (Axum) JSON API in `api/`, shipped as a single compiled binary (dynamically linked, running on a `debian:bookworm-slim` runtime image). The wire contract is pinned by `contract/openapi.yaml` plus golden request/response fixtures in `contract/fixtures/`, and mirrored in `src/types/api.ts`.
 * **PDF export:** rendered in-process by the Rust API via the `markdown2pdf` crate (see `contract/DECISIONS.md` #15) — no extra service required.
 * **Database:** SQLite (WAL journal mode), with auto-migrations on startup (`api/src/db/`).
 * **Authentication:** JWT-based (Bearer header or httpOnly cookie). Supports credential-free single-user self-host mode, local username/password accounts (argon2id, with transparent rehash of legacy hashes), and optional generic OIDC single sign-on (Pocket ID recommended).
 
 ## Local Development Setup
 
-**Prerequisites:** Node.js v18+, Yarn, Rust (stable toolchain with `cargo`)
+**Prerequisites:** Node.js v24+ (see `engines` in `package.json`), Yarn, Rust (stable toolchain with `cargo`)
 
 ```bash
 # Install frontend dependencies
@@ -31,7 +31,7 @@ renders it in-process (`markdown2pdf` crate), no extra service needed.
 
 ## API Reference
 
-All protected endpoints require an `Authorization: Bearer <jwt>` header unless otherwise noted. The full wire contract is `contract/openapi.yaml`.
+All protected endpoints require an `Authorization: Bearer <jwt>` header (or the `nightlio_token` httpOnly cookie) unless otherwise noted. The full wire contract is `contract/openapi.yaml` — 37 paths / 50 operations, of which 33 are authenticated. Every route also answers `OPTIONS` with an empty `204` plus an `Allow` header, before any token check.
 
 **Auth**
 * `POST /api/auth/local/login { username, password }` → 200 { token, user } — credentialed login, works regardless of OIDC config
@@ -49,6 +49,8 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
 * `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`) — **requires auth** (since 2026-08-17; see `contract/DECISIONS.md`); rendered in-process (see `contract/DECISIONS.md` #15), `content` capped at 1 MiB of UTF-8 bytes → 413
 * `GET /api/music/vibe[?tag=chill]` → track suggestion for the given mood tag (requires `ENABLE_MOOD_MUSIC=1` and `JAMENDO_CLIENT_ID`)
+* `GET /api/preferences` → { theme } — requires auth; `theme` is `null` until the user has stored one
+* `PUT /api/preferences { theme }` → { status, theme } — requires auth; `theme` must be one of `default`, `light`, `dark`, `synthwave`, otherwise 400
 
 **Moods & Statistics**
 * `POST /api/mood { date, mood(1-5), content, time?, selected_options?: number[] }` → 201 { entry_id, new_achievements[] }
@@ -59,7 +61,21 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 * `GET /api/mood/:id/selections` → options linked to the entry
 * `GET /api/statistics` → { statistics, mood_distribution, current_streak } — pure read
 * `POST /api/statistics/view` → { counted } — records at most one statistics view per day (feeds the Data Lover achievement)
+* `GET /api/statistics/extended` → { rolling_averages, weekday_averages, mood_volatility, tag_correlations, goal_correlations, monthly_digest } — partly clock-relative: the volatility window is the trailing 30 days and `monthly_digest` is always the current server-local month
+* `GET /api/statistics/heatmap[?year=2026]` → { year, days: [{ date, average_mood, entry_count }], days_logged } — only logged days appear; `year` defaults to the current server-local year, 400 if it is not an integer in 1970–2100
+* `GET /api/statistics/digest[?year=2026&month=8]` → { year, month, entries_logged, average_mood, previous_average_mood, mood_trend, top_tags (≤5), longest_streak } — month-in-review; `year`/`month` default to the current server-local month, 400 if out of range
 * `GET /api/streak` → { current_streak, message }
+
+**Goals**
+* `GET /api/goals` → bare array of goals, `created_at DESC` — the weekly rollover is projected on read only (pure read; it is persisted solely by the write paths), and every row carries the computed `already_completed_today`
+* `POST /api/goals { title, description?, frequency_per_week }` → 201 { id } — `frequency` is a legacy alias consulted only when `frequency_per_week` is absent; 400 on a blank title or an effective frequency outside 1–7
+* `GET /api/goals/:id` → the goal (same projection and row shape as the list); 404 if missing or owned by another user
+* `PUT /api/goals/:id { title?, description?, frequency_per_week? }` → { status } — partial update; lowering `frequency_per_week` clamps `completed`; 400 on an empty body or a blank title
+* `PATCH /api/goals/:id` → alias of `PUT` (same rule, same handler, same responses)
+* `DELETE /api/goals/:id` → { status } — `goal_completions` rows cascade-delete (200 with a body, never 204)
+* `POST /api/goals/:id/progress { date? }` → the updated goal plus { already_logged, logged_date } — body is optional and means "today"; `date` accepts `YYYY-MM-DD` or `M/D/YYYY` and may be at most 1 day in the future; logging is idempotent per (goal, day)
+* `GET /api/goals/:id/completions[?start=YYYY-MM-DD&end=YYYY-MM-DD]` → bare array of { date } ascending — without **both** bounds the window is the last 90 days ending today; 404 for a missing/foreign goal
+* `GET /api/goals/:id/completions/` and `GET /api/goal/:id/completions` → byte-identical aliases of the above (separately registered rules, not redirects)
 
 **Groups & Options**
 * `GET /api/groups` → [{ id, name, options: [{ id, name }] }]
@@ -71,15 +87,18 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header unless o
 **Achievements**
 * `GET /api/achievements` → user achievements (with metadata)
 * `POST /api/achievements/check` → { new_achievements, count }
+* `GET /api/achievements/progress` → fixed-key map of all five achievement types (`first_entry`, `week_warrior`, `consistency_king`, `data_lover`, `mood_master`) to { current, max }, with maxima 1 / 7 / 30 / 10 / 100 and `current` clamped to that range; `GET /api/achievements/progress/` is a byte-identical trailing-slash alias
 
 ## Data Model
 
 **Tables (SQLite):**
-* `users`: id, auth_provider ('local' or 'oidc'), external_id (provider-scoped subject, unique per (auth_provider, external_id)), email, name, avatar_url, password_hash (local accounts only, nullable), created_at, last_login — a legacy unique-identifier column from the pre-OIDC schema remains for backward compatibility with rows created before this change but is no longer written by application logic
+* `users`: id, auth_provider ('local' or 'oidc'), external_id (provider-scoped subject, unique per (auth_provider, external_id)), email, name, avatar_url, password_hash (local accounts only, nullable), theme_preference (nullable, no default — backs `/api/preferences`), created_at, last_login — a legacy unique-identifier column from the pre-OIDC schema remains for backward compatibility with rows created before this change but is no longer written by application logic
 * `mood_entries`: id, user_id(FK), date, mood, content, ...
 * `groups`: id, name
 * `group_options`: id, group_id(FK), name
 * `entry_selections`: entry_id(FK), option_id(FK)
+* `goals`: id, user_id(FK), title, description, frequency_per_week, completed, streak, period_start, last_completed_date, created_at, updated_at
+* `goal_completions`: id, goal_id(FK), date — UNIQUE per (goal, day), which is what makes progress logging idempotent; cascades on goal delete
 * `achievements`: id, user_id(FK), achievement_type, earned_at, ...
 * `activity_log`: id, user_id(FK), event_type, metadata, created_at — backs `GET /api/activity`
 * `user_metrics`: user_id(PK/FK), stats_views, last_view_date — per-day statistics-view tracking
@@ -90,8 +109,9 @@ The GIFs in the README are real captures from the running app (desktop at 720p, 
 
 ```bash
 README_CAPTURES=1 yarn playwright test e2e/readme-captures.spec.ts --project=chromium
-# then, with any directory that has `npm i gifenc pngjs`:
-node scripts/build-readme-gifs.mjs <that-directory>
+# then, in any throwaway scratch directory (outside the repo), run
+# `npm i gifenc pngjs` once and point the script at it:
+node scripts/build-readme-gifs.mjs <that-scratch-directory>
 ```
 
 GIFs land in `docs/assets/`, raw frames in `screenshots/readme-frames/` (gitignored) before assembly.

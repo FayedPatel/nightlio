@@ -15,7 +15,7 @@
 
 ## Why Nightlio?
 
-Nightlio was inspired by mood-tracking apps like Daylio, but born out of frustration with subscription models, paywalls, and single-device lock-in. It's a feature-complete, open-source alternative you can run anywhere: fully web-based, responsive on desktop and mobile, no ads, no subscriptions, no data mining. Your journal lives in one SQLite file on *your* server, behind an API that is a single 158 MB Rust binary using single-digit megabytes of RAM.
+Nightlio was inspired by mood-tracking apps like Daylio, but born out of frustration with subscription models, paywalls, and single-device lock-in. It's a feature-complete, open-source alternative you can run anywhere: fully web-based, responsive on desktop and mobile, no ads, no subscriptions, no data mining. Your journal lives in one SQLite file on *your* server, behind an API that ships as one 158 MB Rust container image and runs in single-digit megabytes of RAM.
 
 ## A tour
 
@@ -46,7 +46,7 @@ And the same flows one-handed on a phone, with bottom navigation and an installa
 * **Gamified consistency** — streaks and achievements, counted fairly (viewing statistics counts once per day, not per page load).
 * **Single sign-on** — any OIDC-compliant provider; [Pocket ID](https://github.com/pocket-id/pocket-id) (passkeys) ships as an opt-in compose profile. Local passwords and a credential-free single-user mode also supported.
 * **Privacy first, always** — self-hosted, one SQLite file, no third-party trackers, no telemetry.
-* **Small footprint** — one static Rust binary for the API, images published for amd64 + arm64.
+* **Small footprint** — one Rust binary for the API, images published for amd64 + arm64.
 
 ## Getting started
 

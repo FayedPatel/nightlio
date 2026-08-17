@@ -23,14 +23,16 @@ info:
   title: Nightlio API
   version: 0.4.0-dev
   description: |
-    Wire contract for the Nightlio Flask API (api/routes/*.py), recorded
-    against live instances and encoded as golden fixtures.
+    Wire contract for the Nightlio Rust API (api/src/routes/*.rs). The golden
+    fixtures it is cross-checked against were recorded against live instances
+    of the removed Flask implementation.
 
     ## Global rules (verified by fixtures)
 
     - **Error envelope.** Every application-level error body is
       `{"error": "<string>"}` — including framework routing 404s, which are
-      rewritten to JSON by app-level handlers (api/utils/error_handlers.py):
+      rewritten to JSON by the router fallbacks in api/src/routes/mod.rs
+      (the shared error type lives in api/src/error.rs):
       `{"error": "Resource not found"}`. Since the contract change,
       **405** follows the envelope too (`{"error": "Method not allowed"}` +
       `Allow` header); the sole exception is the **308** redirect from

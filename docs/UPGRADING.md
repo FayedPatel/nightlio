@@ -87,24 +87,25 @@ graceful shutdown folds the WAL into `nightlio.db`), or archive the whole
 data directory including the `-wal`/`-shm` files, as the `tar` command above
 already does (it copies `-C /data .`, i.e. everything).
 
-Rollback:
+Rollback: **there is no supported downgrade to a pre-v0.4.0 image.**
 
-- The main database now uses WAL journal mode (see above), which any
-  SQLite from 3.7.0 (2010) onward — including the one bundled with the old
-  Python image — can open. Stop the Rust container gracefully before
-  rolling back so the `-wal` file is folded and truncated; if you want the
-  file returned to the pre-v0.4.0 rollback journal mode entirely, run
-  `PRAGMA journal_mode=DELETE` against it with any sqlite3 client while
-  nothing else has it open.
-- The legacy Python source and its compose rollback profile have been
-  removed from the repository (removal was gated on the real-data
-  validation described above). To roll back anyway, run a previously
-  published pre-v0.4.0 `nightlio-api` image tag against the same volume:
-  `docker compose stop api && docker run -d --name nightlio-api --network
-  nightlio_nightlio-network --network-alias api -v
-  nightlio_nightlio_data:/app/data --env-file .env
-  ghcr.io/<owner>/nightlio-api:v0.3.0`. Do not run it alongside the Rust
-  api service — both claim the `api` hostname.
+- Running an older `nightlio-api` image tag against a v0.4.0+ volume is
+  **formally retired** as a rollback path (`contract/DECISIONS.md`, the WAL
+  and legacy-removal entries). The legacy Python source and its compose
+  rollback profile are gone from the repository, removal having been gated
+  on the real-data validation described above.
+- Going backwards is **best-effort only, and it means restoring a backup**.
+  Take the `tar` archive above *before* you upgrade; to go back, stop the
+  stack, restore that archive over the `nightlio_data` volume, and start the
+  older image against the restored copy. Anything written since the backup
+  is lost — there is no way to replay it into the older schema.
+- Do not point an old image at a live v0.4.0+ volume and hope. Even though
+  WAL journal mode is readable by any SQLite from 3.7.0 (2010) onward, the
+  data has moved forward under migrations the old code does not know about,
+  and nothing in the project verifies that combination any more.
+
+Rolling *forward* remains the supported direction: upgrade, and keep the
+pre-upgrade archive until you're satisfied.
 
 CORS default change: the old Flask API's built-in `CORS_ORIGINS` default
 included `https://nightlio.vercel.app`, which granted credentialed
@@ -149,14 +150,16 @@ docker compose exec api python -c "import sqlite3; sqlite3.connect('/app/data/ni
 
 Optional new setting for SSO-only deployments: `DISABLE_LOCAL_LOGIN=1` in
 `.env` hard-disables all local logins (password form and credential-free
-mode) so your identity provider is the only door. Leave it unset/`0` if you
-use local or credential-free login.
+mode) so your identity provider is the only door. Note the current default:
+unset is *not* the same as `0` — with `OIDC_ISSUER_URL` configured, local
+login is off unless you set `DISABLE_LOCAL_LOGIN=0` explicitly.
 
-The rest of this document covers the older Phase 5 compose-rework upgrade.
+The rest of this document covers the older compose rework — the upgrade that
+consolidated the compose files and reworked the container topology.
 
-> **Status:** final. Phase 2 (local password login + generic OIDC, Google
-> removal) and Phase 4 (httpOnly session cookie, `/api/auth/logout`) have
-> both landed in `api/` and `src/`. This doc now reflects the actual shipped
+> **Status:** final. The auth overhaul (local password login + generic OIDC,
+> Google removal) and the session-cookie change (httpOnly `nightlio_token`,
+> `POST /api/auth/logout`) have both shipped. This doc describes shipped
 > behavior, not a plan.
 
 ## TL;DR
@@ -174,8 +177,8 @@ Your data is untouched: the SQLite database lives in the `nightlio_data`
 named volume, which this change never renames, and `DATABASE_PATH` keeps its
 existing default (`/app/data/nightlio.db`) inside the container. Schema
 migrations run automatically on container start (this was already true
-before Phase 5 and is unchanged here) — you do not need to run anything by
-hand.
+before the compose rework and is unchanged by it) — you do not need to run
+anything by hand.
 
 ## What actually changed (compose/infra layer)
 
@@ -187,31 +190,34 @@ hand.
    unchanged — nothing forces a rebuild if you don't pass `--build`.
 2. **API healthcheck fixed** in `docker-compose.yml`. It used to run
    `python -c "import requests; requests.get('http://localhost:5000/api/')"`,
-   but `requests` was never a declared dependency of the api image — the
-   check only ever "passed" by accident (something else pulled `requests` in
-   transitively). It now uses the stdlib: `python -c "import urllib.request;
-   urllib.request.urlopen('http://localhost:5000/api/')"`. If your container
-   was reporting unhealthy before for unrelated reasons, re-check after this
-   upgrade — the healthcheck itself is now trustworthy.
+   but `requests` was never a declared dependency of the Flask api image —
+   the check only ever "passed" by accident (something else pulled
+   `requests` in transitively). That upgrade swapped it for a stdlib
+   `urllib.request` one-liner. Both are pre-v0.4.0 history: the Rust api
+   image ships no Python at all, and the current healthcheck is the binary's
+   own subcommand, `nightlio-api --health-check`. If your container was
+   reporting unhealthy for unrelated reasons, re-check after upgrading — the
+   healthcheck itself is trustworthy now.
 3. **Optional Pocket ID service** added to `docker-compose.yml` as an `oidc`
    compose profile, off by default. See "OIDC / Pocket ID" below.
 4. **`docker-compose.prod.yml` was removed.** There is now a single
    `docker-compose.yml` for every environment — local, LAN, and public
    production. If you were deploying with `docker compose -f
-   docker-compose.prod.yml ...` (formerly `docker-compose.prod.yml`,
-   removed), switch to the plain `docker compose ...` commands against
-   `docker-compose.yml`, and put your own TLS-terminating reverse proxy
+   docker-compose.prod.yml ...`, switch to the plain `docker compose ...`
+   commands against `docker-compose.yml`, and put your own TLS-terminating
+   reverse proxy
    (Caddy, Traefik, or nginx) in front of the `frontend` service's port
    instead of the bundled nginx+TLS setup that file used to provide. Set
    `TRUST_PROXY_HEADERS=1` and `CORS_ORIGINS` to your public origin in
-   `.env` — see the README's "Self-hosting" section for the exact steps.
+   `.env` — see the "Self-hosting" section of `docs/SETUP.md` for the exact
+   steps.
    No compose file still ships a `./ssl` bind mount or nginx TLS config;
    certificates are your reverse proxy's responsibility now.
 
 None of the compose/infra work above touches migrations — those already ran
-automatically before Phase 5 and still do.
+automatically before the compose rework and still do.
 
-Separately (Phase 2/4, `api/` and `src/`, now shipped):
+Separately, in the same era (auth overhaul and session cookie, now shipped):
 - Google OAuth is gone entirely. Auth is now local username/password
   (`POST /api/auth/local/register`, `POST /api/auth/local/login`), plus
   credential-free single-user self-host login when OIDC isn't configured,
@@ -227,8 +233,8 @@ Separately (Phase 2/4, `api/` and `src/`, now shipped):
 
 ## Env var changes
 
-**Remove** from your `.env` (no longer read by anything — Phase 2 deleted
-the corresponding `api/` code):
+**Remove** from your `.env` (no longer read by anything — the Google-OAuth
+removal deleted the corresponding api code):
 ```
 ENABLE_GOOGLE_OAUTH
 GOOGLE_CLIENT_ID
@@ -245,12 +251,17 @@ OIDC_ISSUER_URL=
 OIDC_CLIENT_ID=
 OIDC_CLIENT_SECRET=
 ```
-All three default to empty string in both compose files if unset — you do
-not need to add them to `.env` at all unless you're enabling OIDC. Setting
-`OIDC_ISSUER_URL` also disables the credential-free single-user login path
-(`POST /api/auth/local/login` with no body now returns 403) — local
-username/password accounts keep working alongside OIDC. See "OIDC / Pocket
-ID" below for the exact callback URL to register.
+All three default to empty string in `docker-compose.yml` if unset — you do
+not need to add them to `.env` at all unless you're enabling OIDC.
+
+**Configuring OIDC disables local login by default.** Once
+`OIDC_ISSUER_URL` is set, your identity provider becomes the only door:
+`POST /api/auth/local/login` returns `403` for both the credential-free
+single-user path *and* local username/password accounts. If you want local
+passwords to keep working next to OIDC, set `DISABLE_LOCAL_LOGIN=0`
+explicitly — an explicit `0` or `1` always wins over the OIDC-derived
+default. See "OIDC / Pocket ID" below for the exact callback URL to
+register.
 
 **Add, both optional:**
 ```
@@ -272,13 +283,14 @@ TRUST_PROXY_HEADERS=0
 ```
 APP_ENV=production
 ```
-This is the D5 rename: `APP_ENV` replaces `RAILWAY_ENVIRONMENT` as the
-environment selector read by `api/docker_start.py`. The old name is still
-honored as a fallback (`APP_ENV` checked first, then `RAILWAY_ENVIRONMENT`,
-then default `production`) — you do not need to change anything.
-`docker-compose.yml` already sets both vars for you. This line documents
-intent for anyone editing the compose file directly or running the api
-container standalone outside compose.
+`APP_ENV` replaced `RAILWAY_ENVIRONMENT` as the name of the environment
+selector. The old name is still honored as a fallback — the api reads
+`APP_ENV` first, then `RAILWAY_ENVIRONMENT`, then defaults to `production`
+— so you do not need to change anything. `docker-compose.yml` already sets
+`APP_ENV=production` for you; the current implementation lives in
+`api/src/config.rs`. This line documents intent for anyone editing the
+compose file directly or running the api container standalone outside
+compose.
 
 One previously-soft requirement is now hard: `SECRET_KEY` and `JWT_SECRET`
 no longer have insecure fallback defaults. `docker-compose.yml` refuses to
@@ -320,7 +332,7 @@ OIDC_CLIENT_ID=<from Pocket ID admin>
 OIDC_CLIENT_SECRET=<from Pocket ID admin>
 ```
 Register the callback URL in Pocket ID's client settings as the **api's**
-callback endpoint, not a frontend page (`api/auth/oauth.py` handles the
+callback endpoint, not a frontend page (`api/src/auth/oidc.rs` handles the
 redirect; the frontend's `/login` route only picks up the token afterward,
 from the URL fragment):
 ```
@@ -333,32 +345,33 @@ through nginx in your topology.)
 
 Note: `docker-compose.yml`'s inline comments next to the `pocket-id` service
 give the correct callback URL (`.../api/auth/callback/oidc`, matching the
-URL above) — an earlier draft of this doc warned they were stale from before
-Phase 2; that has since been corrected in the compose file.
+URL above).
 
-**Image note:** compose pins `ghcr.io/pocket-id/pocket-id:latest`. This
-was not pulled/run in this environment (no network egress in this pass) —
-the image name and tag follow Pocket ID's documented GHCR convention, but
-have not been verified by an actual pull here. Pin to a specific version tag
-once you've confirmed it against Pocket ID's release page, rather than
-trusting `:latest` in a long-lived deployment.
+**Image note:** compose pins `ghcr.io/pocket-id/pocket-id:latest`. For a
+long-lived deployment, replace `:latest` with a specific version tag from
+Pocket ID's release page so upgrades of your identity provider are something
+you choose rather than something that happens on the next `docker compose
+pull`.
 
 ## Migrations
 
 Unchanged behavior: schema migrations against `DATABASE_PATH` run
-automatically on every container start, before serving traffic (triggered
-from `create_app()`'s `MoodDatabase` construction, called by
-`api/docker_start.py`). This was true before Phase 5 and remains true —
-`api/docker_start.py`'s only change in this pass is the D5 env-selector
-rename (`APP_ENV`, falling back to `RAILWAY_ENVIRONMENT`); it does not touch
-migration logic. New tables/columns from Phase 2/4 (`auth_provider`,
-`external_id`, `password_hash` on `users`; the new `activity_log` table)
-are created/backfilled by the same auto-migration path — you do not run any
-migration command by hand; `docker compose up -d --build` is sufficient.
+automatically on every container start, before serving traffic. This was
+true before the compose rework, and it is still true today — the current
+bootstrap lives in `api/src/db/bootstrap.rs`, and the environment selector
+rename (`APP_ENV`, falling back to `RAILWAY_ENVIRONMENT`) never touched
+migration logic. The tables and columns added by the auth overhaul
+(`auth_provider`, `external_id`, `password_hash` on `users`; the
+`activity_log` table) are created and backfilled by that same automatic
+path — you do not run any migration command by hand; `docker compose up -d
+--build` is sufficient.
 
-## Rollback
+## Rollback (compose files only)
 
-If something goes wrong after upgrading:
+This section is about reverting the *compose/infra* changes described above,
+not about downgrading the api itself — for that, see the v0.4.0 rollback
+notes near the top of this document. If something goes wrong after the
+compose rework:
 ```bash
 docker compose down
 git checkout <previous-tag-or-commit> -- docker-compose.yml
@@ -382,5 +395,7 @@ docker compose logs -f api               # watch startup: migrations + healthche
 curl -sf http://localhost:5000/api/      # api health endpoint
 ```
 
-The api container reports healthy once the stdlib `urllib.request`
-healthcheck passes; schema migrations have already run by then.
+The api container reports healthy once its healthcheck passes — today that
+is the binary's own `nightlio-api --health-check` subcommand, wired up in
+`docker-compose.yml`. Schema migrations have already run by the time it
+goes healthy.

@@ -27,6 +27,7 @@ The full rewrite: the Flask/Python backend is replaced by a Rust API (Axum + rus
 - **One `new_achievements` shape**: `POST /api/mood` returns the same metadata objects as `/api/achievements/check` instead of bare strings.
 - Every `OPTIONS` answers `204` with an `Allow` header; `405`s use the standard JSON error envelope; `GET /api/mood/{id}/selections`, goal completions, and group options return consistent `404`s; `%m/%d/%Y` dates are normalized to ISO by a startup migration; `next_cursor` is `null` on an exactly-full final page.
 - The default CORS origins no longer include a third-party domain — deployments relying on the implicit `nightlio.vercel.app` grant must set `CORS_ORIGINS`.
+- **`POST /api/export/pdf` requires authentication** (2026-08-17), closing the last unauthenticated route — it was open only as Flask parity, leaving a render-cost DoS surface on exposed instances. The frontend has always sent credentials, so no client breaks.
 
 ### TypeScript frontend
 

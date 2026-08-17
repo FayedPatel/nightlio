@@ -12,9 +12,9 @@ remaining oracle (frozen goldens — nothing can be re-recorded):
 | --- | --- |
 | `contract/openapi.yaml` | The merged, hand-written OpenAPI 3.1 document — all 37 paths / 50 operations (the rewrite added `POST /api/statistics/view`), assembled from the per-family fragments and cross-checked against the fixtures. **This is the graded document.** |
 | `contract/openapi-parts/*.yaml` | The per-family source fragments (auth, mood+statistics, goals, groups, achievements, misc). Kept for provenance; the merged file supersedes them on any conflict. |
-| `contract/fixtures/**` | ~180 golden request/response recordings taken against live Flask instances on throwaway SQLite databases, plus fixtures added or edited by owner-approved contract-change rounds (each such edit carries a "v0.X contract change" note and a `DECISIONS.md` entry). Organized by family (`auth/`, `mood/`, `goals/`, `groups/`, `achievements/`, `misc/`). |
+| `contract/fixtures/**` | ~180 golden request/response recordings taken against live Flask instances on throwaway SQLite databases, plus fixtures added or edited by owner-approved contract-change rounds (each such edit carries a "contract change" note and a `DECISIONS.md` entry). Organized by family (`auth/`, `mood/`, `goals/`, `groups/`, `achievements/`, `misc/`). |
 | `contract/corpus/` | Snapshot SQLite databases plus `PRAGMA table_info` / `PRAGMA index_list` records for migration parity testing. |
-| `src/types/api.ts` | The TypeScript contract module derived from `openapi.yaml`, tailored to the ~35 methods in `src/services/api.js` and `src/services/statsApi.js`. Type-only, strict-mode clean. |
+| `src/types/api.ts` | The TypeScript contract module derived from `openapi.yaml`, tailored to the ~35 methods in `src/services/api.ts` and `src/services/statsApi.ts`. Type-only, strict-mode clean. |
 
 ## Fixture format and how to replay
 

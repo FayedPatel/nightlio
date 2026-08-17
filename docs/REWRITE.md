@@ -15,7 +15,7 @@ v0.4.0 replaced the Flask/Python backend with a Rust API (Axum + rusqlite) and c
 | Throughput | ~4.0k req/s (client-limited) | ~4.4k req/s (client-limited) — effectively a wash |
 | Runtime model | worker pool, GC pauses | single async binary, no GC |
 | CPU architectures | amd64 only | **amd64 + arm64** |
-| Wire contract | implicit — "whatever Flask does" | **explicit** — 46-rule golden fixtures + OpenAPI 3.1 + the `contract/DECISIONS.md` ledger |
+| Wire contract | implicit — "whatever Flask does" | **explicit** — golden fixtures recorded against Flask's 46 URL rules (the contract now has 47, the addition being `POST /api/statistics/view`) + OpenAPI 3.1 + the `contract/DECISIONS.md` ledger |
 | Backend tests | pytest, mostly happy paths (171) | **400 unit + 109 integration**, graded against the golden fixtures, clippy `-D warnings` clean |
 | Frontend typing | untyped JS, silent shape drift possible | **strict TS**, client types derived from the same OpenAPI document the API is graded against |
 | GETs with side effects | statistics and goals wrote on read | **all reads pure** |

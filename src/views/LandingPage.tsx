@@ -232,8 +232,8 @@ docker-compose up -d`}</code></pre>
           <p className="landing__quickstart-note">
             Two containers, one SQLite file, no external services. Full
             walkthrough in the{' '}
-            <a href={`${GITHUB_URL}/blob/main/QUICKSTART.md`} target="_blank" rel="noreferrer">
-              quick start guide
+            <a href={`${GITHUB_URL}/blob/main/docs/SETUP.md`} target="_blank" rel="noreferrer">
+              setup guide
             </a>.
           </p>
         </div>

@@ -40,11 +40,11 @@ trusted.
   `api/src/main.rs:34` before the runtime is even built, so the process exits non-zero and the
   container fails visibly instead of serving traffic with a forgeable key. The check is
   production-only (`APP_ENV=production`); see "Risk-accepted items".
-* **Compose refuses to start too.** `docker-compose.yml:17-18` uses
+* **Compose refuses to start too.** `docker-compose.yml:16-17` uses
   `${SECRET_KEY:?…}` / `${JWT_SECRET:?…}`, so `docker compose up` fails before the container
   exists if `.env` doesn't set them. `APP_ENV=production` is hardcoded for the api service
-  (`docker-compose.yml:12-13`), so the in-app check always applies to the compose path.
-  `POCKET_ID_ENCRYPTION_KEY` has the same `:?` guard (`docker-compose.yml:116`).
+  (`docker-compose.yml:12`), so the in-app check always applies to the compose path.
+  `POCKET_ID_ENCRYPTION_KEY` has the same `:?` guard (`docker-compose.yml:115`).
 * **The env templates ship blank, not placeholder, secrets.** `SECRET_KEY=` / `JWT_SECRET=`
   in `.env.example` and `.env.docker` — copying a template verbatim fails loudly at startup
   rather than silently signing tokens with a value that is public in this repository.
@@ -67,10 +67,10 @@ trusted.
   changed; the host mapping (`5173:8080`) is unaffected.
 * **The healthcheck needs no extra tooling.** The image ships no python and no curl; the
   binary answers its own check via `nightlio-api --health-check`
-  (`api/Dockerfile:119-120`, `docker-compose.yml:49`), so the attack surface isn't widened by
+  (`api/Dockerfile:119-120`, `docker-compose.yml:48`), so the attack surface isn't widened by
   a shell utility that exists only for the healthcheck.
 * **Pocket ID is opt-in and loopback-only.** The bundled OIDC provider sits behind
-  `profiles: ["oidc"]` (`docker-compose.yml:107`), so a plain `docker compose up` never starts
+  `profiles: ["oidc"]` (`docker-compose.yml:106`), so a plain `docker compose up` never starts
   it, and its port is published as `127.0.0.1:1411:1411` — not reachable from the network.
   Before this, the service had no gate at all: it started on every `up`, forced every fresh
   clone to set `POCKET_ID_ENCRYPTION_KEY` just to bring up the base stack, and exposed Pocket
@@ -247,7 +247,7 @@ Known, deliberate, and documented rather than fixed. Each is a trade-off, not an
   own instance. Login still requires a correct password; the limiter only slows guessing.
 
 * **Compose publishes the API on all host interfaces** (`5000:5000`,
-  `docker-compose.yml:43`). The frontend proxies `/api/` internally over the compose network,
+  `docker-compose.yml:42`). The frontend proxies `/api/` internally over the compose network,
   so operators who only expose the frontend can narrow this to `127.0.0.1:5000:5000` and lose
   nothing. Left as-is because direct API access is genuinely useful (scripts, mobile clients,
   debugging) and the API enforces its own authentication either way. Documented, not changed —
