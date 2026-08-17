@@ -1,0 +1,18 @@
+{
+  "method": "POST",
+  "path": "/api/export/pdf",
+  "request": {
+    "headers_that_matter": {},
+    "body": {
+      "content": "<1048577 bytes of 'A'>"
+    }
+  },
+  "response": {
+    "status": 413,
+    "content_type": "application/json",
+    "body": {
+      "error": "Content is too large to export (max 1048576 bytes)"
+    }
+  },
+  "note": "Size measured in UTF-8 encoded bytes, cap 1048576 (1 MiB). Request body elided here: content was 'A' * 1048577."
+}

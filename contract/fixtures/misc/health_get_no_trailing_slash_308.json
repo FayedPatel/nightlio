@@ -1,0 +1,17 @@
+{
+  "method": "GET",
+  "path": "/api",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 308,
+    "content_type": null,
+    "body": "",
+    "headers": {
+      "Location": "http://127.0.0.1:5306/api/"
+    }
+  },
+  "note": "Rule is '/api/' (blueprint route '/' under the /api prefix); the slashless path 308-redirects with Location as the contract. This is the ONLY rule in the app defined WITH a trailing slash, so it is the only place this redirect appears; every other rule 404s on the opposite-slash variant. contract change: the body is empty (Flask/Werkzeug returned a 'Redirecting...' HTML page; the replica was dropped — no client reads a 308 body)."
+}

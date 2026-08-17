@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/api/goals",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "Meditate",
+      "description": "10 minutes",
+      "frequency_per_week": 3
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "id": 1
+    }
+  },
+  "notes": "201 with only the new autoincrement id. id=1 here because the database is fresh."
+}

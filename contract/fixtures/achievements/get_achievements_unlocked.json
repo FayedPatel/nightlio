@@ -1,0 +1,53 @@
+{
+  "method": "GET",
+  "path": "/api/achievements",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "achievement_type": "data_lover",
+        "description": "View statistics on 10 different days",
+        "earned_at": "<TS>",
+        "icon": "BarChart3",
+        "id": 3,
+        "name": "Data Lover",
+        "nft_minted": 0,
+        "nft_token_id": null,
+        "nft_tx_hash": null,
+        "rarity": "uncommon"
+      },
+      {
+        "achievement_type": "first_entry",
+        "description": "Log your first mood entry",
+        "earned_at": "<TS>",
+        "icon": "Zap",
+        "id": 1,
+        "name": "First Entry",
+        "nft_minted": 0,
+        "nft_token_id": null,
+        "nft_tx_hash": null,
+        "rarity": "common"
+      },
+      {
+        "achievement_type": "week_warrior",
+        "description": "Maintain a 7-day streak",
+        "earned_at": "<TS>",
+        "icon": "Flame",
+        "id": 2,
+        "name": "Week Warrior",
+        "nft_minted": 0,
+        "nft_token_id": null,
+        "nft_tx_hash": null,
+        "rarity": "uncommon"
+      }
+    ]
+  },
+  "notes": "Bare array ordered by earned_at DESC. Each item merges the DB row (id [autoincrement], achievement_type, earned_at, nft_minted, nft_token_id, nft_tx_hash) with static metadata (name, description, icon, rarity). nft_minted is integer 0 (SQLite boolean), nft_token_id and nft_tx_hash are null. earned_at normalized to <TS>. contract change: data_lover description re-pinned to 'View statistics on 10 different days' — stats views now count once per calendar day, not per request."
+}

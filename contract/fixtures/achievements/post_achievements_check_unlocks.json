@@ -1,0 +1,27 @@
+{
+  "method": "POST",
+  "path": "/api/achievements/check",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "count": 1,
+      "new_achievements": [
+        {
+          "achievement_type": "data_lover",
+          "description": "View statistics on 10 different days",
+          "icon": "BarChart3",
+          "name": "Data Lover",
+          "rarity": "uncommon"
+        }
+      ]
+    }
+  },
+  "notes": "data_lover condition (statistics viewed on 10 different days) met but not yet awarded; check awards it. new_achievements items are metadata objects {name, description, icon, rarity, achievement_type} \u2014 no id or earned_at \u2014 the unified shape POST /api/mood also returns since the rewrite. contract change: description re-pinned to 'View statistics on 10 different days' \u2014 stats views now count once per calendar day. count == len(new_achievements)."
+}

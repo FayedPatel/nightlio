@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/auth/verify",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "content_type": "application/json",
+    "body": {
+      "error": "Content-Type must be application/json"
+    }
+  },
+  "notes": [
+    "SURPRISE: verify is semantically read-only but uses POST, and cookie-authenticated POSTs go through the CSRF gate -- so a cookie-only verify without Content-Type: application/json is 403, not 200. The frontend always sends both CSRF requirements (src/services/api.js sends Content-Type on every request and X-Requested-With on every mutation-method request), so it never sees this.",
+    "With Content-Type: application/json but missing X-Requested-With the body is {\"error\": \"Missing required request header\"} instead (checks run in that order)."
+  ]
+}

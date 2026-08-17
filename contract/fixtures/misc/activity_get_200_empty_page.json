@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/activity?before=1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "activities": [],
+      "next_cursor": null
+    }
+  },
+  "note": "Nothing older than id 1: empty page keeps the same shape {activities: [], next_cursor: null}. contract change: a full final page now returns next_cursor null, so a client following cursors is never sent to this empty page anymore; the recording stands for a directly-issued request past the oldest row, and its body is unchanged."
+}

@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/mood/2/selections",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": []
+  },
+  "notes": "Entry exists but has no selections -> 200 []."
+}

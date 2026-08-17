@@ -1,0 +1,31 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>",
+      "Content-Type": "application/json",
+      "X-Requested-With": "nightlio"
+    },
+    "body": {
+      "mood": 4,
+      "date": "2026-08-13",
+      "content": "Cookie with CSRF headers.",
+      "selected_options": []
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "entry_id": 2,
+      "message": "Mood entry created successfully",
+      "new_achievements": [],
+      "status": "success"
+    }
+  },
+  "notes": [
+    "Control fixture: cookie auth succeeds once both CSRF requirements are present. entry_id autoincrement (2: second entry).",
+    "contract change: when non-empty, new_achievements now carries metadata objects ({name, description, icon, rarity, achievement_type}) instead of achievement_type strings; the empty array shown here is unaffected."
+  ]
+}

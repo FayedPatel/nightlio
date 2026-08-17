@@ -1,0 +1,26 @@
+{
+  "method": "OPTIONS",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {
+      "Origin": "http://localhost:5173",
+      "Access-Control-Request-Method": "PUT",
+      "Access-Control-Request-Headers": "authorization,content-type"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "content_type": "text/html; charset=utf-8",
+    "body": "",
+    "headers": {
+      "Allow": "HEAD, GET, OPTIONS, PUT",
+      "Access-Control-Allow-Origin": "http://localhost:5173",
+      "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+      "Access-Control-Allow-Headers": "authorization, content-type",
+      "Access-Control-Allow-Credentials": "true",
+      "Vary": "Origin"
+    }
+  },
+  "note": "contract change: all OPTIONS responses are 204 with an empty body (previously 200). A CORS preflight (Origin + Access-Control-Request-Method) traverses the router and rides the same 204; the after-request CORS layer appends the CORS response headers for the allowed origin list with credentials support. A 204 carries no Content-Length."
+}

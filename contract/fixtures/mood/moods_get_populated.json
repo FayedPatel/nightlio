@@ -1,0 +1,41 @@
+{
+  "method": "GET",
+  "path": "/api/moods",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "content": "Third day.",
+        "created_at": "<TS>",
+        "date": "2025-08-03",
+        "id": 3,
+        "mood": 5,
+        "updated_at": "<TS>"
+      },
+      {
+        "content": "Rough day, US-format date.",
+        "created_at": "<TS>",
+        "date": "2025-08-02",
+        "id": 2,
+        "mood": 2,
+        "updated_at": "<TS>"
+      },
+      {
+        "content": "Great workout day.",
+        "created_at": "<TS>",
+        "date": "2025-08-01",
+        "id": 1,
+        "mood": 4,
+        "updated_at": "<TS>"
+      }
+    ]
+  },
+  "notes": "Bare array. Ordered by normalized ISO day DESC (both date formats normalized via _ISO_DAY_EXPR) then created_at DESC. date is echoed verbatim as stored. created_at AND updated_at both default to CURRENT_TIMESTAMP at insert (UTC 'YYYY-MM-DD HH:MM:SS'), so updated_at is never null. Supports ?start_date=&end_date= filtering on the RAW date string (lexicographic BETWEEN, not normalized). contract change: US-format input dates are normalized to ISO before storage, so the entry POSTed as '8/2/2025' is stored and echoed as '2025-08-02' (its position in the list is unchanged \u2014 _ISO_DAY_EXPR already sorted it there)."
+}

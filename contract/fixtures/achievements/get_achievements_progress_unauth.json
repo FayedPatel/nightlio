@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/achievements/progress",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": "No Authorization header and no nightlio_token cookie."
+}

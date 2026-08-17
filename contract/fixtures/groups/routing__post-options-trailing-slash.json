@@ -1,0 +1,21 @@
+{
+  "method": "POST",
+  "path": "/api/groups/1/options/",
+  "scenario": "Trailing slash on POST options: 404",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "X"
+    }
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  }
+}

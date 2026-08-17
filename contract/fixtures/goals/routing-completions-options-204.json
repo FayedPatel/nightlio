@@ -1,0 +1,14 @@
+{
+  "method": "OPTIONS",
+  "path": "/api/goals/1/completions",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "content_type": "text/html",
+    "body": null
+  },
+  "notes": "ROUTING: OPTIONS answers 204 empty before any token check \u2014 no Authorization header needed. Body empty; still labeled text/html. contract change (owner-approved): every OPTIONS in the app now answers 204 with an Allow header (here 'HEAD, GET, OPTIONS'); the old two-regime split between automatic-200 and explicit-204 OPTIONS is gone. The frontend must never treat this as an error despite the no-204 rule for data endpoints."
+}

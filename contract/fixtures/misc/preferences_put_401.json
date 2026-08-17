@@ -1,0 +1,18 @@
+{
+  "method": "PUT",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {},
+    "body": {
+      "theme": "dark"
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "note": "No credentials at all -> 401 before any CSRF or validation check."
+}

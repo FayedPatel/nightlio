@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/goals/2/completions",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": []
+  },
+  "notes": "Goal with no completions -> []. contract change (owner-approved): a nonexistent/foreign goal id no longer shares this 200-[] shape; it now 404s like GET /api/goals/{id} (see goal-completions-200-nonexistent-goal.json)."
+}

@@ -1,0 +1,18 @@
+{
+  "method": "GET",
+  "path": "/api/mood/-1/selections",
+  "scenario": "Negative entry id rejected by the <int:> converter: 404",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  }
+}

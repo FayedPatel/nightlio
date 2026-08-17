@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 3,
+      "date": "2025-08-01",
+      "content": "x",
+      "selected_options": "nope"
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "selected_options must be an array"
+    }
+  },
+  "notes": "selected_options must be an array of integers."
+}

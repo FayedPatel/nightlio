@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/api/auth/local/register",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "username": "alice",
+      "password": "hunter2secret"
+    }
+  },
+  "response": {
+    "status": 409,
+    "content_type": "application/json",
+    "body": {
+      "error": "Username is already taken"
+    }
+  },
+  "notes": [
+    "Backed by sqlite3.IntegrityError on the (auth_provider, external_id) unique index; the service maps it to None and the route to 409."
+  ]
+}

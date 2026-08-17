@@ -1,0 +1,19 @@
+{
+  "method": "PUT",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "X"
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  }
+}

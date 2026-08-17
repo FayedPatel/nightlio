@@ -1,0 +1,17 @@
+{
+  "method": "GET",
+  "path": "/api/groups",
+  "scenario": "Account whose groups have all been deleted: bare empty array",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": []
+  },
+  "notes": "A truly empty groups list is only reachable by deleting the seeded defaults; a fresh account is never empty (see get-groups__fresh-account-defaults.json). Top level is a bare array, not an object."
+}

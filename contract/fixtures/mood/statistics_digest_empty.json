@@ -1,0 +1,25 @@
+{
+  "method": "GET",
+  "path": "/api/statistics/digest?year=2025&month=8",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "average_mood": null,
+      "entries_logged": 0,
+      "longest_streak": 0,
+      "month": 8,
+      "mood_trend": null,
+      "previous_average_mood": null,
+      "top_tags": [],
+      "year": 2025
+    }
+  },
+  "notes": "Empty account: entries_logged 0 (int), average_mood/previous_average_mood/mood_trend null, top_tags [], longest_streak 0. Without params the server defaults to the current local year/month."
+}

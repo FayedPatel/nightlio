@@ -1,0 +1,20 @@
+{
+  "method": "POST",
+  "path": "/api/auth/verify",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer not.a.jwt"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Invalid token"
+    }
+  },
+  "notes": [
+    "An expired (but well-formed) token instead yields 401 {\"error\": \"Token expired\"} -- the middleware string-matches 'expired' in the jose JWTError message."
+  ]
+}

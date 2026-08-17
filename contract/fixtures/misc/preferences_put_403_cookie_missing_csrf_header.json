@@ -1,0 +1,20 @@
+{
+  "method": "PUT",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>"
+    },
+    "body": {
+      "theme": "dark"
+    }
+  },
+  "response": {
+    "status": 403,
+    "content_type": "application/json",
+    "body": {
+      "error": "Missing required request header"
+    }
+  },
+  "note": "Cookie-authenticated state-changing request with Content-Type application/json but WITHOUT X-Requested-With: nightlio -> 403 with exact error string. With a non-JSON Content-Type the earlier check fires: 403 {\"error\": \"Content-Type must be application/json\"}. Bearer requests skip CSRF entirely."
+}

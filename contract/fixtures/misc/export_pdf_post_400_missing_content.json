@@ -1,0 +1,16 @@
+{
+  "method": "POST",
+  "path": "/api/export/pdf",
+  "request": {
+    "headers_that_matter": {},
+    "body": {}
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Content is required"
+    }
+  },
+  "note": "Body without a 'content' key (or empty/non-JSON body) -> 400. Note: request.get_json() without silent=True raises on a non-JSON Content-Type, which Flask turns into the app-level 400 handler {\"error\": \"Bad request\"}."
+}

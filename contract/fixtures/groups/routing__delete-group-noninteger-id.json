@@ -1,0 +1,18 @@
+{
+  "method": "DELETE",
+  "path": "/api/groups/abc",
+  "scenario": "Non-integer id: 404 from the <int:> converter",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  }
+}

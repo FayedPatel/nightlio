@@ -1,0 +1,23 @@
+{
+  "method": "POST",
+  "path": "/api/auth/local/register",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "username": "bob",
+      "password": "hunter2secret"
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "notes": [
+    "require_auth runs before the rate limiter and before any body validation."
+  ]
+}

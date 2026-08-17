@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/music/vibe",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "note": "ENABLE_MOOD_MUSIC unset -> the music blueprint is never registered, so this is a plain routing 404 from the app-level handler \u2014 indistinguishable from any unknown path. No Jamendo call happens. When the flag is truthy the route exists: 200 {track:{...}} or 400 {error} passthrough from MusicService."
+}

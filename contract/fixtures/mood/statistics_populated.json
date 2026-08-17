@@ -1,0 +1,31 @@
+{
+  "method": "GET",
+  "path": "/api/statistics",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "current_streak": 0,
+      "mood_distribution": {
+        "2": 1,
+        "4": 1,
+        "5": 1
+      },
+      "statistics": {
+        "average_mood": 3.67,
+        "first_entry_date": "2025-08-01",
+        "highest_mood": 5,
+        "last_entry_date": "2025-08-03",
+        "lowest_mood": 2,
+        "total_entries": 3
+      }
+    }
+  },
+  "notes": "mood_distribution keys are JSON STRINGS of the int mood values, and only moods actually logged appear. average_mood is round(x,2) (float). first_entry_date/last_entry_date are MIN(date)/MAX(date) on the RAW stored strings (SQL unchanged, still lexicographic). current_streak is 0 because no entry is today/yesterday. contract change: US-format input dates are normalized to ISO before storage (write path + version-2 bootstrap migration), so the entry POSTed as '8/2/2025' is stored as '2025-08-02' and last_entry_date is now the chronologically correct '2025-08-03' instead of the lexicographic US string '8/2/2025'."
+}

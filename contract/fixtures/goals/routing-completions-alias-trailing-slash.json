@@ -1,0 +1,23 @@
+{
+  "method": "GET",
+  "path": "/api/goals/1/completions/",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "date": "<DATE>"
+      },
+      {
+        "date": "<DATE>"
+      }
+    ]
+  },
+  "notes": "ROUTING: trailing-slash alias is a distinct registered rule (strict_slashes=False) returning the exact same body, no redirect."
+}

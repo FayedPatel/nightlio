@@ -1,0 +1,22 @@
+{
+  "method": "POST",
+  "path": "/api/goals",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "description": "no title",
+      "frequency_per_week": 3
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Title is required"
+    }
+  },
+  "notes": "Missing/blank title -> 400. Compare status and shape, not message text."
+}

@@ -1,0 +1,41 @@
+{
+  "method": "GET",
+  "path": "/api/moods?start_date=2025-08-01&end_date=2025-08-31",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "content": "Third day.",
+        "created_at": "<TS>",
+        "date": "2025-08-03",
+        "id": 3,
+        "mood": 5,
+        "updated_at": "<TS>"
+      },
+      {
+        "content": "Rough day, US-format date.",
+        "created_at": "<TS>",
+        "date": "2025-08-02",
+        "id": 2,
+        "mood": 2,
+        "updated_at": "<TS>"
+      },
+      {
+        "content": "Great workout day.",
+        "created_at": "<TS>",
+        "date": "2025-08-01",
+        "id": 1,
+        "mood": 4,
+        "updated_at": "<TS>"
+      }
+    ]
+  },
+  "notes": "?start_date/?end_date filter with a raw-string SQL BETWEEN on the stored date column (no _ISO_DAY_EXPR normalization \u2014 SQL unchanged). contract change: US-format input dates are normalized to ISO before storage (write path + version-2 bootstrap migration), so the entry POSTed as '8/2/2025' is stored as '2025-08-02' and now falls INSIDE the ISO range 2025-08-01..2025-08-31; pre-rewrite it was EXCLUDED because '8...' sorted after '2...'."
+}

@@ -1,0 +1,22 @@
+{
+  "method": "PUT",
+  "path": "/api/goals/1",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "Meditate more",
+      "frequency_per_week": 4
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "ok"
+    }
+  },
+  "notes": "Success body is {'status': 'ok'} regardless of fields changed."
+}

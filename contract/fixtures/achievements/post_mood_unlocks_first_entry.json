@@ -1,0 +1,35 @@
+{
+  "method": "POST",
+  "path": "/api/mood",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 4,
+      "date": "2026-08-15",
+      "content": "Golden fixture seed entry.",
+      "selected_options": []
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "entry_id": 1,
+      "message": "Mood entry created successfully",
+      "new_achievements": [
+        {
+          "achievement_type": "first_entry",
+          "description": "Log your first mood entry",
+          "icon": "Zap",
+          "name": "First Entry",
+          "rarity": "common"
+        }
+      ],
+      "status": "success"
+    }
+  },
+  "notes": "POST /api/mood runs check_achievements internally. contract change: new_achievements is now a list of metadata objects ({name, description, icon, rarity, achievement_type}) — the same shape POST /api/achievements/check returns — instead of achievement_type strings. entry_id is an autoincrement id (value depends on DB state)."
+}

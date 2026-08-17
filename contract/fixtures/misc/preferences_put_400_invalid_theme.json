@@ -1,0 +1,20 @@
+{
+  "method": "PUT",
+  "path": "/api/preferences",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": {
+      "theme": "hotdog-stand"
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "theme must be one of: dark, default, light, synthwave"
+    }
+  },
+  "note": "Allowed set is {default, light, dark, synthwave}; error message joins the sorted set. Same 400 for a missing/absent theme key."
+}

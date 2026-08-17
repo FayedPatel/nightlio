@@ -1,0 +1,50 @@
+{
+  "method": "GET",
+  "path": "/api/activity?limit=3",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "activities": [
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 7,
+          "metadata": {
+            "date": "2026-08-14",
+            "entry_id": 5
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 6,
+          "metadata": {
+            "date": "2026-08-13",
+            "entry_id": 4
+          },
+          "user_id": 1
+        },
+        {
+          "created_at": "<TS>",
+          "event_type": "entry_created",
+          "id": 5,
+          "metadata": {
+            "date": "2026-08-12",
+            "entry_id": 3
+          },
+          "user_id": 1
+        }
+      ],
+      "next_cursor": 5
+    }
+  },
+  "note": "Seeding 5 mood entries after login produced 7 events: 1 login + 5 entry_created + 1 achievement_unlocked (the first_entry unlock is logged as its own activity row). Newest first, keyset on id. ids are autoincrement rows of activity_log \u2014 values depend on seed order. created_at is SQLite 'YYYY-MM-DD HH:MM:SS' UTC, normalized to <TS>. metadata is parsed JSON (object) or null. contract change: next_cursor now means an older row actually exists (server peeks limit+1), no longer merely that the page was full; body unchanged here because rows 4..1 exist beyond this page."
+}

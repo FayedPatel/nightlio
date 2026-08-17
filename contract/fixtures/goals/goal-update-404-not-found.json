@@ -1,0 +1,20 @@
+{
+  "method": "PUT",
+  "path": "/api/goals/999999",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "title": "nope"
+    }
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "No changes or goal not found"
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "method": "POST",
+  "path": "/api/groups/1/options",
+  "scenario": "Create an option under an owned group; option_id is autoincrement",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "name": "Exercise"
+    }
+  },
+  "response": {
+    "status": 201,
+    "content_type": "application/json",
+    "body": {
+      "message": "Option created successfully",
+      "option_id": 28,
+      "status": "success"
+    }
+  },
+  "notes": "option_id is an autoincrement id. It is 28 (not 1) on a fresh DB because seeding creates 27 default options. Group 1 here is the seeded 'Emotions' group."
+}

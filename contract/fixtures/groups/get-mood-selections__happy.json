@@ -1,0 +1,28 @@
+{
+  "method": "GET",
+  "path": "/api/mood/1/selections",
+  "scenario": "Bare array of the entry's selected options with their group name",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": [
+      {
+        "group_name": "Emotions",
+        "id": 2,
+        "name": "excited"
+      },
+      {
+        "group_name": "Emotions",
+        "id": 1,
+        "name": "happy"
+      }
+    ]
+  },
+  "notes": "Shape is {id, name, group_name} per row, ordered by group name then option name. ids are group_options autoincrement ids."
+}

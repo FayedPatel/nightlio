@@ -1,0 +1,21 @@
+{
+  "method": "PUT",
+  "path": "/api/mood/9999",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "mood": 3,
+      "content": "Updated content."
+    }
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Entry not found or no changes made"
+    }
+  }
+}

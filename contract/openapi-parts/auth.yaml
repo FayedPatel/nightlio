@@ -1,0 +1,341 @@
+# OpenAPI 3.1 fragment — auth family (api/routes/auth_routes.py).
+# Recorded against a live Flask instance (port 5301, fresh SQLite, OIDC blanked);
+# cross-checked against api/routes/auth_routes.py, api/utils/auth_middleware.py,
+# api/utils/auth_cookies.py, api/services/user_service.py, api/database_users.py.
+# Merge `paths` and `components` into contract/openapi.yaml.
+#
+# Family-wide facts the Rust port must match:
+# - All success and error bodies are JSON objects; errors are always {"error": string}.
+#   No endpoint here returns a bare array, and none may return 204/empty on 2xx
+#   (the frontend client throws on non-JSON 2xx) — EXCEPT the OPTIONS
+#   responses, which answer 204 with an empty body and an Allow header
+#   (contract change; previously Flask's automatic OPTIONS answered 200).
+# - Trailing-slash variants of every auth path 404 with {"error": "Resource not found"}
+#   (a global JSON 404 handler, api/utils/error_handlers.py — not Werkzeug's HTML 404).
+# - require_auth accepts `Authorization: Bearer <jwt>` first, then falls back to the
+#   `nightlio_token` cookie. Cookie-authenticated POST/PUT/PATCH/DELETE must ALSO send
+#   `Content-Type: application/json` (parameters stripped, case-insensitive) and
+#   `X-Requested-With: nightlio`, or get 403 with exact bodies
+#   {"error": "Content-Type must be application/json"} (checked first) /
+#   {"error": "Missing required request header"}. Bearer requests bypass CSRF entirely.
+#   This applies to POST /api/auth/verify too, despite it being semantically read-only.
+# - Set-Cookie on login (both branches): nightlio_token=<jwt>; Expires=<http-date>;
+#   Max-Age=3600 (mirrors JWT_ACCESS_TOKEN_EXPIRES); HttpOnly; Path=/; SameSite=Lax.
+#   `Secure` is present only when the request is HTTPS (request.is_secure, or
+#   X-Forwarded-Proto: https with TRUST_PROXY_HEADERS truthy); absent over plain HTTP.
+# - Set-Cookie on logout: nightlio_token=; Expires=Thu, 01 Jan 1970 00:00:00 GMT;
+#   Max-Age=0; HttpOnly; Path=/; SameSite=Lax (same conditional Secure).
+# - Rate limits (sqlite-backed, per client): /auth/local/login 30/min,
+#   /auth/local/register 10/min; excess -> 429.
+
+paths:
+  /api/auth/verify:
+    post:
+      operationId: verifyToken
+      summary: Verify the caller's session (Bearer header or cookie) and return user info.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      description: >-
+        Behind require_auth. Semantically read-only but uses POST, so a
+        cookie-authenticated call is subject to the CSRF checks (403 without
+        Content-Type: application/json and X-Requested-With: nightlio); Bearer
+        calls need neither header. Request body is ignored.
+      responses:
+        "200":
+          description: Session valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/AuthUser"
+        "401":
+          description: >-
+            No credentials ({"error": "Authorization header required"} — same
+            body when only the cookie is missing), malformed token
+            ({"error": "Invalid token"}), or expired token
+            ({"error": "Token expired"}). Compare status, not message text.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Cookie-authenticated call failing a CSRF check.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 'Authenticated user id no longer exists ({"error": "User not found"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: 'Unexpected failure ({"error": "Token verification failed"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/logout:
+    post:
+      operationId: logout
+      summary: Clear the session cookie.
+      description: >-
+        Deliberately NOT behind require_auth (and therefore not behind the CSRF
+        gate): must work with an expired/invalid/missing session. Idempotent —
+        always 200 {"status": "success"} with a clearing Set-Cookie
+        (nightlio_token=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0;
+        HttpOnly; Path=/; SameSite=Lax; conditional Secure).
+      responses:
+        "200":
+          description: Cookie cleared (or was never set).
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: Clearing cookie, attributes exactly as described above.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: success
+
+  /api/auth/local/login:
+    post:
+      operationId: localLogin
+      summary: Local login (credentialed, or credential-free self-host mode).
+      description: >-
+        Unauthenticated; rate-limited 30/min. Body is optional JSON. If the
+        parsed body contains `username` OR `password`, the credentialed branch
+        runs: both must be non-empty strings (else 400
+        {"error": "Username and password are required"}), then the password is
+        checked against the stored hash (any failure -> 401
+        {"error": "Invalid credentials"}). With neither key (empty body, no
+        body, or non-JSON body — get_json(silent=True) treats them alike), the
+        credential-free self-host branch issues a token for the default
+        self-host user, but ONLY while OIDC is unconfigured; with OIDC enabled
+        it is 403 {"error": "Credentials required"}. DISABLE_LOCAL_LOGIN=1
+        hard-disables both branches: 403 {"error": "Local login is disabled"}.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Token issued; identical shape for both branches.
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: >-
+                nightlio_token=<jwt>; Expires=<http-date>; Max-Age=3600;
+                HttpOnly; Path=/; SameSite=Lax (+ Secure only over HTTPS).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Credentialed branch with a missing/empty username or password.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unknown username, no stored hash, or wrong password (indistinguishable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Local login disabled, or credential-free branch attempted while OIDC is configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded (30/min).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: 'Unexpected failure ({"error": "Authentication failed"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/local/register:
+    post:
+      operationId: localRegister
+      summary: Create an additional local account (family-account semantics).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      description: >-
+        Behind require_auth (any authenticated user may create accounts; there
+        is no role model) then rate-limited 10/min. Cookie-authenticated calls
+        must satisfy the CSRF checks. Validation order: username required and
+        non-blank string -> 400 {"error": "Username is required"}; password
+        required string -> 400 {"error": "Password is required"}; length >= 8
+        -> 400 {"error": "Password must be at least 8 characters"}. Username is
+        trimmed before storage. Registering does NOT log the new user in (no
+        Set-Cookie, no token in the response).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                password:
+                  type: string
+                  minLength: 8
+                email:
+                  type: string
+                  description: Optional; defaults to "<username>@localhost".
+                name:
+                  type: string
+                  description: Optional; defaults to the username.
+      responses:
+        "201":
+          description: Account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, user]
+                properties:
+                  status:
+                    type: string
+                    const: success
+                  user:
+                    $ref: "#/components/schemas/AuthUser"
+        "400":
+          description: Validation failure (see order in description).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing/invalid credentials (runs before rate limiting and validation).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Cookie-authenticated call failing a CSRF check.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: 'Username already taken ({"error": "Username is already taken"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded (10/min).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: 'Unexpected failure ({"error": "Registration failed"}).'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >-
+        HS256 JWT with claims {user_id: int, exp, iat}. Checked first; presence
+        of any Authorization Bearer header makes the request "header-authed"
+        and exempt from CSRF checks.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: nightlio_token
+      description: >-
+        Same JWT delivered as an httpOnly cookie. Used only when no
+        Authorization header is present. State-changing methods then require
+        Content-Type application/json and X-Requested-With nightlio.
+
+  schemas:
+    AuthUser:
+      type: object
+      description: >-
+        Projection of the users row returned by every auth endpoint
+        (auth_routes._user_payload). Exactly these four keys — never the full
+        DB row (no created_at/last_login/auth_provider/external_id).
+      required: [id, name, email, avatar_url]
+      properties:
+        id:
+          type: integer
+          description: >-
+            SQLite autoincrement. Fixture note: self-host login upserts burn
+            autoincrement values on every conflict, so ids of later-created
+            users have gaps. Never grade exact ids.
+        name:
+          type: [string, "null"]
+          description: >-
+            Nullable in the DB. In practice non-null for self-host ("Me" or
+            SELFHOST_USER_NAME) and local users (defaults to username); OIDC
+            users may have null name.
+        email:
+          type: [string, "null"]
+          description: >-
+            Nullable in the DB. Defaults: self-host "<id>@localhost", local
+            "<username>@localhost"; OIDC users may have null email.
+        avatar_url:
+          type: [string, "null"]
+          description: Null for self-host and local users; set only via OIDC.
+
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: The same HS256 JWT that is also set as the nightlio_token cookie.
+        user:
+          $ref: "#/components/schemas/AuthUser"
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: >-
+        Universal error envelope. Compare status codes and this shape, never
+        the message text (Python exception strings are not reproducible in
+        Rust) — except the two CSRF 403 strings, which the contract fixes
+        exactly: "Content-Type must be application/json" and
+        "Missing required request header".
