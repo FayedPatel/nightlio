@@ -92,6 +92,15 @@ docker-compose*.yml
 
 # Backend files
 api/
+# Rust API (api/Dockerfile has its own build context, ./api, and its
+# own .dockerignore). Without this line the frontend Dockerfile's
+# `COPY . .` would pull the entire Rust crate -- including a 2GB+ target/
+# cache if one exists on the host -- into the node build stage, and every
+# backend-only change would invalidate its `yarn install` layer cache for
+# no reason (the frontend never reads any of it).
+api/
+# would enter the node build stage's `COPY . .` and invalidate its cache
+services/
 data/
 tests/
 scripts/
