@@ -59,6 +59,13 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    strategy:
+      # One shard failing should not cancel the others — each shard's
+      # result is independently useful.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    name: e2e (${{ matrix.shard }}/4)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -86,10 +93,12 @@ jobs:
       # No python needed anywhere: PDF export renders in-process in the
       # Rust binary (markdown2pdf crate, contract/DECISIONS.md #15).
       - run: yarn playwright install --with-deps chromium
-      - run: yarn test:e2e
+      # Shards split by spec file (fullyParallel is false), so each shard
+      # runs ~a quarter of the spec files with its own 4 workers.
+      - run: yarn test:e2e --shard=${{ matrix.shard }}/4
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
