@@ -9,6 +9,13 @@
 #
 # Pulling on a server therefore needs a login first:
 #   echo <PAT with read:packages> | docker login ghcr.io -u <user> --password-stdin
+#
+# Exactly ONE build happens per commit, on the push to main. A release tag
+# (v*) does NOT rebuild: the retag job re-points the semver tag at the
+# sha-tagged image that the main push already built, so 0.5.0 and latest
+# are the same digest. (Previously a release built twice -- once for the
+# merge, once for the tag -- producing two different digests for the same
+# commit and doubling the package-version count on every release.)
 
 name: Publish images
 
@@ -33,10 +40,15 @@ jobs:
   # cannot start until this finishes, and it runs against the same SHA that
   # triggered this workflow. Previously publish.yml had no such gate at all:
   # a red `main` could still publish new "latest" images.
+  # Branch pushes only: a tag points at a commit that already passed this
+  # gate (and was built) when it landed on main, so tag pushes skip
+  # straight to the retag job below.
   test:
+    if: github.ref_type == 'branch'
     uses: ./.github/workflows/test.yml
 
   build-push:
+    if: github.ref_type == 'branch'
     needs: test
     runs-on: ubuntu-latest
     strategy:
@@ -94,9 +106,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          # No type=semver here: this job never runs for tag pushes any
+          # more -- release versions are applied by the retag job below,
+          # which re-points the tag at the sha-* image built here.
           tags: |
             type=ref,event=branch
-            type=semver,pattern={{version}}
             type=sha
             type=raw,value=latest,enable={{is_default_branch}}
 
@@ -127,5 +141,60 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # buildx attaches provenance attestations by default, which show
+          # up in GHCR as two extra untagged "unknown/unknown" versions per
+          # push. Nothing here consumes them, so drop them: each push now
+          # leaves only the manifest list plus its two arch manifests.
+          provenance: false
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  # Release tags re-point, they don't rebuild. `imagetools create` pushes a
+  # new manifest list that references the blobs the main build already
+  # pushed, so the semver tag is byte-identical to the sha-*/latest image
+  # and a release adds zero new builds (and zero new package versions
+  # beyond the tag pointer itself).
+  retag:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      # Needed only to peel the tag to its commit below.
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Point release tag at the sha image built on main
+        run: |
+          set -euo pipefail
+          # HEAD is always the peeled commit, even for annotated tags
+          # (github.sha can be the tag OBJECT for those, which would never
+          # match the commit-keyed sha-* tag from metadata-action).
+          SHA=$(git rev-parse HEAD)
+          SHORT="sha-${SHA:0:7}"           # metadata-action type=sha format
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"  # GHCR requires lowercase
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          for image in nightlio-api nightlio-frontend; do
+            src="ghcr.io/${OWNER}/${image}:${SHORT}"
+            # The tag usually lands minutes after the merge, while the main
+            # build (~20 min) is still running -- wait for its image.
+            found=""
+            for i in $(seq 1 30); do
+              if docker buildx imagetools inspect "$src" >/dev/null 2>&1; then
+                found=1
+                break
+              fi
+              echo "waiting for ${src} (attempt ${i}/30)..."
+              sleep 60
+            done
+            if [ -z "$found" ]; then
+              echo "::error::${src} not found after 30 min. Commit ${SHA} was never built on main -- merge it first, then tag."
+              exit 1
+            fi
+            docker buildx imagetools create \
+              -t "ghcr.io/${OWNER}/${image}:${VERSION}" "$src"
+          done
