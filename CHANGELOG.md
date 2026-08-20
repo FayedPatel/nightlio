@@ -2,6 +2,26 @@
 
 Notable changes to this fork of [shirsakm/nightlio](https://github.com/shirsakm/nightlio).
 
+## [0.5.0] - 2026-08-20
+
+A small polish release: a friendlier entry editor and a rebuilt image-publishing pipeline.
+
+### Fixed
+
+- **The entry editor starts truly empty.** The "How was your day?" template used to be real editor content you had to delete before typing; it is now a faded native placeholder that disappears on focus, works under every theme, and never triggers an autosave when nothing has been typed.
+
+### Publishing & CI
+
+- **Exactly one image build per merge.** A release used to build every image twice — once for the merge to `main`, once for the `v*` tag — producing two different digests for the same commit. Tag pushes no longer rebuild: a lightweight retag job re-points the release version at the image the merge already built, so `0.5.0` and `latest` are byte-identical.
+- Provenance attestations are disabled (`provenance: false`), removing two untagged "unknown/unknown" manifests per push from the package listings.
+- New weekly **GHCR cleanup workflow** (multi-arch aware): deletes dangling untagged manifests and keeps only the newest 8 per-commit `sha-*` versions. Release versions, `latest`, and `main` are never touched.
+
+### Docs
+
+- README no longer claims single-digit megabytes of API memory; real-world usage with data is 10–16 MB.
+
+[0.5.0]: https://github.com/FayedPatel/nightlio/releases/tag/v0.5.0
+
 ## [0.4.0] - 2026-08-16
 
 The full rewrite: the Flask/Python backend is replaced by a Rust API (Axum + rusqlite) and the entire frontend and browser-test suite is converted to strict TypeScript. Same app, same data, same wire contract where it made sense — and a deliberately better one where it didn't.
