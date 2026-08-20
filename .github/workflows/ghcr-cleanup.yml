@@ -14,9 +14,13 @@
 # Expectation: the count never reaches zero -- every live multi-arch
 # version keeps 2 untagged arch-manifest children by design.
 #
-# NIGHTLIO_TOKEN must be a CLASSIC PAT with read:packages, write:packages,
-# delete:packages, stored as a repo Actions secret. GHCR does not accept
-# fine-grained PATs for user-owned packages.
+# Auth: the built-in GITHUB_TOKEN suffices. Both packages were published
+# by this repo's workflows, which links them to the repo and grants it
+# admin on the package, so `packages: write` below covers version
+# deletion. No PAT secret needed. (If GitHub ever severs that link --
+# e.g. the packages are recreated outside Actions -- deletion starts
+# failing 403 and the fix is a classic PAT with read/write/delete:packages
+# stored as a repo secret, swapped into `token:` below.)
 
 name: GHCR cleanup
 
@@ -49,7 +53,7 @@ jobs:
     steps:
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          token: ${{ secrets.NIGHTLIO_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           owner: ${{ github.repository_owner }}
           package: ${{ matrix.package }}
           delete-untagged: true
