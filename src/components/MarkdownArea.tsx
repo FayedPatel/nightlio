@@ -32,10 +32,6 @@ import type { MDXEditorMethods } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 import useMediaQuery from '../hooks/useMediaQuery';
 
-const DEFAULT_MARKDOWN = `# How was your day?
-
-Write about your thoughts, feelings, and experiences...`;
-
 /**
  * Imperative surface consumers reach through the forwarded ref
  * (EntryView's markdownRef).
@@ -96,13 +92,37 @@ const MyComponent = forwardRef<MarkdownAreaHandle, MarkdownAreaProps>(({ initial
           .mdx-editor a { color: var(--accent-600) !important; }
           .mdx-editor code { color: var(--text) !important; }
           .mdx-editor pre { color: var(--text) !important; }
+          /* Placeholder: MDXEditor gives the placeholder div the same class
+             as the contenteditable ("prose") but no contenteditable
+             attribute. Library CSS forces nowrap+ellipsis (single line);
+             undo that so the two-part placeholder can render. Fade with
+             opacity so it stays muted under every theme's --text without
+             fighting the color !important rules above. */
+          .mdx-editor .prose:not([contenteditable]) {
+            white-space: normal !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            opacity: 0.5;
+          }
+          .mdx-editor .entry-placeholder-title {
+            display: block;
+            font-size: 1.6em;
+            font-weight: 700;
+            margin-bottom: 0.6em;
+          }
         `}
       </style>
       <MDXEditor
         ref={editorRef}
-        markdown={initialMarkdown || DEFAULT_MARKDOWN}
+        markdown={initialMarkdown ?? ''}
         {...(onChange ? { onChange } : {})}
         contentEditableClassName="prose"
+        placeholder={
+          <span className="entry-placeholder">
+            <span className="entry-placeholder-title">How was your day?</span>
+            Write about your thoughts, feelings, and experiences...
+          </span>
+        }
         plugins={[
           headingsPlugin(),
           listsPlugin(),

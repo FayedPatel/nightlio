@@ -28,10 +28,6 @@ import type {
 } from '../types/api';
 import type { MoodEntryWithSelections } from '../hooks/useMoodData';
 
-const DEFAULT_MARKDOWN = `# How was your day?
-
-Write about your thoughts, feelings, and experiences...`;
-const DEFAULT_MARKDOWN_TRIMMED = DEFAULT_MARKDOWN.trim();
 const AUTOSAVE_DEBOUNCE_MS = 1200;
 
 type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'disabled';
@@ -125,7 +121,7 @@ const EntryView = ({
 
   const [selectedOptions, setSelectedOptions] = useState<number[]>(initialSelectionIds);
   const [showMoodPicker, setShowMoodPicker] = useState(false);
-  const [markdownContent, setMarkdownContent] = useState(editingEntry?.content || DEFAULT_MARKDOWN);
+  const [markdownContent, setMarkdownContent] = useState(editingEntry?.content ?? '');
   // New entries only: which local day the entry is journaled for. Editing an
   // existing entry keeps its stored date untouched.
   const [entryDate, setEntryDate] = useState(todayISO());
@@ -202,7 +198,7 @@ const EntryView = ({
 
     setSelectedOptions([]);
     setActiveEntryId(null);
-    setMarkdownContent(DEFAULT_MARKDOWN);
+    setMarkdownContent('');
     setEntryDate(todayISO());
     createdByAutosaveRef.current = false;
     skipAutosaveFlushRef.current = false;
@@ -210,7 +206,7 @@ const EntryView = ({
     isHydratingEditorRef.current = true;
     const instance = markdownRef.current?.getInstance?.();
     if (instance && typeof instance.setMarkdown === 'function') {
-      instance.setMarkdown(DEFAULT_MARKDOWN);
+      instance.setMarkdown('');
     }
     queueMicrotask(() => {
       isHydratingEditorRef.current = false;
@@ -218,7 +214,7 @@ const EntryView = ({
 
     lastSavedSnapshotRef.current = buildSnapshot({
       mood: selectedMoodRef.current,
-      content: DEFAULT_MARKDOWN,
+      content: '',
       selectedOptions: [],
       date: todayISO(),
     });
@@ -436,7 +432,7 @@ const EntryView = ({
     }
 
     const trimmed = payload.content.trim();
-    const hasMeaningfulContent = Boolean(trimmed) && trimmed !== DEFAULT_MARKDOWN_TRIMMED;
+    const hasMeaningfulContent = Boolean(trimmed);
 
     if (!hasMeaningfulContent) {
       setSaveState(activeEntryIdRef.current ? 'saved' : 'idle');
@@ -497,12 +493,12 @@ const EntryView = ({
 
   const resetDraftComposer = () => {
     isHydratingEditorRef.current = true;
-    markdownRef.current?.getInstance?.()?.setMarkdown(DEFAULT_MARKDOWN);
+    markdownRef.current?.getInstance?.()?.setMarkdown('');
     queueMicrotask(() => {
       isHydratingEditorRef.current = false;
     });
 
-    setMarkdownContent(DEFAULT_MARKDOWN);
+    setMarkdownContent('');
     setSelectedOptions([]);
     setShowMoodPicker(false);
     setSaveErrorMessage('');
@@ -510,7 +506,7 @@ const EntryView = ({
 
     const resetSnapshot = buildSnapshot({
       mood: selectedMood,
-      content: DEFAULT_MARKDOWN,
+      content: '',
       selectedOptions: [],
       date: entryDate,
     });
@@ -518,7 +514,7 @@ const EntryView = ({
     latestPayloadRef.current = {
       payload: {
         mood: selectedMood ? Number(selectedMood) : null,
-        content: DEFAULT_MARKDOWN,
+        content: '',
         selected_options: [],
         date: entryDate,
       },
@@ -773,7 +769,7 @@ const EntryView = ({
         <div className="entry-right">
           <MDArea
             ref={markdownRef}
-            initialMarkdown={editingEntry?.content || DEFAULT_MARKDOWN}
+            initialMarkdown={editingEntry?.content ?? ''}
             onChange={handleEditorChange}
           />
         </div>

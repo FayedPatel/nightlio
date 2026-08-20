@@ -87,6 +87,13 @@ describe('EntryView entry date', () => {
     );
   });
 
+  it('does not autosave when nothing has been typed', async () => {
+    await renderEntryView();
+    await flushAutosave();
+
+    expect(apiService.createMoodEntry).not.toHaveBeenCalled();
+  });
+
   it('blocks future dates in the date input', async () => {
     await renderEntryView();
     const input = screen.getByLabelText<HTMLInputElement>('Entry date');
