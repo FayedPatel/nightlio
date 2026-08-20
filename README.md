@@ -15,7 +15,7 @@
 
 ## Why Nightlio?
 
-Nightlio was inspired by mood-tracking apps like Daylio, but born out of frustration with subscription models, paywalls, and single-device lock-in. It's a feature-complete, open-source alternative you can run anywhere: fully web-based, responsive on desktop and mobile, no ads, no subscriptions, no data mining. Your journal lives in one SQLite file on *your* server, behind an API that ships as one 158 MB Rust container image and runs in single-digit megabytes of RAM.
+Nightlio was inspired by mood-tracking apps like Daylio, but born out of frustration with subscription models, paywalls, and single-device lock-in. It's a feature-complete, open-source alternative you can run anywhere: fully web-based, responsive on desktop and mobile, no ads, no subscriptions, no data mining. Your journal lives in one SQLite file on *your* server, behind an API that ships as one 158 MB Rust container image and runs in 10–16 MB of RAM in everyday use.
 
 ## A tour
 

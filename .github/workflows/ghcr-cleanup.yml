@@ -1,0 +1,67 @@
+# Prune GHCR package versions so the version list stays readable:
+#
+#   - delete dangling untagged manifests (leftovers from the era when a
+#     release built twice and from cancelled/superseded runs). Live arch
+#     children of tagged multi-arch images are NOT deleted -- the action is
+#     multi-arch aware, which is exactly why it is used instead of the
+#     official actions/delete-package-versions (that one would delete the
+#     amd64/arm64 children out from under tagged manifest lists and break
+#     pulls).
+#   - keep only the newest 8 sha-* per-commit versions; release versions
+#     (*.*.*), latest, and main are excluded from every rule and are never
+#     deleted, so rollback to any published release keeps working.
+#
+# Expectation: the count never reaches zero -- every live multi-arch
+# version keeps 2 untagged arch-manifest children by design.
+#
+# Auth: the built-in GITHUB_TOKEN suffices. Both packages were published
+# by this repo's workflows, which links them to the repo and grants it
+# admin on the package, so `packages: write` below covers version
+# deletion. No PAT secret needed. (If GitHub ever severs that link --
+# e.g. the packages are recreated outside Actions -- deletion starts
+# failing 403 and the fix is a classic PAT with read/write/delete:packages
+# stored as a repo secret, swapped into `token:` below.)
+
+name: GHCR cleanup
+
+on:
+  schedule:
+    # Weekly, Sunday 04:00 UTC.
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Log what would be deleted without deleting
+        type: boolean
+        default: false
+
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+permissions:
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    strategy:
+      # One package failing to clean should not stop the other.
+      fail-fast: false
+      matrix:
+        package: [nightlio-api, nightlio-frontend]
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ${{ github.repository_owner }}
+          package: ${{ matrix.package }}
+          delete-untagged: true
+          keep-n-tagged: 8
+          # Protected before keep-n-tagged is applied and never counted
+          # toward its 8, so only sha-* versions age out.
+          exclude-tags: 'latest,main,*.*.*'
+          # Verify multi-arch images still have all their platform
+          # children after deletion.
+          validate: true
+          dry-run: ${{ inputs.dry-run || false }}

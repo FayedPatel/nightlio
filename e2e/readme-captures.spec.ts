@@ -132,15 +132,11 @@ const logMoodFlow = async (page: Page) => {
   await expect(editor).toBeVisible();
   await page.waitForTimeout(700);
 
-  // Clear the "How was your day?" placeholder before writing, then write
-  // the way a person would: a short heading, Enter, then body text (the
-  // cleared block keeps the placeholder's H1 format, so the first line IS
-  // the heading and Enter drops into a paragraph).
+  // The editor starts empty with a faded placeholder, so just focus and
+  // write the way a person would: "# " turns the first line into an H1
+  // (markdown shortcut), Enter drops into a paragraph for the body.
   await editor.click();
-  await page.keyboard.press('ControlOrMeta+a');
-  await page.waitForTimeout(250);
-  await page.keyboard.press('Delete');
-  await page.waitForTimeout(400);
+  await page.keyboard.type('# ', { delay: 55 });
   await page.keyboard.type('Evening walk', { delay: 55 });
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
