@@ -1,0 +1,236 @@
+# OpenAPI 3.1 fragment — i18n language-pack family (NEW in v0.6.0).
+# Source: api/src/routes/i18n.rs + api/src/i18n.rs (Rust-native; this family
+# never existed in Flask, so there are no recordings — the hand-authored
+# fixtures in contract/fixtures/i18n/ ARE the contract, per the
+# DECISIONS.md entry dated 2026-08-22). Merge into contract/openapi.yaml.
+#
+# Family rules (all fixture-encoded):
+#   - BOTH routes are unauthenticated — no Authorization header, no cookie,
+#     no 401/403 path exists. They must stay reachable pre-login: the
+#     frontend fetches packs before any session exists.
+#   - Caching contract: GET /api/i18n/{code} 200 carries the strong
+#     validator `ETag: "<code>-<version>"` plus
+#     `Cache-Control: public, max-age=3600`; an If-None-Match hit (exact
+#     string compare, quotes included) yields 304 with an empty body and
+#     the same ETag + Cache-Control. GET /api/i18n/languages carries
+#     Cache-Control only — the list has no single stable version identity,
+#     so it gets NO ETag (owner decision, DECISIONS.md 2026-08-22). The
+#     browser HTTP cache is the caching layer (the service worker is
+#     NetworkOnly for /api/*).
+#   - English is NEVER listed by /api/i18n/languages, even when an en pack
+#     is cached; the frontend unions bundled English into its picker.
+#     GET /api/i18n/en still serves a cached en pack — that is how English
+#     itself stays hot-swappable.
+#   - Empty states are soft: nothing cached ⇒ languages returns
+#     {"languages": []} and every pack code 404s; clients run on bundled
+#     English. Upstream (GitHub) failures never surface on these routes —
+#     the server serves stale cache forever or the empty state.
+#   - Routing matches the rest of the app: rules registered without
+#     trailing slashes (slash variants 404 with the JSON envelope), POST →
+#     unified 405 JSON envelope + Allow, OPTIONS → automatic 204 empty +
+#     Allow. The {code} segment is an opaque string (no <int:> converter
+#     semantics); the static "languages" segment wins over {code}.
+
+paths:
+  /api/i18n/languages:
+    get:
+      operationId: listLanguages
+      summary: List server-cached language packs (unauthenticated)
+      description: >-
+        Object envelope, never a bare array. Entries are projections of the
+        cached pack envelopes (code/name/native_name/version — never the
+        strings map), sorted by code ascending. Empty list when nothing is
+        cached (fresh instance, I18N_OFFLINE, or GitHub unreachable with a
+        cold cache). English is never listed (the frontend unions bundled
+        English). Response carries Cache-Control public, max-age=3600 and
+        no ETag. /api/i18n/languages/ (trailing slash) is a 404.
+      responses:
+        "200":
+          description: >-
+            Available packs (possibly none). Headers: Cache-Control
+            "public, max-age=3600"; no ETag on this endpoint.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguagesResponse"
+
+  /api/i18n/{code}:
+    get:
+      operationId: getLanguagePack
+      summary: Fetch a cached language pack by code (unauthenticated)
+      description: >-
+        Serves the cached pack envelope for the code, or the standard
+        app-level 404 envelope when no pack for that code is cached (cold
+        cache ⇒ every code 404s, including en). 200s carry the strong
+        validator ETag "<code>-<version>" and Cache-Control public,
+        max-age=3600; If-None-Match with the current ETag (exact string
+        compare, quotes included) yields 304 — empty body, same ETag +
+        Cache-Control. The 304 joins the GET /api 308 as the only
+        empty-body non-OPTIONS responses; browsers revalidate
+        transparently, so fetch() surfaces the cached 200.
+      parameters:
+        - $ref: "#/components/parameters/LanguageCode"
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: >-
+            Conditional-request validator; send the previously returned
+            ETag verbatim (quotes included) to get a 304 when the pack
+            version is unchanged.
+      responses:
+        "200":
+          description: >-
+            The pack envelope. Headers: ETag "<code>-<version>" (strong),
+            Cache-Control "public, max-age=3600".
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Strong validator, exactly "<code>-<version>" in quotes.
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguagePack"
+        "304":
+          description: >-
+            If-None-Match matched the current ETag. Empty body, no
+            Content-Type; same ETag + Cache-Control headers as the 200.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+        "404":
+          description: >-
+            No pack cached for this code — standard app-level JSON 404
+            {"error": "Resource not found"}, indistinguishable from an
+            unknown path. No caching headers on the 404.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    LanguageCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+      description: >-
+        Opaque lowercase language code (e.g. es), matching the pack's
+        language field and the lang-<code>-v<semver> release tag. A plain
+        string path segment — no <int:> converter semantics. The literal
+        segment "languages" is unreachable here (the static route wins).
+
+  schemas:
+    LanguagesResponse:
+      type: object
+      required: [languages]
+      properties:
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageInfo"
+      description: >-
+        Object envelope (never a bare array — the six bare-array endpoints
+        are a closed set). Sorted by code ascending; empty when nothing is
+        cached; never includes English.
+
+    LanguageInfo:
+      type: object
+      required: [code, name, native_name, version]
+      properties:
+        code:
+          type: string
+          description: Language code, matches the GET /api/i18n/{code} segment.
+        name:
+          type: string
+          description: English display name (e.g. Spanish).
+        native_name:
+          type: string
+          description: >-
+            Self-name in the language itself (e.g. Español). Raw UTF-8 on
+            the wire, never \uXXXX escapes (contract encoding fact).
+        version:
+          type: string
+          description: Pack semver from the lang-<code>-v<semver> release tag.
+
+    LanguagePack:
+      type: object
+      required: [schema_version, language, name, native_name, version, strings]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          description: >-
+            Envelope format version, pinned integer 1; a future breaking
+            envelope change bumps it.
+        language:
+          type: string
+          description: Language code; equals the {code} path segment.
+        name:
+          type: string
+        native_name:
+          type: string
+        version:
+          type: string
+          description: Pack semver; also the second half of the ETag.
+        strings:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/I18nStringsNode"
+          description: >-
+            NESTED translation tree mirroring the src/i18n/en.json source
+            format: each object key is one segment of the dot-path id and
+            every leaf is a string, so {"nav": {"home": "Inicio"}} carries
+            the id nav.home (owner decision, DECISIONS.md 2026-08-22
+            amendment — nested end-to-end). Clients flatten the tree to
+            dot-keys for lookup; partial packs are legal — the lookup order
+            flat(pack.strings)[key] ?? en[key] ?? key makes missing keys
+            safe. A flat dot-key map is accepted on input as the degenerate
+            nesting (a top-level "nav.home" key flattens identically), but
+            the canonical wire form is nested and the server serves packs
+            exactly as validated. {date}-style interpolation placeholders
+            pass through verbatim. Server-side validation caps the pack at
+            1 MiB and rejects non-string leaves before caching.
+      description: >-
+        Exactly these six keys. schema_version/language/name/native_name/
+        version echo the release asset; strings carries the translations.
+
+    I18nStringsNode:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties:
+            $ref: "#/components/schemas/I18nStringsNode"
+      description: >-
+        One node of the nested strings tree: either a translated string
+        (leaf) or a deeper object whose keys are further dot-path segments.
+        Nothing else is legal — arrays, numbers, booleans, and null are
+        rejected anywhere in the tree by server-side validation.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: >-
+        Uniform JSON error envelope (shared app-wide; grade status + shape,
+        never message text).

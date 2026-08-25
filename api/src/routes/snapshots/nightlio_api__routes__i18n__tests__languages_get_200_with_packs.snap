@@ -1,0 +1,27 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": {
+    "languages": [
+      {
+        "code": "es",
+        "name": "Spanish",
+        "native_name": "Español",
+        "version": "1.0.0"
+      },
+      {
+        "code": "fr",
+        "name": "French",
+        "native_name": "Français",
+        "version": "1.2.0"
+      }
+    ]
+  },
+  "content_type": "application/json",
+  "headers": {
+    "Cache-Control": "public, max-age=3600"
+  },
+  "status": 200
+}

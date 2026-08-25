@@ -3,8 +3,16 @@
 //! plus the rate-limiter behavior the fixtures only describe in notes
 //! (30/min login, 10/min register, TESTING bypass, fail-open, proxy-aware
 //! client IP bucketing).
+//!
+//! Since v0.6.0 every test loops over the available backends
+//! (`support::backends()`): SQLite always, exactly as before, plus a
+//! PostgreSQL twin replaying the same fixtures byte-identically when
+//! `NIGHTLIO_PG_TEST_URL` is set (see `tests/support/mod.rs`). The rate
+//! limiter keeps its own SQLite store on both backends.
 
 use std::collections::{BTreeMap, HashMap};
+
+mod support;
 
 use axum::Router;
 use axum::body::Body;
@@ -26,14 +34,15 @@ use nightlio_api::state::AppState;
 struct TestApp {
     app: Router,
     jwt_secret: String,
-    db_path: String,
-    _dir: tempfile::TempDir,
+    db: support::TestDb,
 }
 
-/// Development-env app on a tempfile DB. `RATE_LIMIT_DB_PATH` is always
-/// pointed into the tempdir so parallel tests never share a limiter store
-/// (the default would be the repo-relative `data/rate_limit.db`).
-fn make_app(extra: &[(&str, &str)]) -> TestApp {
+/// Development-env app on a tempfile DB (or a private PostgreSQL database
+/// when the backend is `Pg`). `RATE_LIMIT_DB_PATH` is always pointed into
+/// the tempdir so parallel tests never share a limiter store (the default
+/// would be the repo-relative `data/rate_limit.db`; the limiter stays a
+/// SQLite file on both backends).
+async fn make_app_on(backend: support::Backend, extra: &[(&str, &str)]) -> TestApp {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("nightlio.db");
     let rate_limit_path = dir.path().join("rate_limit.db");
@@ -49,15 +58,32 @@ fn make_app(extra: &[(&str, &str)]) -> TestApp {
     let lookup = move |key: &str| vars.get(key).cloned();
     let mut cfg = Config::from_lookup(&lookup);
     cfg.database_path = db_path.to_string_lossy().into_owned();
-    db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
-    let pool = db::open_pool(&cfg.database_path).expect("pool");
     let jwt_secret = cfg.jwt_secret.clone();
-    let db_path = cfg.database_path.clone();
+    let (handle, test_db) = match backend {
+        support::Backend::Sqlite => {
+            db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
+            let pool = db::open_pool(&cfg.database_path).expect("pool");
+            (
+                db::DbHandle::Sqlite(pool),
+                support::TestDb::Sqlite {
+                    path: cfg.database_path.clone(),
+                    _dir: dir,
+                },
+            )
+        }
+        support::Backend::Pg => {
+            let url = support::create_pg_db(&SelfHostSeed::from(&cfg)).await;
+            let pool = db::pg::build_pool(&url).expect("pg pool");
+            (
+                db::DbHandle::Pg(pool),
+                support::TestDb::Pg { url, _dir: dir },
+            )
+        }
+    };
     TestApp {
-        app: routes::build_router(AppState::new(cfg, pool)),
+        app: routes::build_router(AppState::new(cfg, handle)),
         jwt_secret,
-        db_path,
-        _dir: dir,
+        db: test_db,
     }
 }
 
@@ -222,230 +248,252 @@ fn assert_session_cookie(response: &Response, expected_token: &str) {
 
 #[tokio::test]
 async fn verify_bearer_matches_fixture() {
-    let fx = fixture("verify_bearer-200.json");
-    let test = make_app(&[]);
-    let auth = test.bearer(1);
-    let response = test
-        .post(
-            "/api/auth/verify",
-            &[("Authorization", auth.as_str())],
-            None,
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    assert_json_content_type(&response);
-    assert!(
-        response.headers().get(header::SET_COOKIE).is_none(),
-        "verify never refreshes the cookie"
-    );
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!("verify_bearer_200", json!({"status": 200, "body": body}));
+    for backend in support::backends() {
+        let fx = fixture("verify_bearer-200.json");
+        let test = make_app_on(backend, &[]).await;
+        let auth = test.bearer(1);
+        let response = test
+            .post(
+                "/api/auth/verify",
+                &[("Authorization", auth.as_str())],
+                None,
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        assert_json_content_type(&response);
+        assert!(
+            response.headers().get(header::SET_COOKIE).is_none(),
+            "verify never refreshes the cookie"
+        );
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!("verify_bearer_200", json!({"status": 200, "body": body}));
+    }
 }
 
 #[tokio::test]
 async fn verify_cookie_with_csrf_headers_matches_fixture() {
-    let fx = fixture("verify_cookie-with-csrf-headers-200.json");
-    let test = make_app(&[]);
-    let cookie = format!(
-        "nightlio_token={}",
-        jwt::issue_token(&test.jwt_secret, 1).unwrap()
-    );
-    let response = test
-        .post(
-            "/api/auth/verify",
-            &[
-                ("Cookie", cookie.as_str()),
-                ("Content-Type", "application/json"),
-                ("X-Requested-With", "nightlio"),
-            ],
-            None,
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "verify_cookie_with_csrf_headers_200",
-        json!({"status": 200, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("verify_cookie-with-csrf-headers-200.json");
+        let test = make_app_on(backend, &[]).await;
+        let cookie = format!(
+            "nightlio_token={}",
+            jwt::issue_token(&test.jwt_secret, 1).unwrap()
+        );
+        let response = test
+            .post(
+                "/api/auth/verify",
+                &[
+                    ("Cookie", cookie.as_str()),
+                    ("Content-Type", "application/json"),
+                    ("X-Requested-With", "nightlio"),
+                ],
+                None,
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "verify_cookie_with_csrf_headers_200",
+            json!({"status": 200, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn verify_cookie_without_csrf_headers_matches_fixture() {
-    let fx = fixture("verify_cookie-without-csrf-headers-403.json");
-    let test = make_app(&[]);
-    let cookie = format!(
-        "nightlio_token={}",
-        jwt::issue_token(&test.jwt_secret, 1).unwrap()
-    );
-    // Cookie only, no Content-Type: the Content-Type check fires first.
-    let response = test
-        .post("/api/auth/verify", &[("Cookie", cookie.as_str())], None)
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    assert_json_content_type(&response);
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "verify_cookie_without_csrf_headers_403",
-        json!({"status": 403, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("verify_cookie-without-csrf-headers-403.json");
+        let test = make_app_on(backend, &[]).await;
+        let cookie = format!(
+            "nightlio_token={}",
+            jwt::issue_token(&test.jwt_secret, 1).unwrap()
+        );
+        // Cookie only, no Content-Type: the Content-Type check fires first.
+        let response = test
+            .post("/api/auth/verify", &[("Cookie", cookie.as_str())], None)
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        assert_json_content_type(&response);
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "verify_cookie_without_csrf_headers_403",
+            json!({"status": 403, "body": body})
+        );
 
-    // With JSON Content-Type but no X-Requested-With, the second check
-    // fires instead (fixture notes: checks run in that order).
-    let response = test
-        .post(
-            "/api/auth/verify",
-            &[
-                ("Cookie", cookie.as_str()),
-                ("Content-Type", "application/json"),
-            ],
-            None,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Missing required request header" })
-    );
+        // With JSON Content-Type but no X-Requested-With, the second check
+        // fires instead (fixture notes: checks run in that order).
+        let response = test
+            .post(
+                "/api/auth/verify",
+                &[
+                    ("Cookie", cookie.as_str()),
+                    ("Content-Type", "application/json"),
+                ],
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Missing required request header" })
+        );
+    }
 }
 
 #[tokio::test]
 async fn verify_invalid_token_matches_fixture() {
-    let fx = fixture("verify_invalid-token-401.json");
-    let test = make_app(&[]);
-    let response = test
-        .post(
-            "/api/auth/verify",
-            &[("Authorization", "Bearer not.a.jwt")],
-            None,
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "verify_invalid_token_401",
-        json!({"status": 401, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("verify_invalid-token-401.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post(
+                "/api/auth/verify",
+                &[("Authorization", "Bearer not.a.jwt")],
+                None,
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "verify_invalid_token_401",
+            json!({"status": 401, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn verify_no_auth_matches_fixture() {
-    let fx = fixture("verify_no-auth-401.json");
-    let test = make_app(&[]);
-    let response = test.post("/api/auth/verify", &[], None).await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!("verify_no_auth_401", json!({"status": 401, "body": body}));
+    for backend in support::backends() {
+        let fx = fixture("verify_no-auth-401.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test.post("/api/auth/verify", &[], None).await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!("verify_no_auth_401", json!({"status": 401, "body": body}));
+    }
 }
 
 #[tokio::test]
 async fn verify_unknown_user_is_404() {
-    // Valid token for a user id with no row: the route's own 404 branch.
-    let test = make_app(&[]);
-    let auth = test.bearer(9999);
-    let response = test
-        .post(
-            "/api/auth/verify",
-            &[("Authorization", auth.as_str())],
-            None,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "User not found" })
-    );
+    for backend in support::backends() {
+        // Valid token for a user id with no row: the route's own 404 branch.
+        let test = make_app_on(backend, &[]).await;
+        let auth = test.bearer(9999);
+        let response = test
+            .post(
+                "/api/auth/verify",
+                &[("Authorization", auth.as_str())],
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "User not found" })
+        );
+    }
 }
 
 #[tokio::test]
 async fn verify_options_matches_fixture() {
-    let fx = fixture("verify_options-204.json");
-    // The fixture was recorded with http://localhost:5000 in CORS_ORIGINS.
-    let test = make_app(&[(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:5000",
-    )]);
-    let response = test
-        .send(
-            Request::builder()
-                .method("OPTIONS")
-                .uri("/api/auth/verify")
-                .header(header::ORIGIN, "http://localhost:5000")
-                .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                .body(Body::empty())
-                .unwrap(),
+    for backend in support::backends() {
+        let fx = fixture("verify_options-204.json");
+        // The fixture was recorded with http://localhost:5000 in CORS_ORIGINS.
+        let test = make_app_on(
+            backend,
+            &[(
+                "CORS_ORIGINS",
+                "http://localhost:5173,http://localhost:5000",
+            )],
         )
         .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let expected_headers = &fx["response"]["headers_that_matter"];
-    for name in [
-        "Allow",
-        "Access-Control-Allow-Origin",
-        "Access-Control-Allow-Credentials",
-        "Access-Control-Allow-Methods",
-    ] {
-        assert_eq!(
-            response
-                .headers()
-                .get(name)
-                .and_then(|value| value.to_str().ok()),
-            expected_headers[name].as_str(),
-            "{name}"
-        );
+        let response = test
+            .send(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/auth/verify")
+                    .header(header::ORIGIN, "http://localhost:5000")
+                    .header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let expected_headers = &fx["response"]["headers_that_matter"];
+        for name in [
+            "Allow",
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Credentials",
+            "Access-Control-Allow-Methods",
+        ] {
+            assert_eq!(
+                response
+                    .headers()
+                    .get(name)
+                    .and_then(|value| value.to_str().ok()),
+                expected_headers[name].as_str(),
+                "{name}"
+            );
+        }
+        // contract change: the fixture no longer records Content-Length
+        // (the wire 204 carries none — hyper strips it at serialization).
+        assert_eq!(body_string(response).await, "");
     }
-    // contract change: the fixture no longer records Content-Length
-    // (the wire 204 carries none — hyper strips it at serialization).
-    assert_eq!(body_string(response).await, "");
 }
 
 #[tokio::test]
 async fn verify_plain_options_is_automatic_204() {
-    // Without preflight headers: automatic OPTIONS, same 204-empty (contract
-    // change).
-    let test = make_app(&[]);
-    let response = test
-        .send(
-            Request::builder()
-                .method("OPTIONS")
-                .uri("/api/auth/verify")
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::NO_CONTENT);
-    assert_eq!(
-        response
-            .headers()
-            .get(header::ALLOW)
-            .and_then(|value| value.to_str().ok()),
-        Some("POST, OPTIONS")
-    );
-    assert_eq!(body_string(response).await, "");
+    for backend in support::backends() {
+        // Without preflight headers: automatic OPTIONS, same 204-empty (contract
+        // change).
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .send(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/auth/verify")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get(header::ALLOW)
+                .and_then(|value| value.to_str().ok()),
+            Some("POST, OPTIONS")
+        );
+        assert_eq!(body_string(response).await, "");
+    }
 }
 
 #[tokio::test]
 async fn verify_trailing_slash_matches_fixture() {
-    let fx = fixture("verify_trailing-slash-404.json");
-    let test = make_app(&[]);
-    let auth = test.bearer(1);
-    let response = test
-        .post(
-            "/api/auth/verify/",
-            &[("Authorization", auth.as_str())],
-            None,
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "verify_trailing_slash_404",
-        json!({"status": 404, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("verify_trailing-slash-404.json");
+        let test = make_app_on(backend, &[]).await;
+        let auth = test.bearer(1);
+        let response = test
+            .post(
+                "/api/auth/verify/",
+                &[("Authorization", auth.as_str())],
+                None,
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "verify_trailing_slash_404",
+            json!({"status": 404, "body": body})
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -454,37 +502,39 @@ async fn verify_trailing_slash_matches_fixture() {
 
 #[tokio::test]
 async fn logout_matches_fixture_and_is_idempotent() {
-    let fx = fixture("logout_200.json");
-    let test = make_app(&[]);
-    for round in 0..2 {
-        let response = test.post("/api/auth/logout", &[], None).await;
-        assert_eq!(
-            response.status().as_u16(),
-            fixture_status(&fx),
-            "round {round}"
-        );
-        assert_json_content_type(&response);
+    for backend in support::backends() {
+        let fx = fixture("logout_200.json");
+        let test = make_app_on(backend, &[]).await;
+        for round in 0..2 {
+            let response = test.post("/api/auth/logout", &[], None).await;
+            assert_eq!(
+                response.status().as_u16(),
+                fixture_status(&fx),
+                "round {round}"
+            );
+            assert_json_content_type(&response);
 
-        // Clearing cookie, attribute-exact vs the recorded header:
-        // empty value, Expires at the epoch, Max-Age=0, HttpOnly, Path=/,
-        // SameSite=Lax, Secure absent over plain HTTP.
-        let (name, value, attrs) = parse_set_cookie(&set_cookie_header(&response));
-        let (fx_name, fx_value, fx_attrs) = parse_set_cookie(
-            fx["response"]["headers_that_matter"]["Set-Cookie"]
-                .as_str()
-                .unwrap(),
-        );
-        assert_eq!(name, fx_name);
-        assert_eq!(value, fx_value);
-        assert_eq!(
-            attrs, fx_attrs,
-            "clearing cookie attribute set must match verbatim"
-        );
+            // Clearing cookie, attribute-exact vs the recorded header:
+            // empty value, Expires at the epoch, Max-Age=0, HttpOnly, Path=/,
+            // SameSite=Lax, Secure absent over plain HTTP.
+            let (name, value, attrs) = parse_set_cookie(&set_cookie_header(&response));
+            let (fx_name, fx_value, fx_attrs) = parse_set_cookie(
+                fx["response"]["headers_that_matter"]["Set-Cookie"]
+                    .as_str()
+                    .unwrap(),
+            );
+            assert_eq!(name, fx_name);
+            assert_eq!(value, fx_value);
+            assert_eq!(
+                attrs, fx_attrs,
+                "clearing cookie attribute set must match verbatim"
+            );
 
-        let body = body_json(response).await;
-        assert_eq!(body, fx["response"]["body"]);
-        if round == 0 {
-            insta::assert_json_snapshot!("logout_200", json!({"status": 200, "body": body}));
+            let body = body_json(response).await;
+            assert_eq!(body, fx["response"]["body"]);
+            if round == 0 {
+                insta::assert_json_snapshot!("logout_200", json!({"status": 200, "body": body}));
+            }
         }
     }
 }
@@ -495,364 +545,422 @@ async fn logout_matches_fixture_and_is_idempotent() {
 
 #[tokio::test]
 async fn login_selfhost_credential_free_matches_fixture() {
-    let fx = fixture("local-login_selfhost-credential-free.json");
-    let test = make_app(&[]);
-    let response = test
-        .post("/api/auth/local/login", &[], Some(json!({})))
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    assert_json_content_type(&response);
-    let cookie_header = set_cookie_header(&response);
-    let body = body_json(response).await;
-    // The cookie carries the same token as the body.
-    let token = body["token"].as_str().expect("token").to_string();
-    assert_eq!(
-        jwt::verify_token(&test.jwt_secret, &token).unwrap().user_id,
-        1
-    );
-    {
-        let (name, value, _) = parse_set_cookie(&cookie_header);
+    for backend in support::backends() {
+        let fx = fixture("local-login_selfhost-credential-free.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post("/api/auth/local/login", &[], Some(json!({})))
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        assert_json_content_type(&response);
+        let cookie_header = set_cookie_header(&response);
+        let body = body_json(response).await;
+        // The cookie carries the same token as the body.
+        let token = body["token"].as_str().expect("token").to_string();
         assert_eq!(
-            (name.as_str(), value.as_str()),
-            ("nightlio_token", token.as_str())
+            jwt::verify_token(&test.jwt_secret, &token).unwrap().user_id,
+            1
+        );
+        {
+            let (name, value, _) = parse_set_cookie(&cookie_header);
+            assert_eq!(
+                (name.as_str(), value.as_str()),
+                ("nightlio_token", token.as_str())
+            );
+        }
+
+        let body = normalized(body, false);
+        assert_eq!(body, normalized(fx["response"]["body"].clone(), false));
+        insta::assert_json_snapshot!(
+            "local_login_selfhost_credential_free_200",
+            json!({"status": 200, "body": body})
         );
     }
-
-    let body = normalized(body, false);
-    assert_eq!(body, normalized(fx["response"]["body"].clone(), false));
-    insta::assert_json_snapshot!(
-        "local_login_selfhost_credential_free_200",
-        json!({"status": 200, "body": body})
-    );
 }
 
 #[tokio::test]
 async fn login_selfhost_no_body_matches_fixture() {
-    let fx = fixture("local-login_selfhost-no-body.json");
-    let test = make_app(&[]);
-    // No Content-Type header and no body at all: get_json(silent=True)
-    // yields None, treated as {}.
-    let response = test.post("/api/auth/local/login", &[], None).await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let token = {
-        let (_, value, _) = parse_set_cookie(&set_cookie_header(&response));
-        value
-    };
-    assert_session_cookie(&response, &token);
-    let body = normalized(body_json(response).await, false);
-    assert_eq!(body, normalized(fx["response"]["body"].clone(), false));
-    insta::assert_json_snapshot!(
-        "local_login_selfhost_no_body_200",
-        json!({"status": 200, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-login_selfhost-no-body.json");
+        let test = make_app_on(backend, &[]).await;
+        // No Content-Type header and no body at all: get_json(silent=True)
+        // yields None, treated as {}.
+        let response = test.post("/api/auth/local/login", &[], None).await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let token = {
+            let (_, value, _) = parse_set_cookie(&set_cookie_header(&response));
+            value
+        };
+        assert_session_cookie(&response, &token);
+        let body = normalized(body_json(response).await, false);
+        assert_eq!(body, normalized(fx["response"]["body"].clone(), false));
+        insta::assert_json_snapshot!(
+            "local_login_selfhost_no_body_200",
+            json!({"status": 200, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn login_non_json_content_type_is_credential_free() {
-    // get_json(silent=True) semantics: a text/plain body containing valid
-    // credential JSON is NOT parsed — the credential-free branch answers.
-    let test = make_app(&[]);
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("Content-Type", "text/plain")],
-            None,
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    assert_eq!(body_json(response).await["user"]["id"], json!(1));
+    for backend in support::backends() {
+        // get_json(silent=True) semantics: a text/plain body containing valid
+        // credential JSON is NOT parsed — the credential-free branch answers.
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[("Content-Type", "text/plain")],
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(body_json(response).await["user"]["id"], json!(1));
+    }
 }
 
 #[tokio::test]
 async fn login_credentialed_matches_fixture() {
-    let fx = fixture("local-login_credentialed.json");
-    let test = make_app(&[]);
-    let created = test
-        .register(json!({
-            "username": "alice",
-            "password": "hunter2secret",
-            "email": "alice@example.com",
-            "name": "Alice"
-        }))
-        .await;
-    assert_eq!(created.status(), StatusCode::CREATED);
+    for backend in support::backends() {
+        let fx = fixture("local-login_credentialed.json");
+        let test = make_app_on(backend, &[]).await;
+        let created = test
+            .register(json!({
+                "username": "alice",
+                "password": "hunter2secret",
+                "email": "alice@example.com",
+                "name": "Alice"
+            }))
+            .await;
+        assert_eq!(created.status(), StatusCode::CREATED);
 
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "alice", "password": "hunter2secret"})),
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let cookie_header = set_cookie_header(&response);
-    let body = body_json(response).await;
-    let token = body["token"].as_str().expect("token").to_string();
-    let (_, cookie_value, _) = parse_set_cookie(&cookie_header);
-    assert_eq!(cookie_value, token);
-    // user.id is autoincrement — fixture notes say not to grade it.
-    let body = normalized(body, true);
-    assert_eq!(body, normalized(fx["response"]["body"].clone(), true));
-    insta::assert_json_snapshot!(
-        "local_login_credentialed_200",
-        json!({"status": 200, "body": body})
-    );
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "alice", "password": "hunter2secret"})),
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let cookie_header = set_cookie_header(&response);
+        let body = body_json(response).await;
+        let token = body["token"].as_str().expect("token").to_string();
+        let (_, cookie_value, _) = parse_set_cookie(&cookie_header);
+        assert_eq!(cookie_value, token);
+        // user.id is autoincrement — fixture notes say not to grade it.
+        let body = normalized(body, true);
+        assert_eq!(body, normalized(fx["response"]["body"].clone(), true));
+        insta::assert_json_snapshot!(
+            "local_login_credentialed_200",
+            json!({"status": 200, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn login_missing_password_matches_fixture() {
-    let fx = fixture("local-login_missing-password-400.json");
-    let test = make_app(&[]);
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "alice"})),
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_login_missing_password_400",
-        json!({"status": 400, "body": body})
-    );
-
-    // Empty-string values are only truthiness-checked: same 400. And key
-    // presence alone (password only) also routes into the credentialed
-    // branch instead of self-host mode.
-    for bad in [
-        json!({"username": "", "password": ""}),
-        json!({"username": "alice", "password": ""}),
-        json!({"password": "hunter2secret"}),
-    ] {
-        let response = test.post("/api/auth/local/login", &[], Some(bad)).await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Username and password are required" })
+    for backend in support::backends() {
+        let fx = fixture("local-login_missing-password-400.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "alice"})),
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_login_missing_password_400",
+            json!({"status": 400, "body": body})
         );
+
+        // Empty-string values are only truthiness-checked: same 400. And key
+        // presence alone (password only) also routes into the credentialed
+        // branch instead of self-host mode.
+        for bad in [
+            json!({"username": "", "password": ""}),
+            json!({"username": "alice", "password": ""}),
+            json!({"password": "hunter2secret"}),
+        ] {
+            let response = test.post("/api/auth/local/login", &[], Some(bad)).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Username and password are required" })
+            );
+        }
     }
 }
 
 #[tokio::test]
 async fn login_wrong_password_matches_fixture() {
-    let fx = fixture("local-login_wrong-password-401.json");
-    let test = make_app(&[]);
-    let created = test
-        .register(json!({"username": "alice", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(created.status(), StatusCode::CREATED);
+    for backend in support::backends() {
+        let fx = fixture("local-login_wrong-password-401.json");
+        let test = make_app_on(backend, &[]).await;
+        let created = test
+            .register(json!({"username": "alice", "password": "hunter2secret"}))
+            .await;
+        assert_eq!(created.status(), StatusCode::CREATED);
 
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "alice", "password": "wrongpassword"})),
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    assert!(
-        response.headers().get(header::SET_COOKIE).is_none(),
-        "no Set-Cookie on failure"
-    );
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_login_wrong_password_401",
-        json!({"status": 401, "body": body})
-    );
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "alice", "password": "wrongpassword"})),
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        assert!(
+            response.headers().get(header::SET_COOKIE).is_none(),
+            "no Set-Cookie on failure"
+        );
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_login_wrong_password_401",
+            json!({"status": 401, "body": body})
+        );
 
-    // Unknown username: deliberately the identical body.
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "nobody", "password": "hunter2secret"})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Invalid credentials" })
-    );
+        // Unknown username: deliberately the identical body.
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "nobody", "password": "hunter2secret"})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Invalid credentials" })
+        );
+    }
 }
 
 #[tokio::test]
 async fn login_trailing_slash_matches_fixture() {
-    let fx = fixture("local-login_trailing-slash-404.json");
-    let test = make_app(&[]);
-    let response = test
-        .post("/api/auth/local/login/", &[], Some(json!({})))
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_login_trailing_slash_404",
-        json!({"status": 404, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-login_trailing-slash-404.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post("/api/auth/local/login/", &[], Some(json!({})))
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_login_trailing_slash_404",
+            json!({"status": 404, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn login_credential_free_403_when_oidc_configured() {
-    // Fixture notes: with OIDC configured the same request is 403.
-    // DISABLE_LOCAL_LOGIN=0 is explicit here: with OIDC configured the flag
-    // now defaults to true (owner-approved behavior change), which would
-    // trip the earlier "Local login is disabled" guard; the explicit 0
-    // keeps local login enabled so the credential-free branch's own
-    // fail-closed OIDC check is what refuses.
-    let test = make_app(&[
-        ("OIDC_ISSUER_URL", "https://id.example.com"),
-        ("DISABLE_LOCAL_LOGIN", "0"),
-    ]);
-    let response = test
-        .post("/api/auth/local/login", &[], Some(json!({})))
+    for backend in support::backends() {
+        // Fixture notes: with OIDC configured the same request is 403.
+        // DISABLE_LOCAL_LOGIN=0 is explicit here: with OIDC configured the flag
+        // now defaults to true (owner-approved behavior change), which would
+        // trip the earlier "Local login is disabled" guard; the explicit 0
+        // keeps local login enabled so the credential-free branch's own
+        // fail-closed OIDC check is what refuses.
+        let test = make_app_on(
+            backend,
+            &[
+                ("OIDC_ISSUER_URL", "https://id.example.com"),
+                ("DISABLE_LOCAL_LOGIN", "0"),
+            ],
+        )
         .await;
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Credentials required" })
-    );
+        let response = test
+            .post("/api/auth/local/login", &[], Some(json!({})))
+            .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Credentials required" })
+        );
+    }
 }
 
 #[tokio::test]
 async fn login_defaults_disabled_when_oidc_configured() {
-    // Owner-approved behavior change: OIDC configured + DISABLE_LOCAL_LOGIN
-    // unset -> local login defaults OFF, so both branches hit the
-    // "Local login is disabled" guard.
-    let test = make_app(&[("OIDC_ISSUER_URL", "https://id.example.com")]);
-    for body in [
-        json!({}),
-        json!({"username": "alice", "password": "hunter2secret"}),
-    ] {
-        let response = test.post("/api/auth/local/login", &[], Some(body)).await;
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Local login is disabled" })
-        );
+    for backend in support::backends() {
+        // Owner-approved behavior change: OIDC configured + DISABLE_LOCAL_LOGIN
+        // unset -> local login defaults OFF, so both branches hit the
+        // "Local login is disabled" guard.
+        let test = make_app_on(backend, &[("OIDC_ISSUER_URL", "https://id.example.com")]).await;
+        for body in [
+            json!({}),
+            json!({"username": "alice", "password": "hunter2secret"}),
+        ] {
+            let response = test.post("/api/auth/local/login", &[], Some(body)).await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Local login is disabled" })
+            );
+        }
     }
 }
 
 #[tokio::test]
 async fn login_disabled_403_refuses_both_branches() {
-    let test = make_app(&[("DISABLE_LOCAL_LOGIN", "1")]);
-    for body in [
-        json!({}),
-        json!({"username": "alice", "password": "hunter2secret"}),
-    ] {
-        let response = test.post("/api/auth/local/login", &[], Some(body)).await;
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Local login is disabled" })
-        );
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[("DISABLE_LOCAL_LOGIN", "1")]).await;
+        for body in [
+            json!({}),
+            json!({"username": "alice", "password": "hunter2secret"}),
+        ] {
+            let response = test.post("/api/auth/local/login", &[], Some(body)).await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Local login is disabled" })
+            );
+        }
     }
 }
 
 #[tokio::test]
 async fn login_selfhost_honors_configured_identity() {
-    let test = make_app(&[
-        ("SELFHOST_USER_NAME", "Night Owl"),
-        ("SELFHOST_USER_EMAIL", "me@example.com"),
-    ]);
-    let response = test
-        .post("/api/auth/local/login", &[], Some(json!({})))
+    for backend in support::backends() {
+        let test = make_app_on(
+            backend,
+            &[
+                ("SELFHOST_USER_NAME", "Night Owl"),
+                ("SELFHOST_USER_EMAIL", "me@example.com"),
+            ],
+        )
         .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let body = body_json(response).await;
-    assert_eq!(body["user"]["name"], json!("Night Owl"));
-    assert_eq!(body["user"]["email"], json!("me@example.com"));
+        let response = test
+            .post("/api/auth/local/login", &[], Some(json!({})))
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = body_json(response).await;
+        assert_eq!(body["user"]["name"], json!("Night Owl"));
+        assert_eq!(body["user"]["email"], json!("me@example.com"));
+    }
 }
 
 #[tokio::test]
 async fn login_cookie_gains_secure_behind_trusted_https_proxy() {
-    let test = make_app(&[("TRUST_PROXY_HEADERS", "1")]);
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("X-Forwarded-Proto", "https")],
-            Some(json!({})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let (_, _, attrs) = parse_set_cookie(&set_cookie_header(&response));
-    assert!(attrs.contains_key("secure"), "Secure expected: {attrs:?}");
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[("TRUST_PROXY_HEADERS", "1")]).await;
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[("X-Forwarded-Proto", "https")],
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let (_, _, attrs) = parse_set_cookie(&set_cookie_header(&response));
+        assert!(attrs.contains_key("secure"), "Secure expected: {attrs:?}");
 
-    // Same header WITHOUT proxy trust: spoofable, ignored.
-    let test = make_app(&[]);
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("X-Forwarded-Proto", "https")],
-            Some(json!({})),
-        )
-        .await;
-    let (_, _, attrs) = parse_set_cookie(&set_cookie_header(&response));
-    assert!(
-        !attrs.contains_key("secure"),
-        "Secure must be absent: {attrs:?}"
-    );
+        // Same header WITHOUT proxy trust: spoofable, ignored.
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[("X-Forwarded-Proto", "https")],
+                Some(json!({})),
+            )
+            .await;
+        let (_, _, attrs) = parse_set_cookie(&set_cookie_header(&response));
+        assert!(
+            !attrs.contains_key("secure"),
+            "Secure must be absent: {attrs:?}"
+        );
+    }
+}
+
+/// Seed a local user directly with a pre-hashed password (the register
+/// route now writes argon2id, so a legacy row can only exist this way),
+/// via the backend's own `create_local_user`.
+async fn seed_legacy_user(db: &support::TestDb, username: &str, hash: &str) -> i64 {
+    match db {
+        support::TestDb::Sqlite { path, .. } => {
+            let conn = db::connect(path).expect("connect");
+            db::users::create_local_user(&conn, username, hash, None, None).expect("seed user")
+        }
+        support::TestDb::Pg { .. } => {
+            let client = db.pg_client().await;
+            nightlio_api::db::pg::users::create_local_user(&client, username, hash, None, None)
+                .await
+                .expect("seed user")
+                .expect("fresh username must not collide")
+        }
+    }
+}
+
+/// The stored password hash for a user, via the backend's own query twin.
+async fn stored_password_hash(db: &support::TestDb, user_id: i64) -> String {
+    match db {
+        support::TestDb::Sqlite { path, .. } => {
+            let conn = db::connect(path).expect("connect");
+            db::users::get_user_password_hash(&conn, user_id)
+                .expect("query")
+                .expect("stored hash")
+        }
+        support::TestDb::Pg { .. } => {
+            let client = db.pg_client().await;
+            nightlio_api::db::pg::users::get_user_password_hash(&client, user_id)
+                .await
+                .expect("query")
+                .expect("stored hash")
+        }
+    }
 }
 
 #[tokio::test]
 async fn login_with_legacy_werkzeug_hash_rehashes_to_argon2id() {
-    let test = make_app(&[]);
-    // Pinned werkzeug hash for "hunter2" (cheap pbkdf2 params keep the test
-    // fast; same pinned fixture family as the password unit tests). Seeded
-    // directly — the register route now writes argon2id, so a legacy row
-    // can only exist via direct insertion.
-    let legacy_hash = "pbkdf2:sha256:1000$9mGk3jaNAJBbWfu4$a956000d41c9a2a08ee917585fe66311acd661744951aac17d3aa9a1e89aca0f";
-    let pool = db::open_pool(&test.db_path).expect("pool");
-    let user_id = {
-        let conn = pool.get().expect("conn");
-        db::users::create_local_user(&conn, "legacy", legacy_hash, None, None).expect("seed user")
-    };
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[]).await;
+        // Pinned werkzeug hash for "hunter2" (cheap pbkdf2 params keep the test
+        // fast; same pinned fixture family as the password unit tests). Seeded
+        // directly — the register route now writes argon2id, so a legacy row
+        // can only exist via direct insertion.
+        let legacy_hash = "pbkdf2:sha256:1000$9mGk3jaNAJBbWfu4$a956000d41c9a2a08ee917585fe66311acd661744951aac17d3aa9a1e89aca0f";
+        let user_id = seed_legacy_user(&test.db, "legacy", legacy_hash).await;
 
-    // First login verifies against the werkzeug hash and transparently
-    // upgrades the stored value to argon2id.
-    let creds = json!({"username": "legacy", "password": "hunter2"});
-    let response = test
-        .post("/api/auth/local/login", &[], Some(creds.clone()))
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let stored = {
-        let conn = pool.get().expect("conn");
-        db::users::get_user_password_hash(&conn, user_id)
-            .expect("query")
-            .expect("stored hash")
-    };
-    assert!(
-        stored.starts_with("$argon2id$"),
-        "expected argon2id after rehash-on-login, got {stored}"
-    );
+        // First login verifies against the werkzeug hash and transparently
+        // upgrades the stored value to argon2id.
+        let creds = json!({"username": "legacy", "password": "hunter2"});
+        let response = test
+            .post("/api/auth/local/login", &[], Some(creds.clone()))
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = stored_password_hash(&test.db, user_id).await;
+        assert!(
+            stored.starts_with("$argon2id$"),
+            "expected argon2id after rehash-on-login, got {stored}"
+        );
 
-    // The same password logs in again against the upgraded hash…
-    let response = test.post("/api/auth/local/login", &[], Some(creds)).await;
-    assert_eq!(response.status(), StatusCode::OK);
-    // …and an argon2id hash is left alone (no needless rewrite).
-    let stored_again = {
-        let conn = pool.get().expect("conn");
-        db::users::get_user_password_hash(&conn, user_id)
-            .expect("query")
-            .expect("stored hash")
-    };
-    assert_eq!(stored, stored_again);
+        // The same password logs in again against the upgraded hash…
+        let response = test.post("/api/auth/local/login", &[], Some(creds)).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        // …and an argon2id hash is left alone (no needless rewrite).
+        let stored_again = stored_password_hash(&test.db, user_id).await;
+        assert_eq!(stored, stored_again);
 
-    // Wrong password is still rejected after the upgrade.
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "legacy", "password": "hunter3"})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Invalid credentials" })
-    );
+        // Wrong password is still rejected after the upgrade.
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "legacy", "password": "hunter3"})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Invalid credentials" })
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -861,151 +969,163 @@ async fn login_with_legacy_werkzeug_hash_rehashes_to_argon2id() {
 
 #[tokio::test]
 async fn register_bearer_matches_fixture() {
-    let fx = fixture("local-register_bearer-201.json");
-    let test = make_app(&[]);
-    let response = test
-        .register(json!({
-            "username": "alice",
-            "password": "hunter2secret",
-            "email": "alice@example.com",
-            "name": "Alice"
-        }))
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    assert_json_content_type(&response);
-    assert!(
-        response.headers().get(header::SET_COOKIE).is_none(),
-        "registering does not log the new user in"
-    );
-    let body = normalized(body_json(response).await, true);
-    assert_eq!(body, normalized(fx["response"]["body"].clone(), true));
-    insta::assert_json_snapshot!(
-        "local_register_bearer_201",
-        json!({"status": 201, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-register_bearer-201.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .register(json!({
+                "username": "alice",
+                "password": "hunter2secret",
+                "email": "alice@example.com",
+                "name": "Alice"
+            }))
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        assert_json_content_type(&response);
+        assert!(
+            response.headers().get(header::SET_COOKIE).is_none(),
+            "registering does not log the new user in"
+        );
+        let body = normalized(body_json(response).await, true);
+        assert_eq!(body, normalized(fx["response"]["body"].clone(), true));
+        insta::assert_json_snapshot!(
+            "local_register_bearer_201",
+            json!({"status": 201, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn register_defaults_email_and_name() {
-    // DB-layer defaults: email -> "<username>@localhost", name -> username;
-    // never null in the response.
-    let test = make_app(&[]);
-    let response = test
-        .register(json!({"username": "carol", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let body = body_json(response).await;
-    assert_eq!(body["user"]["email"], json!("carol@localhost"));
-    assert_eq!(body["user"]["name"], json!("carol"));
-    assert_eq!(body["user"]["avatar_url"], Value::Null);
+    for backend in support::backends() {
+        // DB-layer defaults: email -> "<username>@localhost", name -> username;
+        // never null in the response.
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .register(json!({"username": "carol", "password": "hunter2secret"}))
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = body_json(response).await;
+        assert_eq!(body["user"]["email"], json!("carol@localhost"));
+        assert_eq!(body["user"]["name"], json!("carol"));
+        assert_eq!(body["user"]["avatar_url"], Value::Null);
 
-    // Whitespace around the username is stripped before use.
-    let response = test
-        .register(json!({"username": "  dave  ", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(response.status(), StatusCode::CREATED);
-    let body = body_json(response).await;
-    assert_eq!(body["user"]["name"], json!("dave"));
+        // Whitespace around the username is stripped before use.
+        let response = test
+            .register(json!({"username": "  dave  ", "password": "hunter2secret"}))
+            .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let body = body_json(response).await;
+        assert_eq!(body["user"]["name"], json!("dave"));
 
-    // The new user can immediately log in.
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[],
-            Some(json!({"username": "carol", "password": "hunter2secret"})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
+        // The new user can immediately log in.
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[],
+                Some(json!({"username": "carol", "password": "hunter2secret"})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }
 
 #[tokio::test]
 async fn register_duplicate_matches_fixture() {
-    let fx = fixture("local-register_duplicate-409.json");
-    let test = make_app(&[]);
-    let first = test
-        .register(json!({"username": "alice", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(first.status(), StatusCode::CREATED);
-    let response = test
-        .register(json!({"username": "alice", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_register_duplicate_409",
-        json!({"status": 409, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-register_duplicate-409.json");
+        let test = make_app_on(backend, &[]).await;
+        let first = test
+            .register(json!({"username": "alice", "password": "hunter2secret"}))
+            .await;
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let response = test
+            .register(json!({"username": "alice", "password": "hunter2secret"}))
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_register_duplicate_409",
+            json!({"status": 409, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn register_no_auth_matches_fixture() {
-    let fx = fixture("local-register_no-auth-401.json");
-    let test = make_app(&[]);
-    let response = test
-        .post(
-            "/api/auth/local/register",
-            &[],
-            Some(json!({"username": "bob", "password": "hunter2secret"})),
-        )
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_register_no_auth_401",
-        json!({"status": 401, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-register_no-auth-401.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .post(
+                "/api/auth/local/register",
+                &[],
+                Some(json!({"username": "bob", "password": "hunter2secret"})),
+            )
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_register_no_auth_401",
+            json!({"status": 401, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn register_short_password_matches_fixture() {
-    let fx = fixture("local-register_short-password-400.json");
-    let test = make_app(&[]);
-    let response = test
-        .register(json!({"username": "carol", "password": "short"}))
-        .await;
-    assert_eq!(response.status().as_u16(), fixture_status(&fx));
-    let body = body_json(response).await;
-    assert_eq!(body, fx["response"]["body"]);
-    insta::assert_json_snapshot!(
-        "local_register_short_password_400",
-        json!({"status": 400, "body": body})
-    );
+    for backend in support::backends() {
+        let fx = fixture("local-register_short-password-400.json");
+        let test = make_app_on(backend, &[]).await;
+        let response = test
+            .register(json!({"username": "carol", "password": "short"}))
+            .await;
+        assert_eq!(response.status().as_u16(), fixture_status(&fx));
+        let body = body_json(response).await;
+        assert_eq!(body, fx["response"]["body"]);
+        insta::assert_json_snapshot!(
+            "local_register_short_password_400",
+            json!({"status": 400, "body": body})
+        );
+    }
 }
 
 #[tokio::test]
 async fn register_validation_order_username_then_password() {
-    let test = make_app(&[]);
-    // Missing / blank / non-string username → "Username is required".
-    for body in [
-        json!({}),
-        json!({"username": "", "password": "hunter2secret"}),
-        json!({"username": "   ", "password": "hunter2secret"}),
-        json!({"username": 123, "password": "hunter2secret"}),
-        json!({"username": null, "password": "hunter2secret"}),
-    ] {
-        let response = test.register(body.clone()).await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Username is required" }),
-            "{body}"
-        );
-    }
-    // Missing / empty / non-string password → "Password is required".
-    for body in [
-        json!({"username": "bob"}),
-        json!({"username": "bob", "password": ""}),
-        json!({"username": "bob", "password": 12345678}),
-    ] {
-        let response = test.register(body.clone()).await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Password is required" }),
-            "{body}"
-        );
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[]).await;
+        // Missing / blank / non-string username → "Username is required".
+        for body in [
+            json!({}),
+            json!({"username": "", "password": "hunter2secret"}),
+            json!({"username": "   ", "password": "hunter2secret"}),
+            json!({"username": 123, "password": "hunter2secret"}),
+            json!({"username": null, "password": "hunter2secret"}),
+        ] {
+            let response = test.register(body.clone()).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Username is required" }),
+                "{body}"
+            );
+        }
+        // Missing / empty / non-string password → "Password is required".
+        for body in [
+            json!({"username": "bob"}),
+            json!({"username": "bob", "password": ""}),
+            json!({"username": "bob", "password": 12345678}),
+        ] {
+            let response = test.register(body.clone()).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Password is required" }),
+                "{body}"
+            );
+        }
     }
 }
 
@@ -1015,90 +1135,112 @@ async fn register_validation_order_username_then_password() {
 
 #[tokio::test]
 async fn login_rate_limited_after_30_per_minute() {
-    let test = make_app(&[]);
-    for i in 0..30 {
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[]).await;
+        for i in 0..30 {
+            let response = test
+                .post("/api/auth/local/login", &[], Some(json!({})))
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        }
         let response = test
             .post("/api/auth/local/login", &[], Some(json!({})))
             .await;
-        assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Rate limit exceeded. Please try again later." })
+        );
     }
-    let response = test
-        .post("/api/auth/local/login", &[], Some(json!({})))
-        .await;
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Rate limit exceeded. Please try again later." })
-    );
 }
 
 #[tokio::test]
 async fn register_rate_limited_after_10_per_minute_but_not_before_auth() {
-    let test = make_app(&[]);
-    // Even failing (400) requests consume budget: the limiter wraps the
-    // view, running before body validation.
-    for i in 0..10 {
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[]).await;
+        // Even failing (400) requests consume budget: the limiter wraps the
+        // view, running before body validation.
+        for i in 0..10 {
+            let response = test
+                .register(json!({"username": "carol", "password": "short"}))
+                .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "request {i}");
+        }
         let response = test
-            .register(json!({"username": "carol", "password": "short"}))
+            .register(json!({"username": "carol", "password": "hunter2secret"}))
             .await;
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "request {i}");
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Rate limit exceeded. Please try again later." })
+        );
+        // require_auth still runs BEFORE the limiter: an unauthenticated
+        // request gets 401, never 429.
+        let response = test
+            .post(
+                "/api/auth/local/register",
+                &[],
+                Some(json!({"username": "x", "password": "hunter2secret"})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        // And the login endpoint's budget is untouched (separate bucket).
+        let response = test
+            .post("/api/auth/local/login", &[], Some(json!({})))
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
     }
-    let response = test
-        .register(json!({"username": "carol", "password": "hunter2secret"}))
-        .await;
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Rate limit exceeded. Please try again later." })
-    );
-    // require_auth still runs BEFORE the limiter: an unauthenticated
-    // request gets 401, never 429.
-    let response = test
-        .post(
-            "/api/auth/local/register",
-            &[],
-            Some(json!({"username": "x", "password": "hunter2secret"})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    // And the login endpoint's budget is untouched (separate bucket).
-    let response = test
-        .post("/api/auth/local/login", &[], Some(json!({})))
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn rate_limiter_bypassed_in_testing_env() {
-    let test = make_app(&[("APP_ENV", "testing")]);
-    for i in 0..35 {
-        let response = test
-            .post("/api/auth/local/login", &[], Some(json!({})))
-            .await;
-        assert_eq!(response.status(), StatusCode::OK, "request {i}");
+    for backend in support::backends() {
+        let test = make_app_on(backend, &[("APP_ENV", "testing")]).await;
+        for i in 0..35 {
+            let response = test
+                .post("/api/auth/local/login", &[], Some(json!({})))
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        }
     }
 }
 
 #[tokio::test]
 async fn rate_limiter_fails_open_when_store_is_unwritable() {
-    // Point the limiter store at a directory: every check errors, and the
-    // deliberate FAIL-OPEN policy lets logins through instead of 500/429.
-    let dir = tempfile::tempdir().unwrap();
-    let test = make_app(&[("RATE_LIMIT_DB_PATH", dir.path().to_string_lossy().as_ref())]);
-    for i in 0..3 {
-        let response = test
-            .post("/api/auth/local/login", &[], Some(json!({})))
-            .await;
-        assert_eq!(response.status(), StatusCode::OK, "request {i}");
+    for backend in support::backends() {
+        // Point the limiter store at a directory: every check errors, and the
+        // deliberate FAIL-OPEN policy lets logins through instead of 500/429.
+        let dir = tempfile::tempdir().unwrap();
+        let test = make_app_on(
+            backend,
+            &[("RATE_LIMIT_DB_PATH", dir.path().to_string_lossy().as_ref())],
+        )
+        .await;
+        for i in 0..3 {
+            let response = test
+                .post("/api/auth/local/login", &[], Some(json!({})))
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        }
     }
 }
 
 #[tokio::test]
 async fn forwarded_for_buckets_only_when_proxy_is_trusted() {
-    // Trusted proxy: X-Forwarded-For (first value) is the bucket key, so a
-    // different client behind the same proxy gets a fresh budget.
-    let test = make_app(&[("TRUST_PROXY_HEADERS", "1")]);
-    for i in 0..30 {
+    for backend in support::backends() {
+        // Trusted proxy: X-Forwarded-For (first value) is the bucket key, so a
+        // different client behind the same proxy gets a fresh budget.
+        let test = make_app_on(backend, &[("TRUST_PROXY_HEADERS", "1")]).await;
+        for i in 0..30 {
+            let response = test
+                .post(
+                    "/api/auth/local/login",
+                    &[("X-Forwarded-For", "9.9.9.9, 10.0.0.1")],
+                    Some(json!({})),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        }
         let response = test
             .post(
                 "/api/auth/local/login",
@@ -1106,45 +1248,37 @@ async fn forwarded_for_buckets_only_when_proxy_is_trusted() {
                 Some(json!({})),
             )
             .await;
-        assert_eq!(response.status(), StatusCode::OK, "request {i}");
-    }
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("X-Forwarded-For", "9.9.9.9, 10.0.0.1")],
-            Some(json!({})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("X-Forwarded-For", "8.8.8.8")],
-            Some(json!({})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::OK);
-
-    // Untrusted (default): the forged header is ignored — every caller
-    // shares the fallback bucket, so rotating the header cannot bypass the
-    // cap.
-    let test = make_app(&[]);
-    for i in 0..30 {
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         let response = test
             .post(
                 "/api/auth/local/login",
-                &[("X-Forwarded-For", &format!("1.2.3.{i}"))],
+                &[("X-Forwarded-For", "8.8.8.8")],
                 Some(json!({})),
             )
             .await;
-        assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Untrusted (default): the forged header is ignored — every caller
+        // shares the fallback bucket, so rotating the header cannot bypass the
+        // cap.
+        let test = make_app_on(backend, &[]).await;
+        for i in 0..30 {
+            let response = test
+                .post(
+                    "/api/auth/local/login",
+                    &[("X-Forwarded-For", &format!("1.2.3.{i}"))],
+                    Some(json!({})),
+                )
+                .await;
+            assert_eq!(response.status(), StatusCode::OK, "request {i}");
+        }
+        let response = test
+            .post(
+                "/api/auth/local/login",
+                &[("X-Forwarded-For", "7.7.7.7")],
+                Some(json!({})),
+            )
+            .await;
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
-    let response = test
-        .post(
-            "/api/auth/local/login",
-            &[("X-Forwarded-For", "7.7.7.7")],
-            Some(json!({})),
-        )
-        .await;
-    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 }

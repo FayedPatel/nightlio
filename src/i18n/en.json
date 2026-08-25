@@ -1,0 +1,584 @@
+{
+  "common": {
+    "appName": "Nightlio",
+    "tagline": "Your daily mood companion.",
+    "logoAlt": "Nightlio logo",
+    "cancel": "Cancel",
+    "loading": "Loading...",
+    "viewAll": "View All",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "progress": "Progress",
+    "logout": "Logout",
+    "dateAtTime": "{date} at {time}",
+    "streakTitle": "{count} day streak",
+    "streakBadgeLabel": " Day Streak",
+    "themeTitle": "Theme: {theme}",
+    "toggleThemeAria": "Toggle theme",
+    "burnerModeOn": "Burner mode: on",
+    "burnerModeOff": "Burner mode: off",
+    "toggleBurnerAria": "Toggle burner mode",
+    "toggleLayoutThemeAria": "Toggle layout theme",
+    "day": {
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat"
+    },
+    "monthShort": {
+      "1": "Jan",
+      "2": "Feb",
+      "3": "Mar",
+      "4": "Apr",
+      "5": "May",
+      "6": "Jun",
+      "7": "Jul",
+      "8": "Aug",
+      "9": "Sep",
+      "10": "Oct",
+      "11": "Nov",
+      "12": "Dec"
+    },
+    "monthFull": {
+      "1": "January",
+      "2": "February",
+      "3": "March",
+      "4": "April",
+      "5": "May",
+      "6": "June",
+      "7": "July",
+      "8": "August",
+      "9": "September",
+      "10": "October",
+      "11": "November",
+      "12": "December"
+    }
+  },
+  "nav": {
+    "home": "Home",
+    "history": "History",
+    "goals": "Goals",
+    "stats": "Statistics",
+    "statsShort": "Stats",
+    "achievements": "Achievements",
+    "achievementsShort": "Awards",
+    "settings": "Settings"
+  },
+  "landing": {
+    "navAria": "Main",
+    "features": "Features",
+    "about": "About",
+    "github": "GitHub",
+    "contact": "Contact",
+    "signIn": "Sign in",
+    "viewOnGitHub": "View on GitHub",
+    "tag": "Self-hosted · Open source",
+    "hero": {
+      "line1": "Your moods.",
+      "line2": "Your server.",
+      "line3": "Your rules.",
+      "description": "Nightlio is a privacy-first mood tracker and daily journal that runs entirely on your own hardware. No ads, no subscriptions, and absolutely no data mining — just you and the night."
+    },
+    "card": {
+      "label": "The mood scale",
+      "note": "Every entry starts with one tap on this scale, then as much or as little writing as you want."
+    },
+    "why": {
+      "title": "Built for mindful nights and focused mornings"
+    },
+    "highlights": {
+      "privacy": {
+        "title": "Privacy First",
+        "description": "Your data lives in one SQLite file on your own server. No third-party trackers, no analytics, no cloud."
+      },
+      "journaling": {
+        "title": "Rich Journaling",
+        "description": "Markdown notes for every entry — formatting, lists, and links. Forgot a day? Backdate it."
+      },
+      "yours": {
+        "title": "Make It Yours",
+        "description": "Four built-in themes — including the synthwave look you are staring at — saved to your account."
+      }
+    },
+    "featuresSection": {
+      "title": "Everything you need to capture your story"
+    },
+    "featureBlocks": {
+      "logging": {
+        "title": "Effortless Logging",
+        "item1": "Log your mood in seconds on a 5-point scale",
+        "item2": "Tag entries with categories like \"Sleep\" or \"Work\"",
+        "item3": "Autosave keeps every word without a save button"
+      },
+      "consistency": {
+        "title": "Gamified Consistency",
+        "item1": "Earn achievements as you build the habit",
+        "item2": "Track your streak day to day",
+        "item3": "Set weekly goals and mark daily progress"
+      },
+      "analytics": {
+        "title": "Insightful Analytics",
+        "item1": "Calendar heatmap of your mood history",
+        "item2": "Rolling averages and trend lines",
+        "item3": "Spot the patterns behind your state of mind"
+      }
+    },
+    "selfHost": {
+      "title": "Self-host it in minutes"
+    },
+    "terminal": {
+      "title": "nightlio — zsh"
+    },
+    "quickstart": {
+      "notePrefix": "Two containers, one SQLite file, no external services. Full walkthrough in the",
+      "setupGuide": "setup guide"
+    },
+    "cta": {
+      "title": "Take the weight off your mind.",
+      "description": "Spin it up with a single Docker command and start journaling tonight."
+    },
+    "footer": {
+      "notePrefix": "© 2026 Nightlio · maintained by Fayed Patel · forked from the",
+      "originalLink": "original Nightlio",
+      "noteSuffix": "by shirsakm"
+    }
+  },
+  "about": {
+    "title": "Why I forked Nightlio",
+    "subtitle": "This instance is my own build of Nightlio — forked, maintained, and by now rewritten top to bottom, because it is the journal I open every single day.",
+    "origin": {
+      "title": "Where it came from",
+      "beforeAuthor": "Nightlio was originally created by",
+      "author": "shirsakm",
+      "afterAuthor": "as an open source, privacy-first mood tracker — you can find the",
+      "projectLink": "original project on GitHub",
+      "afterLink": ". It nailed the core idea: your journal belongs on your own server, in one SQLite file, with no analytics and no cloud between you and your thoughts. Everything here still stands on that foundation, and the credit for it belongs to the original author. This is a fork, and it says so proudly."
+    },
+    "fork": {
+      "title": "Why the fork",
+      "intro": "I wanted Nightlio to be the journal I actually live in, which meant owning the code — fixing what bothered me, shaping it around my own server, and not waiting on anyone else's roadmap. Since forking, this build has grown its own direction:",
+      "item1": "Single sign-on through any OIDC provider (I run Pocket ID)",
+      "item2": "Backdated entries and goal completions for the days I forget",
+      "item3": "Configurable themes — including the synthwave look — saved per account",
+      "item4": "Achievements that play fair, like the per-day Data Lover streak",
+      "item5": "A full test pyramid: backend unit and integration tests, frontend unit tests, and browser tests on desktop and mobile",
+      "item6": "Docker images for amd64 and arm64, built and checked on every change"
+    },
+    "rewrite": {
+      "title": "The v0.4.0 rewrite",
+      "body": "For v0.4.0 I rebuilt the whole stack. The Python backend became a Rust API built on Axum and rusqlite, and the frontend moved to strict TypeScript. Before porting a single route, I pinned the wire contract with golden fixtures and an OpenAPI document, so the new backend had to reproduce the old one byte for byte — a process that flushed out latent bugs the original code had been quietly living with. The payoff: the server image shrank from 624 MB to 158 MB, memory use dropped from around 290 MiB to about 7.5 MiB, and every request is now checked against a typed contract instead of hope."
+    },
+    "philosophy": {
+      "title": "Philosophy",
+      "p1": "The original promise stays untouched: your data is yours. One SQLite file on your own machine, no telemetry ever, and every feature earns its place by being something I use myself.",
+      "beforeLink": "Found a bug or want to run it yourself? Head to",
+      "forkLink": "my fork on GitHub"
+    }
+  },
+  "auth": {
+    "ssoFailed": "Single sign-on failed. Please try again.",
+    "ssoCouldNotComplete": "Single sign-on could not complete. Please try again.",
+    "enterCredentials": "Enter your username and password.",
+    "loggingIn": "Logging in...",
+    "loginFailed": "Login failed. Please try again.",
+    "localLoginFailed": "Local login failed",
+    "loadingSignInOptions": "Loading sign-in options…",
+    "signInWithSso": "Sign in with SSO",
+    "createAccount": "Create account",
+    "localLoginDisabled": "Local login is disabled on this server. Contact the administrator to enable a sign-in method.",
+    "signInToContinue": "Sign in to continue tracking your mood journey.",
+    "usernamePlaceholder": "Username",
+    "passwordPlaceholder": "Password",
+    "signingIn": "Signing in…",
+    "signIn": "Sign in",
+    "continueWithoutAccount": "Continue without account",
+    "footerSso": "Sign in with your identity provider.",
+    "footerSelfHosted": "Self-hosted: your data never leaves your server."
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": {
+      "title": "Appearance",
+      "description": "Pick a theme. Your choice is saved to your account and follows you across devices.",
+      "themeAria": "Theme"
+    },
+    "theme": {
+      "default": "Default",
+      "light": "Light",
+      "dark": "Dark",
+      "synthwave": "Synthwave"
+    },
+    "language": {
+      "title": "Language",
+      "description": "Choose your language. Packs come from the server; if a pack fails to load, English always works."
+    },
+    "flags": {
+      "title": "Feature flags",
+      "description": "These are currently server-managed. Editable toggles can be added here later.",
+      "oidc": {
+        "label": "Single Sign-On (OIDC)",
+        "description": "Enable login through a configured OpenID Connect provider."
+      },
+      "moodMusic": {
+        "label": "Mood Music",
+        "description": "Play mood-based music suggestions from the mood picker."
+      },
+      "stateLoading": " (loading...)",
+      "stateEnabled": " (enabled)",
+      "stateDisabled": " (disabled)"
+    },
+    "data": {
+      "title": "Data",
+      "description": "Export your entries and goals as a JSON file, or import a previous export. Importing merges with your existing data — duplicates are skipped.",
+      "exportButton": "Export data",
+      "exporting": "Exporting...",
+      "exportError": "Export failed. Please try again.",
+      "importButton": "Import data",
+      "importing": "Importing...",
+      "importInvalidFile": "That file does not look like a Nightlio export.",
+      "importError": "Import failed. Please try again.",
+      "importSummary": "Imported {entries} entries ({entriesSkipped} skipped) and {goals} goals ({goalsSkipped} skipped)."
+    },
+    "activity": {
+      "title": "Recent activity",
+      "description": "A log of recent logins, entries, goals, and achievements on this account.",
+      "loading": "Loading activity...",
+      "empty": "No activity yet. Logins, journal entries, goals, and achievements will show up here.",
+      "loadMore": "Load more",
+      "signedInSso": "Signed in with SSO",
+      "signedInLocal": "Signed in with username and password",
+      "signedInSelfhost": "Signed in (self-host)",
+      "signedIn": "Signed in",
+      "entryCreatedFor": "Created a journal entry for {date}",
+      "entryCreated": "Created a journal entry",
+      "entryEdited": "Edited a journal entry",
+      "entryDeleted": "Deleted a journal entry",
+      "achievementUnlockedNamed": "Unlocked achievement: {name}",
+      "achievementUnlocked": "Unlocked an achievement",
+      "goalCompletedNamed": "Completed goal “{title}”",
+      "goalCompleted": "Completed a goal",
+      "fallback": "Activity"
+    }
+  },
+  "entry": {
+    "pickMoodPrompt": "Pick your mood to start an entry",
+    "editingEntryFrom": "Editing entry from",
+    "dateLabel": "Entry date",
+    "returnToDashboard": "Return to Dashboard",
+    "returnToDashboardAria": "Return to dashboard",
+    "discard": "Discard",
+    "discardAria": "Discard this entry",
+    "discardConfirm": "Discard this entry? Anything written here will be permanently deleted.",
+    "changeMood": "Change mood",
+    "pickNewMood": "Pick a new mood",
+    "saveStatus": {
+      "burner": "Saving is turned off in burner mode.",
+      "saving": "Saving...",
+      "dirty": "Unsaved changes",
+      "error": "Autosave error",
+      "savedAt": "Saved at {time}",
+      "allSaved": "All changes saved",
+      "idle": "Waiting for changes"
+    },
+    "autosaveFailedRetry": "Autosave failed. Retrying when changes continue.",
+    "placeholderTitle": "How was your day?",
+    "placeholderBody": "Write about your thoughts, feelings, and experiences...",
+    "feeling": "Feeling {label}"
+  },
+  "goals": {
+    "title": "Goals",
+    "subtitle": "Track your personal goals and build better habits",
+    "addNew": {
+      "title": "Add New Goal",
+      "subtitle": "Set a new goal to track your progress"
+    },
+    "quickSuggestions": "Quick suggestions",
+    "suggestions": {
+      "meditation": {
+        "title": "Morning Meditation",
+        "description": "10 minutes of mindfulness"
+      },
+      "walk": {
+        "title": "Evening Walk",
+        "description": "30-minute walk outside"
+      },
+      "read": {
+        "title": "Read Before Bed",
+        "description": "Read 20 minutes before sleep"
+      },
+      "readShort": {
+        "description": "Read 20 minutes"
+      },
+      "water": {
+        "title": "Drink Water",
+        "description": "8 glasses of water daily"
+      },
+      "stretch": {
+        "title": "Stretching Routine",
+        "description": "15 minutes of light stretching"
+      },
+      "language": {
+        "title": "Learn a Language",
+        "description": "Practice 20 minutes on Duolingo"
+      },
+      "journal": {
+        "title": "Journal",
+        "description": "Write 5-minute reflection"
+      }
+    },
+    "frequencyPerWeek": {
+      "one": "{count} day a week",
+      "other": "{count} days a week"
+    },
+    "frequencyDaysAWeek": "{count} days a week",
+    "form": {
+      "backToGoals": "Back to Goals",
+      "titleLabel": "Goal Title *",
+      "titlePlaceholder": "e.g., Morning Meditation, Evening Walk, Read Before Bed",
+      "titleRequired": "Title is required",
+      "titleHint": "Make it clear and specific",
+      "descriptionLabel": "Description *",
+      "descriptionPlaceholder": "Describe your goal and why it's important to you...",
+      "descriptionRequired": "Description is required",
+      "descriptionHint": "Add a short motivation to keep you accountable",
+      "frequencyLabel": "Frequency",
+      "frequencyHint": "This sets your weekly target. You can mark progress daily.",
+      "creating": "Creating…",
+      "create": "Create Goal"
+    },
+    "deleteConfirm": "Are you sure you want to delete this goal?",
+    "deleteAria": "Delete goal",
+    "completed": "Completed",
+    "markAsDone": "Mark as done",
+    "logPastDay": "Log past day",
+    "logPastDayFor": "Log past day for {title}",
+    "dayYouDidIt": "Day you did it",
+    "logIt": "Log it",
+    "cancelLogAria": "Cancel logging a past day",
+    "statsTitle": "Goal Statistics",
+    "activeGoals": "Active Goals",
+    "noGoalsYet": "No goals yet.",
+    "addFirstGoal": "Add First Goal",
+    "addGoal": "Add Goal"
+  },
+  "achievements": {
+    "loading": "Loading achievements...",
+    "firstEntry": {
+      "name": "First Entry",
+      "description": "Log your first mood entry"
+    },
+    "weekWarrior": {
+      "name": "Week Warrior",
+      "description": "Maintain a 7-day streak"
+    },
+    "consistencyKing": {
+      "name": "Consistency King",
+      "description": "Maintain a 30-day streak"
+    },
+    "dataLover": {
+      "name": "Data Lover",
+      "description": "View statistics on 10 different days"
+    },
+    "moodMaster": {
+      "name": "Mood Master",
+      "description": "Log 100 total entries"
+    },
+    "modalFallbackTitle": "Achievement",
+    "progressToUnlock": "Progress to unlock",
+    "tips": "Tips: Log daily to maintain your streak. Viewing statistics contributes to \"Data Lover\".",
+    "unlocked": "Unlocked",
+    "rarityAria": "rarity: {rarity}",
+    "rarity": {
+      "common": "common",
+      "uncommon": "uncommon",
+      "rare": "rare",
+      "legendary": "legendary"
+    }
+  },
+  "stats": {
+    "noStatistics": "No statistics available",
+    "totalEntries": "Total Entries",
+    "averageMood": "Average Mood",
+    "currentStreak": "Current Streak",
+    "bestDay": "Best Day",
+    "volatility": {
+      "one": "Volatility ({days}d · {count} entry)",
+      "other": "Volatility ({days}d · {count} entries)"
+    },
+    "moodTrend": "Mood Trend",
+    "exportPng": "Export PNG",
+    "exportCsv": "Export CSV",
+    "rangeD": "{count}d",
+    "mood": "Mood",
+    "avg7": "7-day avg",
+    "avg30": "30-day avg",
+    "noData": "No data",
+    "noEntry": "No entry",
+    "rollingUnavailable": "Rolling averages unavailable right now.",
+    "rollingNote": "Rolling averages are trailing means over the preceding 7 / 30 logged days.",
+    "moodDistribution": "Mood Distribution",
+    "entriesTooltip": "{count} entries",
+    "weekdayPattern": "Weekday Pattern",
+    "weekdayEmpty": "No entries yet — averages will appear per weekday.",
+    "weekdayTooltip": {
+      "one": "{avg} avg · {count} entry",
+      "other": "{avg} avg · {count} entries"
+    },
+    "tagImpact": "Tag Impact",
+    "tagImpactEmpty": "No tags selected yet — tag some entries to compare days with and without them.",
+    "tagImpactNote": "Average mood on days a tag was used versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples.",
+    "goalImpact": "Goal Impact",
+    "goalImpactEmpty": "No goals yet — add goals to compare mood on completion days.",
+    "goalImpactNote": "Average mood on days a goal was completed versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples.",
+    "completed": "completed",
+    "without": "without",
+    "hideSmallSamples": "Hide small samples",
+    "showSmallSamples": "Show small samples ({count})",
+    "onlySmallSamples": "Only small samples so far — use the toggle to see them.",
+    "corrBreakdown": "{avgWith} avg over {countWith}{withLabel} / {avgWithout} over {countWithout} {withoutLabel}",
+    "tagCorrelations": "Tag Correlations",
+    "topPositive": "Top Positive",
+    "topNegative": "Top Negative",
+    "noTagsYet": "No tags yet",
+    "tagNote": "Note: simple average mood per tag; requires at least 2 occurrences to rank.",
+    "yearInMoods": "Year in Moods",
+    "prevYearAria": "Previous year",
+    "nextYearAria": "Next year",
+    "heatmapCell": {
+      "one": "{date} — avg mood {avg} ({count} entry)",
+      "other": "{date} — avg mood {avg} ({count} entries)"
+    },
+    "heatmapCellEmpty": "{date} — no entry",
+    "heatmapFooter": {
+      "one": "{count} day logged in {year} · cell color = average mood that day",
+      "other": "{count} days logged in {year} · cell color = average mood that day"
+    },
+    "monthlyDigest": "Monthly Digest",
+    "digestTitle": "{month} {year} Digest",
+    "entriesLogged": {
+      "one": "Entry logged",
+      "other": "Entries logged"
+    },
+    "averageMoodEntries": {
+      "one": "Average mood ({count} entry)",
+      "other": "Average mood ({count} entries)"
+    },
+    "trendLabel": "Trend · {text}",
+    "trendNoData": "no previous-month data",
+    "trendVs": "{delta} vs {month}",
+    "longestStreak": {
+      "one": "Longest streak (day)",
+      "other": "Longest streak (days)"
+    },
+    "noEntriesThisMonth": "No entries logged this month yet.",
+    "digestTagTimes": "{name} ×{count}",
+    "moodCalendar": "Mood Calendar"
+  },
+  "history": {
+    "title": "History",
+    "sectionAria": "History entries",
+    "searchResults": "Search Results ({count})",
+    "addEntry": "Add Entry",
+    "entryFallbackTitle": "Entry",
+    "openEntryAria": "Open entry from {date}",
+    "editEntryAria": "Edit entry from {date}",
+    "deleteEntryAria": "Delete entry from {date}",
+    "deleteConfirm": "Are you sure you want to delete this entry?",
+    "todaysEntryAria": "Today's entry",
+    "activeGoalsAria": "Active goals",
+    "recentEntriesAria": "Recent entries",
+    "recentEntries": "Recent Entries",
+    "promptTitle": "How are you feeling tonight?",
+    "promptSubtitle": "Tap a mood above to start today’s entry.",
+    "exportPdf": "Export as PDF",
+    "editEntry": "Edit entry",
+    "deleteEntry": "Delete entry",
+    "export": {
+      "date": "**Date:** {date}",
+      "mood": "**Mood:** {mood}",
+      "tags": "**Tags:** {tags}"
+    }
+  },
+  "groups": {
+    "manageCategories": "Manage Categories",
+    "createNew": "Create New Category",
+    "categoryNamePlaceholder": "Category name (e.g., Activities, Weather)",
+    "creating": "Creating...",
+    "create": "Create",
+    "addOption": "Add Option to Category",
+    "selectCategory": "Select category...",
+    "optionNamePlaceholder": "Option name (e.g., happy, tired)",
+    "adding": "Adding...",
+    "add": "Add",
+    "current": "Current Categories",
+    "optionsCount": "{name} ({count} options)"
+  },
+  "search": {
+    "aria": "Search",
+    "placeholder": "Search...",
+    "entriesPlaceholder": "Search entries...",
+    "titleHint": "Search entries…",
+    "placeholderReadOnly": "Search entries… (Press / to focus)"
+  },
+  "moods": {
+    "1": {
+      "label": "Terrible",
+      "short": "T"
+    },
+    "2": {
+      "label": "Bad",
+      "short": "B"
+    },
+    "3": {
+      "label": "Okay",
+      "short": "O"
+    },
+    "4": {
+      "label": "Good",
+      "short": "G"
+    },
+    "5": {
+      "label": "Amazing",
+      "short": "A"
+    },
+    "unknown": "Unknown",
+    "noVibeDetected": "No vibe detected",
+    "selectMood": "Select a mood"
+  },
+  "toast": {
+    "savedAchievements": "Saved. New achievements unlocked.",
+    "autosaveFailed": "Autosave failed. Your changes are still in the editor.",
+    "draftDiscarded": "Draft discarded.",
+    "discardFailed": "Could not discard the draft. Please try again.",
+    "entryDeleted": "Entry deleted",
+    "deleteEntryFailed": "Failed to delete entry. Please try again.",
+    "goalDeleted": "Goal deleted successfully",
+    "alreadyCompletedToday": "Already completed for today",
+    "goalCompletedPeriod": "Goal already completed for this period!",
+    "progressUpdated": "Progress updated!",
+    "alreadyLoggedFor": "Already logged for {date}",
+    "loggedFor": "Logged for {date}",
+    "logDayFailed": "Could not log that day. Try again.",
+    "searchFocused": "Search focused — search not yet implemented"
+  },
+  "errors": {
+    "loadActivity": "Failed to load activity.",
+    "loadAchievements": "Failed to load achievements",
+    "loadStatistics": "Failed to load statistics",
+    "loadExtendedStatistics": "Failed to load extended statistics",
+    "loadHeatmap": "Failed to load mood heatmap",
+    "loadMoodHistory": "Failed to load mood history",
+    "loadCategories": "Failed to load categories",
+    "createCategory": "Failed to create category",
+    "createOption": "Failed to create option",
+    "deleteCategory": "Failed to delete category",
+    "loadConfig": "Failed to load config",
+    "exportPdf": "Failed to export PDF.",
+    "notFoundCode": "404",
+    "notFound": "Page not found",
+    "goHome": "Go Home"
+  }
+}

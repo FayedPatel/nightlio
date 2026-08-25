@@ -1,0 +1,69 @@
+{
+  "method": "GET",
+  "path": "/api/export/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "schema_version": 1,
+      "exported_at": "<TS>",
+      "app_version": "<VERSION>",
+      "data": {
+        "entries": [
+          {
+            "date": "<DATE>",
+            "mood": 4,
+            "content": "Great workout day.",
+            "created_at": "<TS>",
+            "updated_at": "<TS>",
+            "selections": [
+              { "group_name": "Emotions", "option_name": "content" },
+              { "group_name": "Emotions", "option_name": "happy" }
+            ]
+          },
+          {
+            "date": "<DATE>",
+            "mood": 2,
+            "content": "Rough night.",
+            "created_at": "<TS>",
+            "updated_at": "<TS>",
+            "selections": []
+          }
+        ],
+        "goals": [
+          {
+            "title": "Meditate",
+            "description": "10 minutes",
+            "frequency_per_week": 3,
+            "completed": 1,
+            "streak": 0,
+            "period_start": "<DATE>",
+            "last_completed_date": "<DATE>",
+            "created_at": "<TS>",
+            "updated_at": "<TS>",
+            "completions": ["<DATE>"]
+          },
+          {
+            "title": "Read",
+            "description": "",
+            "frequency_per_week": 2,
+            "completed": 0,
+            "streak": 0,
+            "period_start": "<DATE>",
+            "last_completed_date": null,
+            "created_at": "<TS>",
+            "updated_at": "<TS>",
+            "completions": []
+          }
+        ]
+      }
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). SEEDING (fresh DB, self-host login, in this order): 1) POST /api/mood {mood: 4, date: \"2025-08-01\", content: \"Great workout day.\", selected_options: [1, 5]} (default seeded options 1=Emotions/happy, 5=Emotions/content); 2) POST /api/mood {mood: 2, date: \"2025-08-02\", content: \"Rough night.\"}; 3) POST /api/goals {title: \"Meditate\", description: \"10 minutes\", frequency_per_week: 3} then POST /api/goals/1/progress with no date (logs today); 4) POST /api/goals {title: \"Read\", frequency_per_week: 2}. Object envelope, exactly four top-level keys: schema_version (pinned integer 1), exported_at (SQLite-style UTC \"YYYY-MM-DD HH:MM:SS\" -> <TS>), app_version (CARGO_PKG_VERSION -> <VERSION>, same substitution as config_get_200.json), data {entries, goals}. NO ids and NO user_id anywhere — they are not portable (fresh DBs pre-seed 3 groups / 27 options). Selections are denormalized by exact name as {group_name, option_name} pairs, ordered like GET /api/mood/{id}/selections (group name, then option name — hence content before happy). Deterministic order is contract: entries ascending by date (id-order tiebreak), goals in creation order. Goal weekly state (completed/streak/period_start) is exported raw with the rollover projected exactly as the goals GETs project it — the export is a pure read and persists nothing. Volatile values normalized: timestamps -> <TS>, bare YYYY-MM-DD dates -> <DATE> (the goals-family convention; the concrete seed dates are in this note)."
+}

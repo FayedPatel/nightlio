@@ -1,0 +1,14 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": {
+    "error": "Method not allowed"
+  },
+  "content_type": "application/json",
+  "headers": {
+    "Allow": "GET,HEAD,OPTIONS"
+  },
+  "status": 405
+}

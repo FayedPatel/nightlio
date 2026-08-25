@@ -1,0 +1,10 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "error": "entries[1]: mood must be between 1 and 5"
+  },
+  "status": 400
+}

@@ -1,0 +1,16 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "app_version": "<VERSION>",
+    "data": {
+      "entries": [],
+      "goals": []
+    },
+    "exported_at": "<TS>",
+    "schema_version": 1
+  },
+  "status": 200
+}

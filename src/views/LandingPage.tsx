@@ -2,51 +2,56 @@ import './LandingPage.css';
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { MOODS } from '../utils/moodUtils';
+import { useI18n } from '../i18n';
+import type { I18nKey } from '../i18n';
 
 const GITHUB_URL = 'https://github.com/FayedPatel/nightlio';
 const UPSTREAM_URL = 'https://github.com/shirsakm/nightlio';
 
-const highlights = [
+const highlights: { id: string; titleKey: I18nKey; descriptionKey: I18nKey }[] = [
   {
-    title: 'Privacy First',
-    description:
-      'Your data lives in one SQLite file on your own server. No third-party trackers, no analytics, no cloud.',
+    id: 'privacy',
+    titleKey: 'landing.highlights.privacy.title',
+    descriptionKey: 'landing.highlights.privacy.description',
   },
   {
-    title: 'Rich Journaling',
-    description:
-      'Markdown notes for every entry — formatting, lists, and links. Forgot a day? Backdate it.',
+    id: 'journaling',
+    titleKey: 'landing.highlights.journaling.title',
+    descriptionKey: 'landing.highlights.journaling.description',
   },
   {
-    title: 'Make It Yours',
-    description:
-      'Four built-in themes — including the synthwave look you are staring at — saved to your account.',
+    id: 'yours',
+    titleKey: 'landing.highlights.yours.title',
+    descriptionKey: 'landing.highlights.yours.description',
   },
 ];
 
-const featureBlocks = [
+const featureBlocks: { id: string; titleKey: I18nKey; itemKeys: I18nKey[] }[] = [
   {
-    title: 'Effortless Logging',
-    items: [
-      'Log your mood in seconds on a 5-point scale',
-      'Tag entries with categories like "Sleep" or "Work"',
-      'Autosave keeps every word without a save button',
+    id: 'logging',
+    titleKey: 'landing.featureBlocks.logging.title',
+    itemKeys: [
+      'landing.featureBlocks.logging.item1',
+      'landing.featureBlocks.logging.item2',
+      'landing.featureBlocks.logging.item3',
     ],
   },
   {
-    title: 'Gamified Consistency',
-    items: [
-      'Earn achievements as you build the habit',
-      'Track your streak day to day',
-      'Set weekly goals and mark daily progress',
+    id: 'consistency',
+    titleKey: 'landing.featureBlocks.consistency.title',
+    itemKeys: [
+      'landing.featureBlocks.consistency.item1',
+      'landing.featureBlocks.consistency.item2',
+      'landing.featureBlocks.consistency.item3',
     ],
   },
   {
-    title: 'Insightful Analytics',
-    items: [
-      'Calendar heatmap of your mood history',
-      'Rolling averages and trend lines',
-      'Spot the patterns behind your state of mind',
+    id: 'analytics',
+    titleKey: 'landing.featureBlocks.analytics.title',
+    itemKeys: [
+      'landing.featureBlocks.analytics.item1',
+      'landing.featureBlocks.analytics.item2',
+      'landing.featureBlocks.analytics.item3',
     ],
   },
 ];
@@ -56,58 +61,65 @@ interface LandingNavProps {
   active?: 'about';
 }
 
-export const LandingNav = ({ active }: LandingNavProps) => (
-  <nav className="landing__nav" aria-label="Main">
-    <div className="landing__nav-inner">
-    <Link className="landing__brand" to="/">
-      <img src="/logo.png" alt="Nightlio logo" className="landing__brand-mark" />
-      <span className="landing__brand-name">Nightlio</span>
-    </Link>
-    <div className="landing__nav-links">
-      <Link to="/#features">Features</Link>
-      <Link to="/about" className={active === 'about' ? 'is-active' : undefined}>
-        About
+export const LandingNav = ({ active }: LandingNavProps) => {
+  const { t } = useI18n();
+  return (
+    <nav className="landing__nav" aria-label={t('landing.navAria')}>
+      <div className="landing__nav-inner">
+      <Link className="landing__brand" to="/">
+        <img src="/logo.png" alt={t('common.logoAlt')} className="landing__brand-mark" />
+        <span className="landing__brand-name">{t('common.appName')}</span>
       </Link>
-    </div>
-    <div className="landing__nav-actions">
-      <a
-        className="landing__button landing__button--icon"
-        href={GITHUB_URL}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="GitHub"
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405 1.02 0 2.04.135 3 .405 2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-        </svg>
-      </a>
-      <Link className="landing__button landing__button--primary" to="/login">
-        Sign in
-      </Link>
-    </div>
-    </div>
-  </nav>
-);
+      <div className="landing__nav-links">
+        <Link to="/#features">{t('landing.features')}</Link>
+        <Link to="/about" className={active === 'about' ? 'is-active' : undefined}>
+          {t('landing.about')}
+        </Link>
+      </div>
+      <div className="landing__nav-actions">
+        <a
+          className="landing__button landing__button--icon"
+          href={GITHUB_URL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={t('landing.github')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405 1.02 0 2.04.135 3 .405 2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.285 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+          </svg>
+        </a>
+        <Link className="landing__button landing__button--primary" to="/login">
+          {t('landing.signIn')}
+        </Link>
+      </div>
+      </div>
+    </nav>
+  );
+};
 
-export const LandingFooter = () => (
-  <footer className="landing__footer">
-    <p className="landing__footer-note">
-      © 2026 Nightlio · maintained by Fayed Patel · forked from the{' '}
-      <a href={UPSTREAM_URL} target="_blank" rel="noreferrer">
-        original Nightlio
-      </a>{' '}
-      by shirsakm
-    </p>
-    <div className="landing__footer-links">
-      <Link to="/about">About</Link>
-      <a href={GITHUB_URL} target="_blank" rel="noreferrer">GitHub</a>
-      <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer">Contact</a>
-    </div>
-  </footer>
-);
+export const LandingFooter = () => {
+  const { t } = useI18n();
+  return (
+    <footer className="landing__footer">
+      <p className="landing__footer-note">
+        {t('landing.footer.notePrefix')}{' '}
+        <a href={UPSTREAM_URL} target="_blank" rel="noreferrer">
+          {t('landing.footer.originalLink')}
+        </a>{' '}
+        {t('landing.footer.noteSuffix')}
+      </p>
+      <div className="landing__footer-links">
+        <Link to="/about">{t('landing.about')}</Link>
+        <a href={GITHUB_URL} target="_blank" rel="noreferrer">{t('landing.github')}</a>
+        <a href={`${GITHUB_URL}/issues`} target="_blank" rel="noreferrer">{t('landing.contact')}</a>
+      </div>
+    </footer>
+  );
+};
 
 const LandingPage = () => {
   const location = useLocation();
+  const { t } = useI18n();
 
   // Hash links (e.g. Features from the About page navigating to /#features)
   // don't auto-scroll under client-side routing — do it explicitly.
@@ -131,22 +143,20 @@ const LandingPage = () => {
 
         <div className="landing__hero-body">
           <div className="landing__hero-copy">
-            <span className="landing__tag">Self-hosted · Open source</span>
+            <span className="landing__tag">{t('landing.tag')}</span>
             <h1>
-              Your moods.
+              {t('landing.hero.line1')}
               <br />
-              <span className="landing__neon">Your server.</span>
+              <span className="landing__neon">{t('landing.hero.line2')}</span>
               <br />
-              Your rules.
+              {t('landing.hero.line3')}
             </h1>
             <p>
-              Nightlio is a privacy-first mood tracker and daily journal that
-              runs entirely on your own hardware. No ads, no subscriptions,
-              and absolutely no data mining — just you and the night.
+              {t('landing.hero.description')}
             </p>
             <div className="landing__cta-group">
               <Link className="landing__button landing__button--primary landing__button--lg" to="/login">
-                Sign in
+                {t('landing.signIn')}
               </Link>
               <a
                 className="landing__button landing__button--ghost landing__button--lg"
@@ -154,7 +164,7 @@ const LandingPage = () => {
                 target="_blank"
                 rel="noreferrer"
               >
-                View on GitHub
+                {t('landing.viewOnGitHub')}
               </a>
             </div>
           </div>
@@ -164,7 +174,7 @@ const LandingPage = () => {
                 icons as MoodPicker), remapped to the synthwave palette. */}
             <div className="landing__card">
               <div className="landing__card-header">
-                <span className="landing__card-label">The mood scale</span>
+                <span className="landing__card-label">{t('landing.card.label')}</span>
                 <span className="landing__card-dots" aria-hidden="true">
                   <i /><i /><i />
                 </span>
@@ -180,8 +190,7 @@ const LandingPage = () => {
                 ))}
               </div>
               <p className="landing__note">
-                Every entry starts with one tap on this scale, then as much or
-                as little writing as you want.
+                {t('landing.card.note')}
               </p>
             </div>
           </div>
@@ -189,26 +198,26 @@ const LandingPage = () => {
       </header>
 
       <section id="why-nightlio" className="landing__section landing__section--alt">
-        <h2>Built for mindful nights and focused mornings</h2>
+        <h2>{t('landing.why.title')}</h2>
         <div className="landing__tile-grid">
           {highlights.map((item) => (
-            <article key={item.title} className="landing__tile">
-              <h3>{item.title}</h3>
-              <p>{item.description}</p>
+            <article key={item.id} className="landing__tile">
+              <h3>{t(item.titleKey)}</h3>
+              <p>{t(item.descriptionKey)}</p>
             </article>
           ))}
         </div>
       </section>
 
       <section id="features" className="landing__section">
-        <h2>Everything you need to capture your story</h2>
+        <h2>{t('landing.featuresSection.title')}</h2>
         <div className="landing__feature-columns">
           {featureBlocks.map((block) => (
-            <div key={block.title} className="landing__feature">
-              <h3>{block.title}</h3>
+            <div key={block.id} className="landing__feature">
+              <h3>{t(block.titleKey)}</h3>
               <ul>
-                {block.items.map((item) => (
-                  <li key={item}>{item}</li>
+                {block.itemKeys.map((itemKey) => (
+                  <li key={itemKey}>{t(itemKey)}</li>
                 ))}
               </ul>
             </div>
@@ -217,12 +226,12 @@ const LandingPage = () => {
       </section>
 
       <section id="self-host" className="landing__section landing__section--alt">
-        <h2>Self-host it in minutes</h2>
+        <h2>{t('landing.selfHost.title')}</h2>
         <div className="landing__quickstart">
           <div className="landing__terminal">
             <div className="landing__terminal-bar" aria-hidden="true">
               <i /><i /><i />
-              <span>nightlio — zsh</span>
+              <span>{t('landing.terminal.title')}</span>
             </div>
             <pre className="landing__code"><code>{`git clone ${GITHUB_URL}.git
 cd nightlio
@@ -230,10 +239,9 @@ cp .env.docker .env   # set SECRET_KEY + JWT_SECRET
 docker-compose up -d`}</code></pre>
           </div>
           <p className="landing__quickstart-note">
-            Two containers, one SQLite file, no external services. Full
-            walkthrough in the{' '}
+            {t('landing.quickstart.notePrefix')}{' '}
             <a href={`${GITHUB_URL}/blob/main/docs/SETUP.md`} target="_blank" rel="noreferrer">
-              setup guide
+              {t('landing.quickstart.setupGuide')}
             </a>.
           </p>
         </div>
@@ -242,17 +250,16 @@ docker-compose up -d`}</code></pre>
       <section id="cta" className="landing__section landing__section--cta">
         <div className="landing__cta">
           <div>
-            <h2>Take the weight off your mind.</h2>
+            <h2>{t('landing.cta.title')}</h2>
             <p>
-              Spin it up with a single Docker command and start journaling
-              tonight.
+              {t('landing.cta.description')}
             </p>
           </div>
           <div className="landing__cta-buttons">
             {/* Single closing action: the footer right below already links
                 GitHub, so repeating it here was pure duplication. */}
             <Link className="landing__button landing__button--primary landing__button--lg" to="/login">
-              Sign in
+              {t('landing.signIn')}
             </Link>
           </div>
         </div>

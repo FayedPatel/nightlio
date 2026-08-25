@@ -1,0 +1,17 @@
+{
+  "method": "OPTIONS",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "content_type": "text/html; charset=utf-8",
+    "body": "",
+    "headers_that_matter": {
+      "Allow": "OPTIONS, POST"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). App-wide unified OPTIONS: 204, empty body, Allow header, Content-Type text/html; charset=utf-8 kept, no Content-Length on the wire. \"OPTIONS, POST\" matches the automatic_options value used by the other POST-only mutations (POST /api/mood, /api/statistics/view, /api/export/pdf). Answered by the automatic handler BEFORE any token or CSRF check — CORS preflights (which never carry credentials' custom headers) must succeed here for the cookie-authed import to be reachable from the browser; the Access-Control-* headers are appended by the after-request CORS layer when Origin matches, exactly as misc/preferences_options_204_cors_preflight.json records."
+}

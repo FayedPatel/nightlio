@@ -7,6 +7,7 @@ import { getMoodLabel } from '../../utils/moodUtils';
 import { entryDateKey, formatEntryDate } from '../../utils/dateUtils';
 import type { MoodEntryWithSelections } from '../../hooks/useMoodData';
 import Modal from '../ui/Modal';
+import { useI18n } from '../../i18n';
 import './EntryModal.css';
 
 const deriveTitleBody = (content = ''): { title: string; body: string } => {
@@ -48,6 +49,7 @@ interface EntryModalProps {
 // this the same sheet-on-mobile / swipe-dismiss / safe-area / z-index
 // (var(--z-modal)) behavior every other dialog in the app already has.
 const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: EntryModalProps) => {
+  const { t } = useI18n();
   const [isExporting, setIsExporting] = useState(false);
 
   if (!isOpen || !entry) return null;
@@ -58,7 +60,9 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
     setIsExporting(true);
     try {
       const timeStr = entry.created_at ? new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-      const dateStr = `${formatEntryDate(entry.date)}${timeStr ? ` at ${timeStr}` : ''}`;
+      const dateStr = timeStr
+        ? t('common.dateAtTime', { date: formatEntryDate(entry.date), time: timeStr })
+        : formatEntryDate(entry.date);
 
       const moodLabel = entry.mood ? getMoodLabel(entry.mood) : '';
 
@@ -67,12 +71,12 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
         : '';
 
       const headerLines = [];
-      headerLines.push(`**Date:** ${dateStr}`);
+      headerLines.push(t('history.export.date', { date: dateStr }));
       if (moodLabel) {
-        headerLines.push(`**Mood:** ${moodLabel}`);
+        headerLines.push(t('history.export.mood', { mood: moodLabel }));
       }
       if (tagsStr) {
-        headerLines.push(`**Tags:** ${tagsStr}`);
+        headerLines.push(t('history.export.tags', { tags: tagsStr }));
       }
 
       const enhancedContent = headerLines.join('\n') + '\n\n---\n\n' + (entry.content || '');
@@ -88,7 +92,7 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
       document.body.removeChild(a);
     } catch (err) {
       console.error("Export error:", err);
-      alert("Failed to export PDF.");
+      alert(t('errors.exportPdf'));
     } finally {
       setIsExporting(false);
     }
@@ -113,8 +117,8 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
         onClick={handleExport}
         disabled={isExporting}
         className="entry-modal-action-btn"
-        title="Export as PDF"
-        aria-label="Export as PDF"
+        title={t('history.exportPdf')}
+        aria-label={t('history.exportPdf')}
       >
         <Download size={18} />
       </button>
@@ -124,8 +128,8 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
           disabled={isDeleting}
           className="entry-modal-action-btn entry-modal-action-btn--primary"
-          title="Edit entry"
-          aria-label="Edit entry"
+          title={t('history.editEntry')}
+          aria-label={t('history.editEntry')}
         >
           <Pencil size={18} />
         </button>
@@ -136,8 +140,8 @@ const EntryModal = ({ isOpen, entry, onClose, onDelete, isDeleting, onEdit }: En
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           disabled={isDeleting}
           className="entry-modal-action-btn entry-modal-action-btn--danger"
-          title="Delete entry"
-          aria-label="Delete entry"
+          title={t('history.deleteEntry')}
+          aria-label={t('history.deleteEntry')}
         >
           {isDeleting ? <Trash2 size={18} opacity={0.5} /> : <Trash2 size={18} />}
         </button>

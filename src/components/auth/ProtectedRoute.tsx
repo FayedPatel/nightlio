@@ -2,6 +2,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { useI18n } from '../../i18n';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAuthenticated, loading } = useAuth();
+  const { t } = useI18n();
 
   // Override parent styling when loading
   useEffect(() => {
@@ -70,7 +72,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
             animation: 'spin 1s linear infinite',
             margin: '0 auto 1rem auto'
           }}></div>
-          <p style={{ color: 'var(--text-muted)', margin: '0', fontSize: '0.9rem' }}>Logging in...</p>
+          <p style={{ color: 'var(--text-muted)', margin: '0', fontSize: '0.9rem' }}>{t('auth.loggingIn')}</p>
           <style>
             {`
               @keyframes spin {

@@ -4,28 +4,30 @@ import ProgressBar from '../components/ui/ProgressBar';
 import AchievementNFT from '../components/nft/AchievementNFT';
 import apiService from '../services/api';
 import type { Achievement, AchievementProgress, NewAchievement } from '../types/api';
+import { useI18n } from '../i18n';
+import type { TranslateFn } from '../i18n';
 
 // All possible achievements (metadata-only NewAchievement shape: locked
 // achievements have no id/earned_at/nft_* columns to show).
-const getAllAchievements = (): NewAchievement[] => [
+const getAllAchievements = (t: TranslateFn): NewAchievement[] => [
   {
     achievement_type: 'first_entry',
-    name: 'First Entry',
-    description: 'Log your first mood entry',
+    name: t('achievements.firstEntry.name'),
+    description: t('achievements.firstEntry.description'),
     icon: 'Zap',
     rarity: 'common'
   },
   {
     achievement_type: 'week_warrior',
-    name: 'Week Warrior',
-    description: 'Maintain a 7-day streak',
+    name: t('achievements.weekWarrior.name'),
+    description: t('achievements.weekWarrior.description'),
     icon: 'Flame',
     rarity: 'uncommon'
   },
   {
     achievement_type: 'consistency_king',
-    name: 'Consistency King',
-    description: 'Maintain a 30-day streak',
+    name: t('achievements.consistencyKing.name'),
+    description: t('achievements.consistencyKing.description'),
     // Icon must match the backend achievement metadata (wire truth) so the
     // icon does not visibly change when the achievement unlocks.
     icon: 'Target',
@@ -33,21 +35,22 @@ const getAllAchievements = (): NewAchievement[] => [
   },
   {
     achievement_type: 'data_lover',
-    name: 'Data Lover',
-    description: 'View statistics on 10 different days',
+    name: t('achievements.dataLover.name'),
+    description: t('achievements.dataLover.description'),
     icon: 'BarChart3',
     rarity: 'uncommon'
   },
   {
     achievement_type: 'mood_master',
-    name: 'Mood Master',
-    description: 'Log 100 total entries',
+    name: t('achievements.moodMaster.name'),
+    description: t('achievements.moodMaster.description'),
     icon: 'Crown',
     rarity: 'legendary'
   }
 ];
 
 const AchievementsView = () => {
+  const { t } = useI18n();
   // Web3 removed
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +72,7 @@ const AchievementsView = () => {
       setAchievements(data);
       setProgress(prog || {});
     } catch (err) {
-      setError('Failed to load achievements');
+      setError(t('errors.loadAchievements'));
       console.error('Failed to load achievements:', err);
     } finally {
       setLoading(false);
@@ -79,7 +82,7 @@ const AchievementsView = () => {
   if (loading) {
     return (
       <div style={{ marginTop: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-        Loading achievements...
+        {t('achievements.loading')}
       </div>
     );
   }
@@ -109,7 +112,7 @@ const AchievementsView = () => {
         width: '100%'
       }}>
         {/* All possible achievements */}
-        {getAllAchievements().map((achievement, index) => {
+        {getAllAchievements(t).map((achievement, index) => {
           const unlockedAchievement = achievements.find(a => a.achievement_type === achievement.achievement_type);
           const isUnlocked = !!unlockedAchievement;
           const p = progress[achievement.achievement_type] || null;
@@ -149,16 +152,16 @@ const AchievementsView = () => {
         })}
       </div>
 
-      <Modal open={!!active} onClose={() => setActive(null)} title={active?.name || 'Achievement'}>
+      <Modal open={!!active} onClose={() => setActive(null)} title={active?.name || t('achievements.modalFallbackTitle')}>
         <p style={{ marginTop: 0 }}>{active?.description}</p>
         {!achievements.find(a => a.achievement_type === active?.achievement_type) && (() => {
           // Same lookup as before conversion: an undefined `active` used to
           // index as progress[undefined] -> undefined -> fallback.
           const p = (active ? progress[active.achievement_type] : undefined) || { current: 0, max: 7 };
-          return <ProgressBar value={p.current || 0} max={p.max || 7} label="Progress to unlock" />;
+          return <ProgressBar value={p.current || 0} max={p.max || 7} label={t('achievements.progressToUnlock')} />;
         })()}
         <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
-          Tips: Log daily to maintain your streak. Viewing statistics contributes to "Data Lover".
+          {t('achievements.tips')}
         </div>
       </Modal>
     </div>

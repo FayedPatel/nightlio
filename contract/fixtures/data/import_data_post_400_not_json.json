@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "text/plain"
+    },
+    "body": "this is not JSON"
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Bad request"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). A Bearer-authenticated request (CSRF checks bypassed) whose body does not parse as JSON takes the app-level 400 handler {\"error\": \"Bad request\"} — the same path export_pdf_post_400_missing_content.json documents for a non-JSON Content-Type. The import parser is STRICT (no get_json(silent=True) leniency — that closed set stays login, goal progress, achievements check): a missing, empty, or unparsable body is a 400, never a 200 no-op. A COOKIE-authenticated call with a non-JSON Content-Type never reaches this handler: the CSRF Content-Type check fires first -> 403 {\"error\": \"Content-Type must be application/json\"}. Message text not graded."
+}

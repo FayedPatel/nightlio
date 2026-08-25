@@ -8,6 +8,7 @@ import { useBurner } from '../contexts/BurnerContext';
 import { useToast } from './ui/ToastProvider';
 import type { MoodEntry } from '../types/api';
 import type { MoodEntryWithSelections } from '../hooks/useMoodData';
+import { useI18n } from '../i18n';
 
 import './Header.css';
 import SearchBar from './search/SearchBar';
@@ -80,6 +81,7 @@ interface HeaderProps {
 }
 
 const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: HeaderProps) => {
+  const { t } = useI18n();
   const { user, logout } = useAuth();
   useConfig();
   const { theme, cycle } = useTheme();
@@ -110,10 +112,10 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
       const input = document.getElementById('global-search-input');
       if (input) {
         input.focus();
-        show('Search focused — search not yet implemented', 'info', 1500);
+        show(t('toast.searchFocused'), 'info', 1500);
       }
     },
-    [show, showSearch]
+    [show, showSearch, t]
   );
 
   useEffect(() => {
@@ -132,13 +134,13 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
           {currentStreak > 0 && (
             <div
               className="header__streakBadge"
-              title={`${currentStreak} day streak`}
-              aria-label={`${currentStreak} day streak`}
+              title={t('common.streakTitle', { count: currentStreak })}
+              aria-label={t('common.streakTitle', { count: currentStreak })}
             >
               <Flame size={14} strokeWidth={2} aria-hidden="true" />
               <span aria-hidden="true">
                 {currentStreak}
-                <span className="header__streakBadge-label"> Day Streak</span>
+                <span className="header__streakBadge-label">{t('common.streakBadgeLabel')}</span>
               </span>
             </div>
           )}
@@ -149,7 +151,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
             <SearchBar
               entries={pastEntries}
               onSearch={onSearch}
-              placeholder="Search..."
+              placeholder={t('search.placeholder')}
               searchFields={SEARCH_FIELDS}
             />
           </div>
@@ -161,8 +163,8 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
               type="button"
               onClick={cycle}
               className="header__button header__iconButton"
-              title={`Theme: ${theme}`}
-              aria-label="Toggle theme"
+              title={t('common.themeTitle', { theme })}
+              aria-label={t('common.toggleThemeAria')}
             >
               {theme === 'light' ? <Moon size={14} strokeWidth={2} /> : <Sun size={14} strokeWidth={2} />}
             </button>
@@ -171,8 +173,8 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
               type="button"
               onClick={toggleBurnerMode}
               className={`header__button header__iconButton${isBurnerMode ? ' header__iconButton--active' : ''}`}
-              title={`Burner mode: ${isBurnerMode ? 'on' : 'off'}`}
-              aria-label="Toggle burner mode"
+              title={isBurnerMode ? t('common.burnerModeOn') : t('common.burnerModeOff')}
+              aria-label={t('common.toggleBurnerAria')}
               aria-pressed={isBurnerMode}
             >
               <Flame size={14} strokeWidth={2} />
@@ -196,7 +198,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
               className="header__button"
             >
               <LogOut size={14} />
-              Logout
+              {t('common.logout')}
             </button>
           </div>
         )}

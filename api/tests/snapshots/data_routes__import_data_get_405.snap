@@ -1,0 +1,10 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": 405, \"body\": body })"
+---
+{
+  "body": {
+    "error": "Method not allowed"
+  },
+  "status": 405
+}

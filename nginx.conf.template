@@ -58,7 +58,25 @@ server {
         proxy_read_timeout 60s;
     }
 
-    # Cache static assets
+    # Deploy-critical files must always revalidate. Exact-match (=) locations
+    # beat the regex block below regardless of order, so sw.js escapes the
+    # 1y-immutable rule that would otherwise pin browsers to a stale service
+    # worker (and with it, a stale app shell) for a year. nginx's default
+    # `etag on` makes each revalidation a cheap 304. add_header here
+    # intentionally mirrors the static block below: like it, these blocks
+    # define their own add_header and therefore do not inherit the
+    # server-level security headers.
+    location = /sw.js {
+        add_header Cache-Control "no-cache";
+    }
+    location = /manifest.webmanifest {
+        add_header Cache-Control "no-cache";
+    }
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    # Cache static assets (hashed /assets/* filenames make immutable safe)
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";

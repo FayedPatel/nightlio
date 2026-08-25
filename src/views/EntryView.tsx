@@ -18,6 +18,7 @@ import type { MarkdownAreaHandle } from '../components/MarkdownArea';
 import apiService from '../services/api';
 import { useToast } from '../components/ui/ToastProvider';
 import { useBurner } from '../contexts/BurnerContext';
+import { useI18n } from '../i18n';
 import { formatEntryDate, todayISO, yesterdayISO } from '../utils/dateUtils';
 import type {
   CreateMoodEntryRequest,
@@ -144,6 +145,7 @@ const EntryView = ({
 
   const { show } = useToast();
   const { isBurnerMode } = useBurner();
+  const { t } = useI18n();
 
   const clearAutosaveTimer = useCallback(() => {
     if (autosaveTimerRef.current) {
@@ -317,7 +319,7 @@ const EntryView = ({
           }
 
           if (response?.new_achievements?.length) {
-            show('Saved. New achievements unlocked.', 'success');
+            show(t('toast.savedAchievements'), 'success');
           }
         }
 
@@ -328,9 +330,9 @@ const EntryView = ({
       } catch (error) {
         console.error('Autosave failed:', error);
         setSaveState('error');
-        setSaveErrorMessage('Autosave failed. Retrying when changes continue.');
+        setSaveErrorMessage(t('entry.autosaveFailedRetry'));
         if (!silentError) {
-          show('Autosave failed. Your changes are still in the editor.', 'error');
+          show(t('toast.autosaveFailed'), 'error');
         }
         return false;
       } finally {
@@ -345,7 +347,7 @@ const EntryView = ({
         }
       }
     },
-    [isBurnerMode, onEntryUpdated, show]
+    [isBurnerMode, onEntryUpdated, show, t]
   );
 
   const flushPendingSave = useCallback(async (): Promise<boolean> => {
@@ -541,9 +543,7 @@ const EntryView = ({
   };
 
   const handleDiscard = async () => {
-    const confirmed = window.confirm(
-      'Discard this entry? Anything written here will be permanently deleted.'
-    );
+    const confirmed = window.confirm(t('entry.discardConfirm'));
     if (!confirmed) return;
 
     clearAutosaveTimer();
@@ -556,11 +556,11 @@ const EntryView = ({
         if (typeof onEntryDeleted === 'function') {
           onEntryDeleted(draftId);
         }
-        show('Draft discarded.', 'success');
+        show(t('toast.draftDiscarded'), 'success');
       } catch (error) {
         console.error('Failed to discard autosaved draft:', error);
         skipAutosaveFlushRef.current = false;
-        show('Could not discard the draft. Please try again.', 'error');
+        show(t('toast.discardFailed'), 'error');
         return;
       }
     }
@@ -573,28 +573,28 @@ const EntryView = ({
   const saveStatusMeta: { label: string; Icon: LucideIcon } = (() => {
     if (isBurnerMode) {
       return {
-        label: 'Saving is turned off in burner mode.',
+        label: t('entry.saveStatus.burner'),
         Icon: CloudOff,
       };
     }
 
     if (saveState === 'saving') {
       return {
-        label: 'Saving...',
+        label: t('entry.saveStatus.saving'),
         Icon: Loader2,
       };
     }
 
     if (saveState === 'dirty') {
       return {
-        label: 'Unsaved changes',
+        label: t('entry.saveStatus.dirty'),
         Icon: AlertCircle,
       };
     }
 
     if (saveState === 'error') {
       return {
-        label: saveErrorMessage || 'Autosave error',
+        label: saveErrorMessage || t('entry.saveStatus.error'),
         Icon: AlertCircle,
       };
     }
@@ -604,13 +604,13 @@ const EntryView = ({
         ? lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : '';
       return {
-        label: timestamp ? `Saved at ${timestamp}` : 'All changes saved',
+        label: timestamp ? t('entry.saveStatus.savedAt', { time: timestamp }) : t('entry.saveStatus.allSaved'),
         Icon: CheckCircle2,
       };
     }
 
     return {
-      label: 'Waiting for changes',
+      label: t('entry.saveStatus.idle'),
       Icon: Clock3,
     };
   })();
@@ -619,7 +619,7 @@ const EntryView = ({
     return (
       <div className="entry-mood-prompt">
         <h3>
-          Pick your mood to start an entry
+          {t('entry.pickMoodPrompt')}
         </h3>
         <MoodPicker onMoodSelect={handleMoodSelection} />
       </div>
@@ -632,13 +632,13 @@ const EntryView = ({
         <div className="entry-left">
           {isEditing && editingEntry && (
             <div className="entry-editing-note">
-              Editing entry from <strong>{formatEntryDate(editingEntry.date)}</strong>
+              {t('entry.editingEntryFrom')} <strong>{formatEntryDate(editingEntry.date)}</strong>
             </div>
           )}
           {!isEditing && (
             <div className="entry-date-section">
               <label className="entry-date-section__label" htmlFor="entry-date-input">
-                Entry date
+                {t('entry.dateLabel')}
               </label>
               <div className="entry-date-section__controls">
                 <input
@@ -659,7 +659,7 @@ const EntryView = ({
                   className={`entry-date-chip${entryDate === yesterdayISO() ? ' is-active' : ''}`}
                   onClick={() => setEntryDate(yesterdayISO())}
                 >
-                  Yesterday
+                  {t('common.yesterday')}
                 </button>
                 {entryDate !== todayISO() && (
                   <button
@@ -667,7 +667,7 @@ const EntryView = ({
                     className="entry-date-chip"
                     onClick={() => setEntryDate(todayISO())}
                   >
-                    Today
+                    {t('common.today')}
                   </button>
                 )}
               </div>
@@ -680,11 +680,11 @@ const EntryView = ({
                   type="button"
                   className="entry-save-button entry-return-button"
                   onClick={handleCancel}
-                  aria-label="Return to dashboard"
-                  title="Return to dashboard"
+                  aria-label={t('entry.returnToDashboardAria')}
+                  title={t('entry.returnToDashboardAria')}
                 >
                   <ArrowLeft size={16} aria-hidden="true" />
-                  <span>Return to Dashboard</span>
+                  <span>{t('entry.returnToDashboard')}</span>
                 </button>
 
                 {!isEditing && !isBurnerMode && (
@@ -692,11 +692,11 @@ const EntryView = ({
                     type="button"
                     className="entry-save-button"
                     onClick={handleDiscard}
-                    aria-label="Discard this entry"
-                    title="Discard this entry"
+                    aria-label={t('entry.discardAria')}
+                    title={t('entry.discardAria')}
                   >
                     <Trash2 size={16} aria-hidden="true" />
-                    <span>Discard</span>
+                    <span>{t('entry.discard')}</span>
                   </button>
                 )}
 
@@ -731,14 +731,14 @@ const EntryView = ({
                 className="entry-change-mood-btn"
                 onClick={() => setShowMoodPicker(true)}
               >
-                Change mood
+                {t('entry.changeMood')}
               </button>
             )}
           </div>
           {isEditing && showMoodPicker && (
             <div className="entry-mood-picker-panel">
               <p className="entry-mood-picker-panel__intro">
-                Pick a new mood
+                {t('entry.pickNewMood')}
               </p>
               <MoodPicker onMoodSelect={handleMoodSelection} />
               <div className="entry-mood-picker-panel__footer">
@@ -747,7 +747,7 @@ const EntryView = ({
                   className="entry-mood-picker-panel__cancel"
                   onClick={() => setShowMoodPicker(false)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>

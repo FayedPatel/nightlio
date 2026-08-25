@@ -53,6 +53,8 @@ export interface AppConfig {
   enable_local_login: boolean;
   /** Absolute http(s) URL only when OIDC is enabled; null otherwise. */
   signup_url: string | null;
+  /** API server semver (CARGO_PKG_VERSION), e.g. "0.6.0". */
+  version: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -652,4 +654,148 @@ export interface MusicTrack {
 export interface ExportPdfRequest {
   /** Markdown source; at most 1 MiB of UTF-8 bytes (413 above). */
   content: string;
+}
+
+// ---------------------------------------------------------------------------
+// i18n language packs (GET /api/i18n/languages, GET /api/i18n/{code})
+// v0.6.0 hot-swappable language packs. Shapes are normative from
+// contract/fixtures/i18n/ + contract/openapi.yaml (schemas LanguagesResponse/
+// LanguageInfo/LanguagePack) — unauthenticated, Rust-native family.
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry of the server-cached language list (never the strings map).
+ * English is NEVER listed here, even when an `en` pack is cached — the
+ * frontend unions bundled English into its own picker.
+ */
+export interface LanguageInfo {
+  /** Matches the GET /api/i18n/{code} path segment and the pack's `language`. */
+  code: string;
+  /** English display name, e.g. "Spanish". */
+  name: string;
+  /** Self-name in the language itself, e.g. "Español". Raw UTF-8 on the wire. */
+  native_name: string;
+  /** Pack semver from the `lang-<code>-v<semver>` release tag. */
+  version: string;
+}
+
+/** GET /api/i18n/languages 200 body. Object envelope, never a bare array. */
+export interface LanguagesResponse {
+  languages: LanguageInfo[];
+}
+
+/**
+ * GET /api/i18n/{code} 200 body — the full pack envelope. Exactly these six
+ * keys. `strings` is a NESTED object mirroring src/i18n/en.json: each
+ * nesting level is one segment of the dot-path id, leaves are strings
+ * (flat dot-key maps are accepted as the degenerate nesting). Partial packs
+ * are legal — the client flattens to dot-keys and looks up
+ * pack[key] ?? en[key] ?? key, so missing keys are safe.
+ */
+export type LanguagePackStrings = { [key: string]: string | LanguagePackStrings };
+
+export interface LanguagePack {
+  /** Envelope format version, pinned integer 1. */
+  schema_version: 1;
+  /** Language code; equals the {code} path segment. */
+  language: string;
+  name: string;
+  native_name: string;
+  /** Pack semver; also the second half of the ETag ("<code>-<version>"). */
+  version: string;
+  strings: LanguagePackStrings;
+}
+
+// ---------------------------------------------------------------------------
+// Data export/import (GET /api/export/data, POST /api/import/data)
+// v0.6.0 versioned JSON backup. Shapes are normative from
+// contract/fixtures/data/ + contract/openapi.yaml (schemas DataExport/
+// DataExportEntry/DataExportSelection/DataExportGoal/DataImportResult) —
+// authenticated, Rust-native family (DECISIONS.md 2026-08-24).
+// ---------------------------------------------------------------------------
+
+/**
+ * One denormalized selection of an exported entry. Names, never ids —
+ * import resolves-or-creates the group and option by exact name.
+ */
+export interface DataExportSelection {
+  group_name: string;
+  option_name: string;
+}
+
+/**
+ * One exported mood entry. No id/user_id. The import duplicate key is the
+ * (date, content) pair; created_at/updated_at are preserved on import.
+ */
+export interface DataExportEntry {
+  /** Stored date string, ISO "YYYY-MM-DD" since the date normalization. */
+  date: IsoDate;
+  mood: MoodValue;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  /** Ordered by group name, then option name; empty array when none. */
+  selections: DataExportSelection[];
+}
+
+/**
+ * One exported goal. No id/user_id. The import duplicate key is `title`;
+ * a duplicate goal is skipped whole (its completions are ignored — an
+ * import never mutates existing streak state). Weekly state is exported
+ * with the rollover projected and imported raw — the rollover projection
+ * self-heals stale periods on the next goals read.
+ */
+export interface DataExportGoal {
+  title: string;
+  /** Trimmed string as written by the API; legacy rows can surface null. */
+  description: string | null;
+  /** 1..7. */
+  frequency_per_week: number;
+  completed: number;
+  streak: number;
+  /** ISO Monday of the goal's current week as projected at export time. */
+  period_start: IsoDate;
+  last_completed_date: IsoDate | null;
+  created_at: SqliteTimestamp;
+  updated_at: SqliteTimestamp;
+  /** Bare ISO "YYYY-MM-DD" strings (NOT {date} objects), ascending. */
+  completions: IsoDate[];
+}
+
+/**
+ * The portable v1 envelope: GET /api/export/data 200 body AND the
+ * POST /api/import/data request body. Carries no ids anywhere. Unknown
+ * extra keys are ignored on import (additive evolution); only a breaking
+ * change bumps schema_version, and v1 files import forever.
+ */
+export interface DataExport {
+  /** Export format version, pinned integer 1. Read first by the importer. */
+  schema_version: 1;
+  /** UTC "YYYY-MM-DD HH:MM:SS" at export time. Informational only. */
+  exported_at: SqliteTimestamp;
+  /** Server semver that produced the file. Informational only. */
+  app_version: string;
+  data: {
+    /** Ascending by date; empty array on empty accounts. */
+    entries: DataExportEntry[];
+    /** Creation order; empty array on empty accounts. */
+    goals: DataExportGoal[];
+  };
+}
+
+/**
+ * POST /api/import/data 200 body — per-category imported/skipped counts
+ * (imported + skipped = rows in the file; a skipped goal counts once).
+ * Idempotent: re-importing the same file skips everything.
+ */
+export interface DataImportResult {
+  status: 'success';
+  entries: {
+    imported: number;
+    skipped: number;
+  };
+  goals: {
+    imported: number;
+    skipped: number;
+  };
 }

@@ -41,12 +41,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
-use tokio::task::spawn_blocking;
 
 use crate::auth::{cookie as auth_cookie, jwt};
 use crate::config::Config;
-use crate::db::DatabaseError;
-use crate::db::users::{self, UserRow};
+use crate::db::store;
 use crate::routes::{ForwardedInfo, automatic_options};
 use crate::state::AppState;
 
@@ -554,21 +552,9 @@ async fn run_callback(
     }
 
     // --- provisioning (handle_oidc_login → upsert_oidc_user) ---
-    let pool = state.pool.clone();
-    let upserted = spawn_blocking(move || -> Result<Option<UserRow>, DatabaseError> {
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        users::upsert_oidc_user(
-            &conn,
-            &subject,
-            email.as_deref(),
-            name.as_deref(),
-            avatar.as_deref(),
-            "oidc",
-        )
-    })
-    .await;
+    let upserted = store::users::upsert_oidc_user(&state.db, subject, email, name, avatar).await;
     let user = match upserted {
-        Ok(Ok(Some(user))) => user,
+        Ok(Some(user)) => user,
         _ => return Err(CallbackError::AuthFailed),
     };
 

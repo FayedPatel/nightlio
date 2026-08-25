@@ -29,6 +29,12 @@ rm -f "$RATE_LIMIT_DB_PATH"
 export OIDC_ISSUER_URL="" OIDC_CLIENT_ID="" OIDC_CLIENT_SECRET="" \
   OIDC_CALLBACK_URL="" FRONTEND_URL="" TRUST_PROXY_HEADERS="" \
   DISABLE_LOCAL_LOGIN=""
+# Hermetic i18n: never let e2e workers hit the live GitHub releases API.
+# Once a real lang-*-v* release exists, discovery would otherwise fetch it
+# (nondeterministic strings + unauthenticated 60/h rate limit shared across
+# parallel workers). Offline with a cold cache = empty language list, which
+# is exactly the degrade path the suite pins.
+export I18N_OFFLINE=1
 rm -f "$DATABASE_PATH"
 
 # cargo build's own fingerprinting makes this a ~0.2s no-op once the release
@@ -41,12 +47,15 @@ rm -f "$DATABASE_PATH"
 # Output is captured and only shown on failure, so a healthy build stays
 # quiet under Playwright's ignored stdio.
 BUILD_LOG="$(mktemp)"
+trap 'rm -f "$BUILD_LOG"' EXIT INT TERM
 if ! cargo build --release --manifest-path api/Cargo.toml --bin nightlio-api >"$BUILD_LOG" 2>&1; then
   cat "$BUILD_LOG" >&2
-  rm -f "$BUILD_LOG"
   exit 1
 fi
+# Explicit cleanup: the exec below replaces the shell, so the EXIT trap
+# would never fire on the success path.
 rm -f "$BUILD_LOG"
+trap - EXIT INT TERM
 
 # The Rust config maps E2E_API_PORT -> PORT (Config::from_env reads PORT,
 # default 5000). DATABASE_PATH / RATE_LIMIT_DB_PATH / OIDC_* / FRONTEND_URL /

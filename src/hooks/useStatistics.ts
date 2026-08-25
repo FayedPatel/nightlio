@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import apiService from '../services/api';
+import { translate } from '../i18n';
 import type { Statistics } from '../types/api';
 
 export const useStatistics = () => {
@@ -17,7 +18,7 @@ export const useStatistics = () => {
       setStatistics(data);
     } catch (error) {
       console.error('Failed to load statistics:', error);
-      setError('Failed to load statistics');
+      setError(translate('errors.loadStatistics'));
     } finally {
       setLoading(false);
     }

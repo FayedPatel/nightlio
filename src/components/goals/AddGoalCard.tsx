@@ -1,10 +1,12 @@
 import { Plus } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 interface AddGoalCardProps {
   onAdd: () => void;
 }
 
 const AddGoalCard = ({ onAdd }: AddGoalCardProps) => {
+  const { t } = useI18n();
   return (
     <div
       className="entry-card"
@@ -22,8 +24,8 @@ const AddGoalCard = ({ onAdd }: AddGoalCardProps) => {
         cursor: 'pointer',
         transition: 'background 0.2s, border-color 0.2s'
       }}
-      aria-label="Add Goal"
-      title="Add Goal"
+      aria-label={t('goals.addGoal')}
+      title={t('goals.addGoal')}
     >
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'var(--accent-600)' }}>
         <div style={{
@@ -38,7 +40,7 @@ const AddGoalCard = ({ onAdd }: AddGoalCardProps) => {
         }}>
           <Plus size={24} />
         </div>
-        <div style={{ fontWeight: 600 }}>Add Goal</div>
+        <div style={{ fontWeight: 600 }}>{t('goals.addGoal')}</div>
       </div>
     </div>
   );

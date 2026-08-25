@@ -1,0 +1,14 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": {
+    "languages": []
+  },
+  "content_type": "application/json",
+  "headers": {
+    "Cache-Control": "public, max-age=3600"
+  },
+  "status": 200
+}

@@ -1,0 +1,10 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "error": "Unsupported schema_version: 2 (supported: 1)"
+  },
+  "status": 400
+}

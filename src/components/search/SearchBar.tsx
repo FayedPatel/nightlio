@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Search, X } from 'lucide-react';
+import { useI18n } from '../../i18n';
 import type { MoodEntry } from '../../types/api';
 import './SearchBar.css';
 
@@ -19,10 +20,12 @@ interface SearchBarProps {
 export default function SearchBar({
   entries = EMPTY_ENTRIES,
   onSearch,
-  placeholder = "Search entries...",
+  placeholder,
   searchFields = DEFAULT_SEARCH_FIELDS
 }: SearchBarProps) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
+  const effectivePlaceholder = placeholder ?? t('search.entriesPlaceholder');
 
   // Real-time search as user types; results are delivered to the parent via
   // onSearch rather than rendered here (the inline dropdown was removed).
@@ -56,7 +59,7 @@ export default function SearchBar({
         <Search size={18} className="search-bar-icon" />
         <input
           type="text"
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="search-bar-input"

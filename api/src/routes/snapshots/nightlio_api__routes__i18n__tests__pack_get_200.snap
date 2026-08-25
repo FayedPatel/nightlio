@@ -1,0 +1,37 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": {
+    "language": "es",
+    "name": "Spanish",
+    "native_name": "Español",
+    "schema_version": 1,
+    "strings": {
+      "common": {
+        "appName": "Nightlio",
+        "cancel": "Cancelar",
+        "dateAtTime": "{date} a las {time}",
+        "loading": "Cargando...",
+        "today": "Hoy",
+        "yesterday": "Ayer"
+      },
+      "nav": {
+        "goals": "Metas",
+        "history": "Historial",
+        "home": "Inicio",
+        "settings": "Ajustes",
+        "stats": "Estadísticas",
+        "statsShort": "Stats"
+      }
+    },
+    "version": "1.0.0"
+  },
+  "content_type": "application/json",
+  "headers": {
+    "Cache-Control": "public, max-age=3600",
+    "ETag": "\"es-1.0.0\""
+  },
+  "status": 200
+}

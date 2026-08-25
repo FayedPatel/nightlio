@@ -53,6 +53,21 @@ impl ApiError {
     }
 }
 
+/// Data-layer failure → the matching internal variant (all map to a generic
+/// 500). Mirrors the per-route `db_err` helpers so call sites checking a
+/// connection out of [`crate::db::DbHandle`] can use `?` directly.
+impl From<crate::db::DatabaseError> for ApiError {
+    fn from(error: crate::db::DatabaseError) -> Self {
+        match error {
+            crate::db::DatabaseError::Sqlite(inner) => ApiError::Database(inner),
+            crate::db::DatabaseError::Pool(inner) => ApiError::Pool(inner),
+            crate::db::DatabaseError::Message(message) => {
+                ApiError::Internal(anyhow::anyhow!(message))
+            }
+        }
+    }
+}
+
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {

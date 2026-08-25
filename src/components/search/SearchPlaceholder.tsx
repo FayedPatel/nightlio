@@ -1,12 +1,14 @@
 import { Search } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 const SearchPlaceholder = () => {
+  const { t } = useI18n();
   return (
     <div
       className="search-placeholder"
       role="search"
-      aria-label="Search"
-      title="Search entries…"
+      aria-label={t('search.aria')}
+      title={t('search.titleHint')}
       id="global-search"
     >
       <Search size={16} strokeWidth={2} aria-hidden="true" />
@@ -14,7 +16,7 @@ const SearchPlaceholder = () => {
         className="search-placeholder__input"
         type="text"
         readOnly
-        placeholder="Search entries… (Press / to focus)"
+        placeholder={t('search.placeholderReadOnly')}
         aria-readonly="true"
         id="global-search-input"
       />

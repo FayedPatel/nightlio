@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, Calendar, Info } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 /** Payload GoalForm hands to onSubmit; `frequency` is the "N days a week" label. */
 export interface GoalFormData {
@@ -29,6 +30,7 @@ interface GoalFormState {
 type GoalFormErrors = Partial<Record<keyof GoalFormState, string>>;
 
 const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel, showInlineSuggestions = true }, ref) => {
+  const { t } = useI18n();
   const [formData, setFormData] = useState<GoalFormState>({
     title: '',
     description: '',
@@ -51,7 +53,7 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
   const descMax = 280;
   const titleLen = formData.title.length;
   const descLen = formData.description.length;
-  const freqLabel = useMemo(() => `${formData.frequencyNumber} ${formData.frequencyNumber === 1 ? 'day' : 'days'} a week`, [formData.frequencyNumber]);
+  const freqLabel = useMemo(() => t('goals.frequencyPerWeek', { count: formData.frequencyNumber }), [formData.frequencyNumber, t]);
 
   const handleInputChange = <K extends keyof GoalFormState>(field: K, value: GoalFormState[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -63,13 +65,13 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
 
   const validateForm = () => {
     const newErrors: GoalFormErrors = {};
-    
+
     if (!formData.title.trim()) {
-      newErrors.title = 'Title is required';
+      newErrors.title = t('goals.form.titleRequired');
     }
-    
+
     if (!formData.description.trim()) {
-      newErrors.description = 'Description is required';
+      newErrors.description = t('goals.form.descriptionRequired');
     }
 
     setErrors(newErrors);
@@ -121,26 +123,26 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
         onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
       >
         <ArrowLeft size={16} />
-        Back to Goals
+        {t('goals.form.backToGoals')}
       </button>
 
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '24px' }}>
-          <label htmlFor="goal-title" style={{ 
-            display: 'block', 
-            marginBottom: '8px', 
-            fontWeight: '500', 
+          <label htmlFor="goal-title" style={{
+            display: 'block',
+            marginBottom: '8px',
+            fontWeight: '500',
             color: 'var(--text)',
             fontSize: '0.95rem'
           }}>
-            Goal Title *
+            {t('goals.form.titleLabel')}
           </label>
           <input
             type="text"
             id="goal-title"
             value={formData.title}
             onChange={(e) => handleInputChange('title', e.target.value)}
-            placeholder="e.g., Morning Meditation, Evening Walk, Read Before Bed"
+            placeholder={t('goals.form.titlePlaceholder')}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -165,27 +167,27 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
             {errors.title ? (
               <div style={{ color: 'var(--error)', fontSize: '0.85rem' }}>{errors.title}</div>
             ) : (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Make it clear and specific</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t('goals.form.titleHint')}</span>
             )}
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{titleLen}/{titleMax}</span>
           </div>
         </div>
 
         <div style={{ marginBottom: '24px' }}>
-      <label htmlFor="goal-desc" style={{ 
-            display: 'block', 
-            marginBottom: '8px', 
-            fontWeight: '500', 
+      <label htmlFor="goal-desc" style={{
+            display: 'block',
+            marginBottom: '8px',
+            fontWeight: '500',
             color: 'var(--text)',
             fontSize: '0.95rem'
           }}>
-            Description *
+            {t('goals.form.descriptionLabel')}
           </label>
           <textarea
             id="goal-desc"
             value={formData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
-            placeholder="Describe your goal and why it's important to you..."
+            placeholder={t('goals.form.descriptionPlaceholder')}
             rows={4}
             style={{
               width: '100%',
@@ -213,7 +215,7 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
             {errors.description ? (
               <div style={{ color: 'var(--error)', fontSize: '0.85rem' }}>{errors.description}</div>
             ) : (
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Add a short motivation to keep you accountable</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{t('goals.form.descriptionHint')}</span>
             )}
             <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{descLen}/{descMax}</span>
           </div>
@@ -223,7 +225,7 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             {/* Not a <label>: the "control" is the button group below, so this
                 is a group heading wired up via role="group" + aria-labelledby. */}
-            <span id="goal-frequency-label" style={{ fontWeight: 500, color: 'var(--text)', fontSize: '0.95rem' }}>Frequency</span>
+            <span id="goal-frequency-label" style={{ fontWeight: 500, color: 'var(--text)', fontSize: '0.95rem' }}>{t('goals.form.frequencyLabel')}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               <Calendar size={14} />
               <span>{freqLabel}</span>
@@ -255,15 +257,19 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, color: 'var(--text-muted)', fontSize: '0.85rem' }}>
             <Info size={14} />
-            <span>This sets your weekly target. You can mark progress daily.</span>
+            <span>{t('goals.form.frequencyHint')}</span>
           </div>
         </div>
 
         {showInlineSuggestions && (
           <div style={{ marginBottom: '28px' }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>Quick suggestions</div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>{t('goals.quickSuggestions')}</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {[{t:'Morning Meditation',d:'10 minutes of mindfulness'}, {t:'Evening Walk',d:'30-minute walk outside'}, {t:'Read Before Bed',d:'Read 20 minutes'}].map((s) => (
+              {[
+                { t: t('goals.suggestions.meditation.title'), d: t('goals.suggestions.meditation.description') },
+                { t: t('goals.suggestions.walk.title'), d: t('goals.suggestions.walk.description') },
+                { t: t('goals.suggestions.read.title'), d: t('goals.suggestions.readShort.description') },
+              ].map((s) => (
                 <button
                   key={s.t}
                   type="button"
@@ -304,7 +310,7 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
             onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'var(--accent-bg-softer)'; }}
             onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'var(--surface)'; }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
@@ -318,7 +324,7 @@ const GoalForm = forwardRef<GoalFormHandle, GoalFormProps>(({ onSubmit, onCancel
             }}
             disabled={submitting}
           >
-            {submitting ? 'Creating…' : 'Create Goal'}
+            {submitting ? t('goals.form.creating') : t('goals.form.create')}
           </button>
         </div>
       </form>

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import apiService from '../services/api';
+import { useI18n } from '../i18n';
 import type { Group } from '../types/api';
 
 export const useGroups = () => {
+  const { t } = useI18n();
   const [groups, setGroups] = useState<Group[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -10,13 +12,13 @@ export const useGroups = () => {
   const loadGroups = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await apiService.getGroups();
       setGroups(data);
     } catch (error) {
       console.error('Failed to load groups:', error);
-      setError('Failed to load categories');
+      setError(t('errors.loadCategories'));
     } finally {
       setLoading(false);
     }
@@ -31,7 +33,7 @@ export const useGroups = () => {
       return true;
     } catch (error) {
       console.error('Failed to create group:', error);
-      setError('Failed to create category');
+      setError(t('errors.createCategory'));
       return false;
     }
   };
@@ -43,7 +45,7 @@ export const useGroups = () => {
       return true;
     } catch (error) {
       console.error('Failed to create group option:', error);
-      setError('Failed to create option');
+      setError(t('errors.createOption'));
       return false;
     }
   };
@@ -55,7 +57,7 @@ export const useGroups = () => {
       return true;
     } catch (error) {
       console.error('Failed to delete group:', error);
-      setError('Failed to delete category');
+      setError(t('errors.deleteCategory'));
       return false;
     }
   };

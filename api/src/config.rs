@@ -43,6 +43,19 @@ impl AppEnv {
 /// in `api/config.py`).
 pub const JWT_ACCESS_TOKEN_EXPIRES_SECS: u64 = 3600;
 
+/// Which backend serves the main data store (v0.6.0). Selected by
+/// `DATABASE_URL`: unset/empty means SQLite via `DATABASE_PATH`, exactly as
+/// before; a `postgres://` or `postgresql://` URL opts into Postgres. The
+/// rate limiter is unaffected — it keeps its own SQLite file
+/// (`rate_limit_db_path`) on both backends.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DatabaseTarget {
+    /// Embedded SQLite at [`Config::database_path`] (the default).
+    Sqlite,
+    /// Opt-in Postgres; carries the full `DATABASE_URL` connection string.
+    Postgres(String),
+}
+
 /// Default CORS origins. Deliberately diverges from the Flask default
 /// (`api/config.py::Config.CORS_ORIGINS`), which shipped a credentialed
 /// grant to the third-party `https://nightlio.vercel.app` origin for any
@@ -53,6 +66,19 @@ const DEFAULT_CORS_ORIGINS: &str = "http://localhost:5173,http://localhost:5000"
 /// The well-known dev fallback signing key. Weak by definition; production
 /// startup refuses it via [`Config::validate_production_secrets`].
 const DEV_SECRET_KEY: &str = "dev-secret-key-change-in-production";
+
+/// Hot-swappable language packs (v0.6.0, `api/src/i18n.rs`): the GitHub
+/// repository whose `lang-<code>-v<semver>` releases carry the pack assets.
+const DEFAULT_I18N_GITHUB_REPO: &str = "FayedPatel/nightlio";
+
+/// GitHub API base URL for release discovery. Overridable via
+/// `I18N_GITHUB_API_BASE` so tests can point wiremock at a fake GitHub —
+/// the same test seam idea as `JAMENDO_API_BASE` in
+/// `api/src/routes/extras.rs`.
+const DEFAULT_I18N_GITHUB_API_BASE: &str = "https://api.github.com";
+
+/// Default TTL (seconds) between language-pack release-discovery refreshes.
+const DEFAULT_I18N_REFRESH_SECS: u64 = 3600;
 
 /// Known placeholder secrets, ported verbatim from
 /// `api/config.py::_KNOWN_WEAK_SECRETS`. Kept in sync with the compose /
@@ -149,6 +175,11 @@ pub struct Config {
     /// (`ProductionConfig` fallback), testing always `/tmp/nightlio_test.db`
     /// (the Python `TestingConfig` hardcodes it, ignoring the env var).
     pub database_path: String,
+    /// Raw `DATABASE_URL` (unset and empty both become `None`, meaning the
+    /// SQLite backend via `database_path`). Validated by
+    /// [`Config::database_target`] — startup fails fast on any scheme other
+    /// than `postgres://` / `postgresql://`.
+    pub database_url: Option<String>,
     /// `RATE_LIMIT_DB_PATH`; when unset, `rate_limit.db` next to the raw
     /// `DATABASE_PATH` env value or the documented default data directory
     /// (mirrors `api/utils/rate_limiter.py::_rate_limit_db_path`).
@@ -168,6 +199,26 @@ pub struct Config {
     pub enable_mood_music: bool,
     /// `JAMENDO_CLIENT_ID` (mood-music service, `api/services/mus_service.py`).
     pub jamendo_client_id: Option<String>,
+    /// `I18N_GITHUB_REPO`: `owner/repo` whose `lang-<code>-v<semver>`
+    /// releases carry the hot-swappable language packs (v0.6.0,
+    /// `api/src/i18n.rs`). Default `FayedPatel/nightlio`.
+    pub i18n_github_repo: String,
+    /// `I18N_GITHUB_API_BASE`: GitHub API base URL for release discovery,
+    /// default `https://api.github.com`. Tests point wiremock here.
+    pub i18n_github_api_base: String,
+    /// `I18N_REFRESH_SECS`: TTL between release-discovery refreshes,
+    /// default 3600; unparseable values fall back to the default.
+    pub i18n_refresh_secs: u64,
+    /// `I18N_OFFLINE`: never contact GitHub; serve only whatever the disk
+    /// cache already holds (air-gapped self-hosters).
+    pub i18n_offline: bool,
+    /// `I18N_LOCAL_DIR`: directory of `<code>.json` pack files served
+    /// directly from disk. Takes precedence over GitHub entirely — no
+    /// network, no TTL, files re-read per request.
+    pub i18n_local_dir: Option<String>,
+    /// `I18N_GITHUB_TOKEN`: optional token for the release-discovery calls
+    /// (raises the unauthenticated 60/h GitHub API rate limit).
+    pub i18n_github_token: Option<String>,
     /// OIDC SSO (any spec-compliant provider). Discovery document derived as
     /// `<OIDC_ISSUER_URL>/.well-known/openid-configuration`.
     pub oidc_issuer_url: Option<String>,
@@ -275,6 +326,7 @@ impl Config {
             app_env,
             port,
             database_path,
+            database_url: non_empty(env("DATABASE_URL")),
             rate_limit_db_path,
             secret_key,
             jwt_secret,
@@ -283,6 +335,18 @@ impl Config {
             trust_proxy_headers: is_truthy(env("TRUST_PROXY_HEADERS").as_deref()),
             enable_mood_music: is_truthy(env("ENABLE_MOOD_MUSIC").as_deref()),
             jamendo_client_id: non_empty(env("JAMENDO_CLIENT_ID")),
+            i18n_github_repo: non_empty(env("I18N_GITHUB_REPO"))
+                .unwrap_or_else(|| DEFAULT_I18N_GITHUB_REPO.to_string()),
+            i18n_github_api_base: non_empty(env("I18N_GITHUB_API_BASE"))
+                .unwrap_or_else(|| DEFAULT_I18N_GITHUB_API_BASE.to_string()),
+            i18n_refresh_secs: env("I18N_REFRESH_SECS")
+                .unwrap_or_default()
+                .trim()
+                .parse::<u64>()
+                .unwrap_or(DEFAULT_I18N_REFRESH_SECS),
+            i18n_offline: is_truthy(env("I18N_OFFLINE").as_deref()),
+            i18n_local_dir: non_empty(env("I18N_LOCAL_DIR")),
+            i18n_github_token: non_empty(env("I18N_GITHUB_TOKEN")),
             oidc_issuer_url,
             oidc_client_id: non_empty(env("OIDC_CLIENT_ID")),
             oidc_client_secret: non_empty(env("OIDC_CLIENT_SECRET")),
@@ -295,6 +359,30 @@ impl Config {
             selfhost_user_name: non_empty(env("SELFHOST_USER_NAME"))
                 .unwrap_or_else(|| "Me".to_string()),
             selfhost_user_email: non_empty(env("SELFHOST_USER_EMAIL")),
+        }
+    }
+
+    /// Resolve which database backend `DATABASE_URL` selects. Called once
+    /// at startup: unset ⇒ SQLite (byte-for-byte today's behavior);
+    /// `postgres://` / `postgresql://` ⇒ Postgres; anything else refuses to
+    /// start rather than silently falling back to SQLite. Error messages
+    /// deliberately never echo the full URL (it can embed credentials).
+    pub fn database_target(&self) -> anyhow::Result<DatabaseTarget> {
+        let Some(url) = self.database_url.as_deref() else {
+            return Ok(DatabaseTarget::Sqlite);
+        };
+        match url.split_once("://") {
+            Some(("postgres" | "postgresql", _)) => Ok(DatabaseTarget::Postgres(url.to_string())),
+            Some((scheme, _)) => bail!(
+                "Refusing to start: DATABASE_URL has unsupported scheme `{scheme}://` \
+                 (only postgres:// and postgresql:// are supported). Unset \
+                 DATABASE_URL to use the default SQLite backend via DATABASE_PATH."
+            ),
+            None => bail!(
+                "Refusing to start: DATABASE_URL is set but is not a URL (expected \
+                 postgres://... or postgresql://...). Unset DATABASE_URL to use the \
+                 default SQLite backend via DATABASE_PATH."
+            ),
         }
     }
 
@@ -355,6 +443,8 @@ mod tests {
         assert_eq!(cfg.app_env, AppEnv::Production);
         assert_eq!(cfg.port, 5000);
         assert_eq!(cfg.database_path, "/tmp/nightlio.db");
+        assert_eq!(cfg.database_url, None);
+        assert_eq!(cfg.database_target().unwrap(), DatabaseTarget::Sqlite);
         assert_eq!(cfg.rate_limit_db_path, "data/rate_limit.db");
         assert_eq!(cfg.secret_key, "dev-secret-key-change-in-production");
         assert_eq!(cfg.jwt_secret, "dev-secret-key-change-in-production");
@@ -368,6 +458,12 @@ mod tests {
         assert!(!cfg.disable_local_login);
         assert!(!cfg.oidc_enabled());
         assert_eq!(cfg.jamendo_client_id, None);
+        assert_eq!(cfg.i18n_github_repo, "FayedPatel/nightlio");
+        assert_eq!(cfg.i18n_github_api_base, "https://api.github.com");
+        assert_eq!(cfg.i18n_refresh_secs, 3600);
+        assert!(!cfg.i18n_offline);
+        assert_eq!(cfg.i18n_local_dir, None);
+        assert_eq!(cfg.i18n_github_token, None);
         assert_eq!(cfg.oidc_signup_url, None);
         assert_eq!(cfg.frontend_url, None);
         assert_eq!(cfg.default_self_host_id, "selfhost_default_user");
@@ -429,6 +525,55 @@ mod tests {
             ("DATABASE_PATH", "/srv/custom.db"),
         ]));
         assert_eq!(cfg.database_path, "/tmp/nightlio_test.db");
+    }
+
+    #[test]
+    fn database_target_defaults_to_sqlite_when_unset_or_empty() {
+        // Unset -> SQLite, DATABASE_PATH semantics untouched.
+        let cfg = Config::from_lookup(&lookup(&[("DATABASE_PATH", "/srv/custom.db")]));
+        assert_eq!(cfg.database_url, None);
+        assert_eq!(cfg.database_target().unwrap(), DatabaseTarget::Sqlite);
+        assert_eq!(cfg.database_path, "/srv/custom.db");
+        // Empty = unset (os.getenv-or-None convention).
+        let cfg = Config::from_lookup(&lookup(&[("DATABASE_URL", "")]));
+        assert_eq!(cfg.database_url, None);
+        assert_eq!(cfg.database_target().unwrap(), DatabaseTarget::Sqlite);
+    }
+
+    #[rstest]
+    #[case("postgres://night:secret@db.example.com:5432/nightlio")]
+    #[case("postgresql://night:secret@db.example.com:5432/nightlio")]
+    fn database_target_accepts_postgres_schemes(#[case] url: &str) {
+        let cfg = Config::from_lookup(&lookup(&[("DATABASE_URL", url)]));
+        assert_eq!(cfg.database_url.as_deref(), Some(url));
+        assert_eq!(
+            cfg.database_target().unwrap(),
+            DatabaseTarget::Postgres(url.to_string())
+        );
+        // The rate limiter stays its own SQLite file on both backends.
+        assert_eq!(cfg.rate_limit_db_path, "data/rate_limit.db");
+    }
+
+    #[rstest]
+    #[case("mysql://night:secret@db.example.com/nightlio")]
+    #[case("sqlite:///tmp/nightlio.db")]
+    #[case("file:///tmp/nightlio.db")]
+    fn database_target_refuses_other_schemes(#[case] url: &str) {
+        let cfg = Config::from_lookup(&lookup(&[("DATABASE_URL", url)]));
+        let err = cfg.database_target().unwrap_err().to_string();
+        assert!(err.contains("Refusing to start"), "{err}");
+        assert!(err.contains("DATABASE_URL"), "{err}");
+        assert!(err.contains("postgres://"), "{err}");
+        // Never echo the full URL — it can embed credentials.
+        assert!(!err.contains("secret"), "{err}");
+    }
+
+    #[test]
+    fn database_target_refuses_non_url_values() {
+        let cfg = Config::from_lookup(&lookup(&[("DATABASE_URL", "not-a-url")]));
+        let err = cfg.database_target().unwrap_err().to_string();
+        assert!(err.contains("Refusing to start"), "{err}");
+        assert!(err.contains("not a URL"), "{err}");
     }
 
     #[test]
@@ -636,6 +781,57 @@ mod tests {
             let cfg = Config::from_lookup(&lookup(&[("APP_ENV", env_name)]));
             assert!(cfg.validate_production_secrets().is_ok(), "{env_name}");
         }
+    }
+
+    #[test]
+    fn i18n_env_seams_load() {
+        let cfg = Config::from_lookup(&lookup(&[
+            ("I18N_GITHUB_REPO", "acme/l10n"),
+            ("I18N_GITHUB_API_BASE", "http://127.0.0.1:9099"),
+            ("I18N_REFRESH_SECS", "60"),
+            ("I18N_OFFLINE", "yes"),
+            ("I18N_LOCAL_DIR", "/srv/i18n"),
+            ("I18N_GITHUB_TOKEN", "ghp_example_token_value"),
+        ]));
+        assert_eq!(cfg.i18n_github_repo, "acme/l10n");
+        assert_eq!(cfg.i18n_github_api_base, "http://127.0.0.1:9099");
+        assert_eq!(cfg.i18n_refresh_secs, 60);
+        assert!(cfg.i18n_offline);
+        assert_eq!(cfg.i18n_local_dir.as_deref(), Some("/srv/i18n"));
+        assert_eq!(
+            cfg.i18n_github_token.as_deref(),
+            Some("ghp_example_token_value")
+        );
+    }
+
+    #[test]
+    fn i18n_empty_values_fall_back_to_defaults() {
+        // Empty = unset (os.getenv-or-None convention), like every other
+        // optional variable in this module.
+        let cfg = Config::from_lookup(&lookup(&[
+            ("I18N_GITHUB_REPO", ""),
+            ("I18N_GITHUB_API_BASE", ""),
+            ("I18N_OFFLINE", ""),
+            ("I18N_LOCAL_DIR", ""),
+            ("I18N_GITHUB_TOKEN", ""),
+        ]));
+        assert_eq!(cfg.i18n_github_repo, "FayedPatel/nightlio");
+        assert_eq!(cfg.i18n_github_api_base, "https://api.github.com");
+        assert!(!cfg.i18n_offline);
+        assert_eq!(cfg.i18n_local_dir, None);
+        assert_eq!(cfg.i18n_github_token, None);
+    }
+
+    #[rstest]
+    #[case("60", 60)]
+    #[case(" 60 ", 60)] // int()-style whitespace tolerance, like PORT
+    #[case("0", 0)]
+    #[case("not-a-number", 3600)]
+    #[case("-5", 3600)]
+    #[case("", 3600)]
+    fn i18n_refresh_secs_parsing(#[case] raw: &str, #[case] expected: u64) {
+        let cfg = Config::from_lookup(&lookup(&[("I18N_REFRESH_SECS", raw)]));
+        assert_eq!(cfg.i18n_refresh_secs, expected);
     }
 
     #[test]

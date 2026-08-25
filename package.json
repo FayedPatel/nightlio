@@ -1,7 +1,7 @@
 {
   "name": "nightlio",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.6.0",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -39,6 +39,8 @@
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
+    "i18n:validate": "node scripts/validate-lang-pack.mjs",
+    "i18n:build": "node scripts/build-lang-pack.mjs",
     "test": "cargo test --manifest-path api/Cargo.toml",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

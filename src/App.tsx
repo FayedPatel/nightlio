@@ -6,6 +6,8 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ConfigProvider, useConfig } from "./contexts/ConfigContext";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { BurnerProvider } from "./contexts/BurnerContext";
+import { I18nProvider } from "./i18n";
+import I18nSync from "./i18n/sync";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Header from "./components/Header";
 import Sidebar from "./components/navigation/Sidebar";
@@ -255,30 +257,33 @@ const AppContent = () => {
 
 function App() {
   return (
-    <ConfigProvider>
-      <ThemeProvider>
-        <ToastProvider>
-          <BurnerProvider>
-            <AuthProvider>
-              <Routes>
-                <Route path="/" element={<LandingPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route
-                  path="/dashboard/*"
-                  element={
-                    <ProtectedRoute>
-                      <AppContent />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AuthProvider>
-          </BurnerProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </ConfigProvider>
+    <I18nProvider>
+      <I18nSync />
+      <ConfigProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <BurnerProvider>
+              <AuthProvider>
+                <Routes>
+                  <Route path="/" element={<LandingPage />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route
+                    path="/dashboard/*"
+                    element={
+                      <ProtectedRoute>
+                        <AppContent />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AuthProvider>
+            </BurnerProvider>
+          </ToastProvider>
+        </ThemeProvider>
+      </ConfigProvider>
+    </I18nProvider>
   );
 }
 

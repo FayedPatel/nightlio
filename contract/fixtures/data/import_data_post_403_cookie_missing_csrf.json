@@ -1,0 +1,27 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Cookie": "nightlio_token=<JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 1,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [],
+        "goals": []
+      }
+    }
+  },
+  "response": {
+    "status": 403,
+    "content_type": "application/json",
+    "body": {
+      "error": "Missing required request header"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). Cookie-authenticated state-changing request with Content-Type application/json but WITHOUT X-Requested-With: nightlio -> 403 with the exact error string (one of the only two contract-fixed error texts). With a non-JSON Content-Type the earlier check fires instead: 403 {\"error\": \"Content-Type must be application/json\"}. Bearer requests skip CSRF entirely. Nothing is imported on a CSRF rejection."
+}

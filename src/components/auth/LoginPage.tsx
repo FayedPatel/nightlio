@@ -5,6 +5,8 @@ import { Lock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import apiService from '../../services/api';
+import { useI18n } from '../../i18n';
+import type { I18nKey } from '../../i18n';
 import './LoginPage.css';
 
 const LoadingSpinner = () => (
@@ -13,16 +15,17 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-// Record<string, string> so the code parsed out of the URL fragment (an
-// arbitrary string) can index it; unknown codes fall back to callback_failed.
-const SSO_ERROR_FALLBACK = 'Single sign-on failed. Please try again.';
-const SSO_ERROR_MESSAGES: Record<string, string> = {
-  callback_failed: SSO_ERROR_FALLBACK,
-  auth_failed: 'Single sign-on could not complete. Please try again.',
+// Record<string, I18nKey> so the code parsed out of the URL fragment (an
+// arbitrary string) can index it; unknown codes fall back to auth.ssoFailed.
+const SSO_ERROR_FALLBACK_KEY: I18nKey = 'auth.ssoFailed';
+const SSO_ERROR_KEYS: Record<string, I18nKey> = {
+  callback_failed: SSO_ERROR_FALLBACK_KEY,
+  auth_failed: 'auth.ssoCouldNotComplete',
 };
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const { loginWithPassword, isAuthenticated } = useAuth();
   const { config, loading: configLoading } = useConfig();
   const [username, setUsername] = useState('');
@@ -92,15 +95,16 @@ const LoginPage = () => {
     if (typeof window === 'undefined') return;
     const match = (window.location.hash || '').match(/[#&]sso_error=([^&]+)/);
     if (!match) return;
-    setMessage((match[1] && SSO_ERROR_MESSAGES[match[1]]) || SSO_ERROR_FALLBACK);
+    const key = (match[1] && SSO_ERROR_KEYS[match[1]]) || SSO_ERROR_FALLBACK_KEY;
+    setMessage(t(key));
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
-  }, []);
+  }, [t]);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!username.trim() || !password) {
-        setMessage('Enter your username and password.');
+        setMessage(t('auth.enterCredentials'));
         return;
       }
 
@@ -110,11 +114,11 @@ const LoginPage = () => {
       if (result.success) {
         navigate('/dashboard', { replace: true });
       } else {
-        setMessage(result.error || 'Login failed. Please try again.');
+        setMessage(result.error || t('auth.loginFailed'));
         setIsLoading(false);
       }
     },
-    [username, password, loginWithPassword, navigate],
+    [username, password, loginWithPassword, navigate, t],
   );
 
   const handleSsoLogin = useCallback(() => {
@@ -137,7 +141,7 @@ const LoginPage = () => {
       <div className="login-page">
         <div className="login-page__card login-page__card--auth" aria-busy="true">
           <LoadingSpinner />
-          <span className="login-page__sr-only">Loading sign-in options…</span>
+          <span className="login-page__sr-only">{t('auth.loadingSignInOptions')}</span>
         </div>
       </div>
     );
@@ -148,10 +152,10 @@ const LoginPage = () => {
       <div className="login-page__card login-page__card--auth">
         <div className="login-page__header">
           <h1 className="login-page__brand-title">
-            <img src="/logo.png" alt="Nightlio logo" className="login-page__brand-logo" />
-            Nightlio
+            <img src="/logo.png" alt={t('common.logoAlt')} className="login-page__brand-logo" />
+            {t('common.appName')}
           </h1>
-          <p className="login-page__brand-subtitle">Your daily mood companion.</p>
+          <p className="login-page__brand-subtitle">{t('common.tagline')}</p>
         </div>
 
         <div className="login-page__body">
@@ -166,12 +170,12 @@ const LoginPage = () => {
                 className="login-page__button"
                 onClick={handleSsoLogin}
               >
-                Sign in with SSO
+                {t('auth.signInWithSso')}
               </button>
 
               {signupUrl && (
                 <a className="login-page__signup-link" href={signupUrl}>
-                  Create account
+                  {t('auth.createAccount')}
                 </a>
               )}
             </>
@@ -179,13 +183,12 @@ const LoginPage = () => {
             /* Local login disabled without SSO configured: nothing can issue
                a session. Say so instead of rendering a dead form. */
             <p className="login-page__description">
-              Local login is disabled on this server. Contact the
-              administrator to enable a sign-in method.
+              {t('auth.localLoginDisabled')}
             </p>
           ) : (
             <>
               <p className="login-page__description">
-                Sign in to continue tracking your mood journey.
+                {t('auth.signInToContinue')}
               </p>
 
               {message && <p className="login-page__message">{message}</p>}
@@ -195,8 +198,8 @@ const LoginPage = () => {
                   type="text"
                   name="username"
                   autoComplete="username"
-                  placeholder="Username"
-                  aria-label="Username"
+                  placeholder={t('auth.usernamePlaceholder')}
+                  aria-label={t('auth.usernamePlaceholder')}
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
                   disabled={isLoading}
@@ -206,8 +209,8 @@ const LoginPage = () => {
                   type="password"
                   name="password"
                   autoComplete="current-password"
-                  placeholder="Password"
-                  aria-label="Password"
+                  placeholder={t('auth.passwordPlaceholder')}
+                  aria-label={t('auth.passwordPlaceholder')}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   disabled={isLoading}
@@ -221,10 +224,10 @@ const LoginPage = () => {
                   {isLoading ? (
                     <>
                       <LoadingSpinner />
-                      <span>Signing in…</span>
+                      <span>{t('auth.signingIn')}</span>
                     </>
                   ) : (
-                    'Sign in'
+                    t('auth.signIn')
                   )}
                 </button>
               </form>
@@ -235,7 +238,7 @@ const LoginPage = () => {
                 onClick={handleSelfHostContinue}
                 disabled={isLoading}
               >
-                Continue without account
+                {t('auth.continueWithoutAccount')}
               </button>
             </>
           )}
@@ -244,8 +247,8 @@ const LoginPage = () => {
             <Lock size={12} aria-hidden="true" />
             <span>
               {enableOidc
-                ? 'Sign in with your identity provider.'
-                : 'Self-hosted: your data never leaves your server.'}
+                ? t('auth.footerSso')
+                : t('auth.footerSelfHosted')}
             </span>
           </div>
         </div>

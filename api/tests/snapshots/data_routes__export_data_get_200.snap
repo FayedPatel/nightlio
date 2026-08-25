@@ -1,0 +1,69 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "app_version": "<VERSION>",
+    "data": {
+      "entries": [
+        {
+          "content": "Great workout day.",
+          "created_at": "<TS>",
+          "date": "<DATE>",
+          "mood": 4,
+          "selections": [
+            {
+              "group_name": "Emotions",
+              "option_name": "content"
+            },
+            {
+              "group_name": "Emotions",
+              "option_name": "happy"
+            }
+          ],
+          "updated_at": "<TS>"
+        },
+        {
+          "content": "Rough night.",
+          "created_at": "<TS>",
+          "date": "<DATE>",
+          "mood": 2,
+          "selections": [],
+          "updated_at": "<TS>"
+        }
+      ],
+      "goals": [
+        {
+          "completed": 1,
+          "completions": [
+            "<DATE>"
+          ],
+          "created_at": "<TS>",
+          "description": "10 minutes",
+          "frequency_per_week": 3,
+          "last_completed_date": "<DATE>",
+          "period_start": "<DATE>",
+          "streak": 0,
+          "title": "Meditate",
+          "updated_at": "<TS>"
+        },
+        {
+          "completed": 0,
+          "completions": [],
+          "created_at": "<TS>",
+          "description": "",
+          "frequency_per_week": 2,
+          "last_completed_date": null,
+          "period_start": "<DATE>",
+          "streak": 0,
+          "title": "Read",
+          "updated_at": "<TS>"
+        }
+      ]
+    },
+    "exported_at": "<TS>",
+    "schema_version": 1
+  },
+  "status": 200
+}

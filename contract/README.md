@@ -10,9 +10,9 @@ remaining oracle (frozen goldens — nothing can be re-recorded):
 
 | Artifact | What it is |
 | --- | --- |
-| `contract/openapi.yaml` | The merged, hand-written OpenAPI 3.1 document — all 37 paths / 50 operations (the rewrite added `POST /api/statistics/view`), assembled from the per-family fragments and cross-checked against the fixtures. **This is the graded document.** |
-| `contract/openapi-parts/*.yaml` | The per-family source fragments (auth, mood+statistics, goals, groups, achievements, misc). Kept for provenance; the merged file supersedes them on any conflict. |
-| `contract/fixtures/**` | ~180 golden request/response recordings taken against live Flask instances on throwaway SQLite databases, plus fixtures added or edited by owner-approved contract-change rounds (each such edit carries a "contract change" note and a `DECISIONS.md` entry). Organized by family (`auth/`, `mood/`, `goals/`, `groups/`, `achievements/`, `misc/`). |
+| `contract/openapi.yaml` | The merged, hand-written OpenAPI 3.1 document — all 41 paths / 54 operations (the rewrite added `POST /api/statistics/view`; v0.6.0 added the `/api/i18n` family and the `/api/export/data` + `/api/import/data` data family), assembled from the per-family fragments and cross-checked against the fixtures. **This is the graded document.** |
+| `contract/openapi-parts/*.yaml` | The per-family source fragments (auth, mood+statistics, goals, groups, achievements, misc, i18n, data). Kept for provenance; the merged file supersedes them on any conflict. |
+| `contract/fixtures/**` | ~180 golden request/response recordings taken against live Flask instances on throwaway SQLite databases, plus fixtures added or edited by owner-approved contract-change rounds (each such edit carries a "contract change" note and a `DECISIONS.md` entry). Organized by family (`auth/`, `mood/`, `goals/`, `groups/`, `achievements/`, `misc/`, `i18n/`, `data/`). The 8 fixtures in `i18n/` and the 15 in `data/` are hand-authored spec, not recordings — those families never existed in Flask (see the 2026-08-22 and 2026-08-24 `DECISIONS.md` entries) — but they are frozen goldens all the same. |
 | `contract/corpus/` | Snapshot SQLite databases plus `PRAGMA table_info` / `PRAGMA index_list` records for migration parity testing. |
 | `src/types/api.ts` | The TypeScript contract module derived from `openapi.yaml`, tailored to the ~35 methods in `src/services/api.ts` and `src/services/statsApi.ts`. Type-only, strict-mode clean. |
 
@@ -62,6 +62,10 @@ check):
    output:
    - JWTs -> `<JWT>`; HTTP dates in Set-Cookie -> `<TS>`
    - `created_at` / `updated_at` / `earned_at` -> `<TS>`
+   - the `version` field in `/api/config` -> `<VERSION>` (substituted with the
+     live `CARGO_PKG_VERSION` by `config_matches_fixture` in
+     `api/tests/shell_router.rs` — future version bumps never touch the
+     fixture; see the 2026-08-22 `DECISIONS.md` entry)
    - streak seed dates -> `<TODAY>` / `<YESTERDAY>`
    - current-month digest fields -> `<CURRENT_YEAR>` / `<CURRENT_MONTH>`
    - bare `YYYY-MM-DD` values in goals fixtures -> `<DATE>`
@@ -85,7 +89,7 @@ no Rust implementation should reproduce. Grade:
   null), bare-array vs object envelope.
 - Headers listed in `headers_that_matter` — Set-Cookie attribute-for-attribute
   (with `<JWT>`/`<TS>` normalization), `Content-Type`, `Content-Disposition`,
-  `Allow`, `Location`.
+  `Allow`, `Location`, and the i18n caching pair `ETag` / `Cache-Control`.
 
 **Exactly two error strings are contract-fixed** (the frontend does not parse
 any others, but these gate CSRF debugging): the cookie-auth 403 bodies

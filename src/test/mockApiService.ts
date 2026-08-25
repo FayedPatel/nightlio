@@ -36,6 +36,7 @@ export const createMockApiService = (overrides: Partial<MockApiService> = {}): M
     enable_mood_music: false,
     enable_local_login: true,
     signup_url: null,
+    version: '0.0.0-test',
   }),
   verifyToken: vi.fn<ApiService['verifyToken']>().mockResolvedValue({ user: testUser }),
   localLogin: vi
@@ -144,7 +145,31 @@ export const createMockApiService = (overrides: Partial<MockApiService> = {}): M
   getMoodMusic: vi
     .fn<ApiService['getMoodMusic']>()
     .mockResolvedValue({ audio_url: '', track_name: '', artist: '' }),
+  // Empty by default: the picker degrades to bundled-English-only, matching
+  // how a fresh/offline server (or the pre-IC current state) behaves.
+  getLanguages: vi.fn<ApiService['getLanguages']>().mockResolvedValue({ languages: [] }),
+  getLanguagePack: vi.fn<ApiService['getLanguagePack']>().mockResolvedValue({
+    schema_version: 1,
+    language: 'en',
+    name: 'English',
+    native_name: 'English',
+    version: '0.0.0-test',
+    strings: {},
+  }),
   exportPdf: vi.fn<ApiService['exportPdf']>().mockResolvedValue(new Blob()),
+  // Minimal valid v1 envelope / zero-count result — specs that care about
+  // real payloads override these per-test.
+  exportData: vi.fn<ApiService['exportData']>().mockResolvedValue({
+    schema_version: 1,
+    exported_at: '2026-01-01 00:00:00',
+    app_version: '0.0.0-test',
+    data: { entries: [], goals: [] },
+  }),
+  importData: vi.fn<ApiService['importData']>().mockResolvedValue({
+    status: 'success',
+    entries: { imported: 0, skipped: 0 },
+    goals: { imported: 0, skipped: 0 },
+  }),
   request: vi.fn<ApiService['request']>().mockResolvedValue({}),
   ...overrides,
 });

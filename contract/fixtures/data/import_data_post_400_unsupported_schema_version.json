@@ -1,0 +1,27 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 2,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "9.9.9",
+      "data": {
+        "entries": [],
+        "goals": []
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "Unsupported schema_version: 2 (supported: 1)"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). schema_version dispatch is a match: 1 -> the v1 parser, anything else -> 400 naming the received and supported versions. Message text is NOT graded — grade status + {error} shape. The versioning policy (docs/EXPORT-FORMAT.md): importers accept every schema_version <= their current one, so v1 files import forever; only files from a NEWER schema than the server knows are rejected. Unknown extra JSON keys inside a supported version are ignored (future additive fields import fine) — version bumps are reserved for breaking changes. Nothing is imported."
+}

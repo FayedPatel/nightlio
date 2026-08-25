@@ -9,6 +9,10 @@
 //! change; Werkzeug's HTML interstitial was dropped). Every other
 //! rule 404s its opposite-slash variant via the JSON fallback.
 //!
+//! Since 0.6.0 this router is built per mount prefix ([`router_at`]):
+//! once for the canonical `/api` and once for the `/api/v1` alias, whose
+//! slash pair redirects within its own prefix (`/api/v1` → `/api/v1/`).
+//!
 //! [`extras`]: crate::routes::extras
 
 use axum::Extension;
@@ -25,19 +29,29 @@ use crate::state::AppState;
 /// `Allow` value Werkzeug advertises for the GET-only rules here.
 const GET_ALLOW: &str = "HEAD, GET, OPTIONS";
 
-pub fn router() -> Router<AppState> {
+/// The misc family with its absolute paths built from `prefix` (`"/api"`
+/// or `"/api/v1"`) — behavior at `/api` is byte-identical to the
+/// pre-alias `router()`.
+pub fn router_at(prefix: &'static str) -> Router<AppState> {
     Router::new()
-        .route("/api", any(api_root_redirect))
         .route(
-            "/api/",
+            prefix,
+            any(
+                move |forwarded: Option<Extension<ForwardedInfo>>, headers: HeaderMap| {
+                    api_root_redirect(prefix, forwarded, headers)
+                },
+            ),
+        )
+        .route(
+            &format!("{prefix}/"),
             get(health_check).merge(automatic_options(GET_ALLOW)),
         )
         .route(
-            "/api/time",
+            &format!("{prefix}/time"),
             get(get_current_time).merge(automatic_options(GET_ALLOW)),
         )
         .route(
-            "/api/config",
+            &format!("{prefix}/config"),
             get(get_public_config).merge(automatic_options(GET_ALLOW)),
         )
 }
@@ -67,6 +81,12 @@ async fn get_current_time() -> Json<serde_json::Value> {
 /// `GET /api/config` — port of `config_to_public_dict` (`api/config.py`):
 /// the four public flags, secrets never included. `signup_url` is forced
 /// null whenever OIDC is disabled, even if the env var is set.
+///
+/// `version` (added 0.6.0, contract/DECISIONS.md 2026-08-22) is the crate
+/// version baked in at compile time — the deploy's source of truth, since
+/// the git tag never reaches the published image (publish.yml retags
+/// without rebuilding). Kept in lockstep with package.json and
+/// contract/openapi.yaml by scripts/check-version-sync.sh in CI.
 async fn get_public_config(State(state): State<AppState>) -> Json<serde_json::Value> {
     let config = &state.config;
     let oidc_enabled = config.oidc_enabled();
@@ -80,14 +100,17 @@ async fn get_public_config(State(state): State<AppState>) -> Json<serde_json::Va
         "enable_mood_music": config.enable_mood_music,
         "enable_local_login": !config.disable_local_login,
         "signup_url": signup_url,
+        "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 
-/// Any-method `/api` → 308 to `/api/`, like Werkzeug's redirect during URL
-/// matching (which fires before the method check, hence `any`). The
-/// `Location` is absolute when a host is known — honoring ProxyFix-trusted
-/// forwarded values when present — and falls back to a relative `/api/`.
+/// Any-method bare `prefix` → 308 to `{prefix}/` (`/api` → `/api/`,
+/// `/api/v1` → `/api/v1/`), like Werkzeug's redirect during URL matching
+/// (which fires before the method check, hence `any`). The `Location` is
+/// absolute when a host is known — honoring ProxyFix-trusted forwarded
+/// values when present — and falls back to the relative `{prefix}/`.
 async fn api_root_redirect(
+    prefix: &'static str,
     forwarded: Option<Extension<ForwardedInfo>>,
     headers: HeaderMap,
 ) -> Response {
@@ -99,14 +122,15 @@ async fn api_root_redirect(
             .and_then(|value| value.to_str().ok())
             .map(str::to_string)
     });
+    let relative = format!("{prefix}/");
     let location = match host {
-        Some(host) => format!("{scheme}://{host}/api/"),
-        None => "/api/".to_string(),
+        Some(host) => format!("{scheme}://{host}{prefix}/"),
+        None => relative.clone(),
     };
-    let location_value = match location.parse::<axum::http::HeaderValue>() {
-        Ok(value) => value,
-        Err(_) => axum::http::HeaderValue::from_static("/api/"),
-    };
+    let location_value = location
+        .parse::<axum::http::HeaderValue>()
+        .or_else(|_| relative.parse())
+        .unwrap_or_else(|_| axum::http::HeaderValue::from_static("/api/"));
     // contract change: empty body — `Location` is the contract; the
     // Werkzeug HTML replica was dropped.
     (

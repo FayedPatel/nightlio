@@ -1,9 +1,11 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../../i18n';
 
 const AddEntryCard = () => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   // Straight to the editor: without a mood in location.state, EntryView
   // renders its inline mood prompt, so this is a one-click new-entry flow.
   const handleAdd = () => {
@@ -26,8 +28,8 @@ const AddEntryCard = () => {
         cursor: 'pointer',
         transition: 'background 0.2s, border-color 0.2s'
       }}
-      aria-label="Add Entry"
-      title="Add Entry"
+      aria-label={t('history.addEntry')}
+      title={t('history.addEntry')}
     >
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, color: 'var(--accent-600)' }}>
         <div style={{
@@ -42,7 +44,7 @@ const AddEntryCard = () => {
         }}>
           <Plus size={24} />
         </div>
-        <div style={{ fontWeight: 600 }}>Add Entry</div>
+        <div style={{ fontWeight: 600 }}>{t('history.addEntry')}</div>
       </div>
     </div>
   );

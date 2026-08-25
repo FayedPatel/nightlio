@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import statsApi from '../services/statsApi';
+import { translate } from '../i18n';
 import type { ExtendedStats, Heatmap } from '../types/api';
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -27,7 +28,7 @@ export const useExtendedStatistics = () => {
       setExtended(data);
     } catch (error) {
       console.error('Failed to load extended statistics:', error);
-      setExtendedError('Failed to load extended statistics');
+      setExtendedError(translate('errors.loadExtendedStatistics'));
     } finally {
       setExtendedLoading(false);
     }
@@ -41,7 +42,7 @@ export const useExtendedStatistics = () => {
       setHeatmap(data);
     } catch (error) {
       console.error('Failed to load mood heatmap:', error);
-      setHeatmapError('Failed to load mood heatmap');
+      setHeatmapError(translate('errors.loadHeatmap'));
     } finally {
       setHeatmapLoading(false);
     }

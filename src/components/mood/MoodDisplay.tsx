@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { MOODS } from '../../utils/moodUtils';
+import { useI18n } from '../../i18n';
 import './MoodDisplay.css';
 
 interface MoodDisplayProps {
@@ -11,6 +12,7 @@ interface MoodDisplayProps {
 }
 
 const MoodDisplay = ({ moodValue, size = 32, showLabel = true, children = null }: MoodDisplayProps) => {
+  const { t } = useI18n();
   const mood = MOODS.find(m => m.value === moodValue);
   const isIconOnly = !showLabel;
 
@@ -33,7 +35,7 @@ const MoodDisplay = ({ moodValue, size = 32, showLabel = true, children = null }
         />
         {showLabel && (
           <span className="mood-display__label" style={{ color: mood.color }}>
-            Feeling {mood.label}
+            {t('entry.feeling', { label: mood.label })}
           </span>
         )}
       </div>

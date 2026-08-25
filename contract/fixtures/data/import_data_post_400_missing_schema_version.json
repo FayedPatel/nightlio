@@ -1,0 +1,26 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [],
+        "goals": []
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "schema_version is required"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). Version dispatch: the handler parses the body to a generic JSON value and reads schema_version FIRST; a missing (or non-integer) schema_version -> 400 before any row is examined. Message text is NOT graded (only the two CSRF 403 strings are contract-fixed) — grade status 400 + the {error} envelope. Nothing is imported: validation failures are atomic whole-file rejections."
+}

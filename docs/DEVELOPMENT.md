@@ -31,7 +31,7 @@ renders it in-process (`markdown2pdf` crate), no extra service needed.
 
 ## API Reference
 
-All protected endpoints require an `Authorization: Bearer <jwt>` header (or the `nightlio_token` httpOnly cookie) unless otherwise noted. The full wire contract is `contract/openapi.yaml` — 37 paths / 50 operations, of which 33 are authenticated. Every route also answers `OPTIONS` with an empty `204` plus an `Allow` header, before any token check.
+All protected endpoints require an `Authorization: Bearer <jwt>` header (or the `nightlio_token` httpOnly cookie) unless otherwise noted. The full wire contract is `contract/openapi.yaml` — 41 paths / 54 operations, with 35 routing rules behind authentication. Every route also answers `OPTIONS` with an empty `204` plus an `Allow` header, before any token check.
 
 **Auth**
 * `POST /api/auth/local/login { username, password }` → 200 { token, user } — credentialed login, works regardless of OIDC config
@@ -48,6 +48,9 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header (or the 
 * `GET /api/time` → { time }
 * `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
 * `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`) — **requires auth** (since 2026-08-17; see `contract/DECISIONS.md`); rendered in-process (see `contract/DECISIONS.md` #15), `content` capped at 1 MiB of UTF-8 bytes → 413
+* `GET /api/export/data` → the versioned v1 JSON export envelope (`{ schema_version: 1, exported_at, app_version, data: { entries, goals } }`) — **requires auth**; pure read, deterministic order; the frontend saves it as `nightlio-export-YYYY-MM-DD.json`. Full format spec: [`EXPORT-FORMAT.md`](EXPORT-FORMAT.md)
+* `POST /api/import/data <export envelope>` → { status, entries: { imported, skipped }, goals: { imported, skipped } } — **requires auth**; merges an exported envelope back in inside one all-or-nothing transaction, skipping duplicates (entries by date + content, goals by title); unsupported/missing `schema_version` or any invalid row → 400 (nothing imported), body capped at 8 MiB → 413
+* `GET /api/i18n/languages` → { languages } and `GET /api/i18n/{code}` → language-pack envelope — unauthenticated, ETag/`Cache-Control` HTTP-cacheable; serves the server's cached language packs (bundled English is never listed — it ships inside the frontend). See [`I18N.md`](I18N.md) and `i18n/README.md`
 * `GET /api/music/vibe[?tag=chill]` → track suggestion for the given mood tag (requires `ENABLE_MOOD_MUSIC=1` and `JAMENDO_CLIENT_ID`)
 * `GET /api/preferences` → { theme } — requires auth; `theme` is `null` until the user has stored one
 * `PUT /api/preferences { theme }` → { status, theme } — requires auth; `theme` must be one of `default`, `light`, `dark`, `synthwave`, otherwise 400

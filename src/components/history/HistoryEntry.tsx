@@ -7,6 +7,7 @@ import apiService from '../../services/api';
 import { useToast } from '../ui/ToastProvider';
 import type { MoodEntryWithSelections } from '../../hooks/useMoodData';
 import EntryModal from './EntryModal';
+import { useI18n } from '../../i18n';
 import './HistoryEntry.css';
 
 // How far the card slides to fully expose the edit/delete actions behind
@@ -42,6 +43,7 @@ interface SwipeState {
 }
 
 const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntryProps) => {
+  const { t } = useI18n();
   const { icon: IconComponent, color } = getMoodIcon(entry.mood);
   const displayDate = formatEntryDate(entry.date);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -101,16 +103,16 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
 
   const { show } = useToast();
   const handleDelete = async (): Promise<boolean> => {
-    if (!window.confirm('Are you sure you want to delete this entry?')) return false;
+    if (!window.confirm(t('history.deleteConfirm'))) return false;
     setIsDeleting(true);
     try {
       await apiService.deleteMoodEntry(entry.id);
       onDelete(entry.id);
-      show('Entry deleted', 'success');
+      show(t('toast.entryDeleted'), 'success');
       return true;
     } catch (error) {
       console.error('Failed to delete entry:', error);
-      show('Failed to delete entry. Please try again.', 'error');
+      show(t('toast.deleteEntryFailed'), 'error');
       return false;
     } finally {
       setIsDeleting(false);
@@ -212,7 +214,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
         onPointerMove={onCardPointerMove}
         onPointerUp={endCardSwipe}
         onPointerCancel={endCardSwipe}
-        aria-label={`Open entry from ${displayDate}`}
+        aria-label={t('history.openEntryAria', { date: displayDate })}
         style={{
           border: isHovered ? '1px solid color-mix(in oklab, var(--accent-600), transparent 55%)' : '1px solid var(--border)',
           boxShadow: isHovered ? 'var(--shadow-md)' : 'var(--shadow-sm)',
@@ -243,7 +245,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
 
         {/* Title + excerpt preview */}
         <div className="entry-card__body">
-          <div className="entry-card__title">{title || 'Entry'}</div>
+          <div className="entry-card__title">{title || t('history.entryFallbackTitle')}</div>
           {excerpt && (
             <div className="entry-card__excerpt">{excerpt}</div>
           )}
@@ -276,7 +278,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
           className="entry-card__swipe-btn entry-card__swipe-btn--edit"
           onClick={closeSwipeAndRun(handleEdit)}
           disabled={!onEdit}
-          aria-label={`Edit entry from ${displayDate}`}
+          aria-label={t('history.editEntryAria', { date: displayDate })}
         >
           <Pencil size={18} />
         </button>
@@ -285,7 +287,7 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
           className="entry-card__swipe-btn entry-card__swipe-btn--delete"
           onClick={closeSwipeAndRun(handleDelete)}
           disabled={isDeleting}
-          aria-label={`Delete entry from ${displayDate}`}
+          aria-label={t('history.deleteEntryAria', { date: displayDate })}
         >
           <Trash2 size={18} />
         </button>

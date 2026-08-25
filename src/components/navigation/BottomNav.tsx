@@ -1,10 +1,12 @@
 import { Home, History, BarChart3, Trophy, Settings, Target } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useI18n } from '../../i18n';
+import type { I18nKey } from '../../i18n';
 
 interface NavItem {
   key: string;
-  label: string;
+  labelKey: I18nKey;
   icon: LucideIcon;
   end?: boolean;
 }
@@ -16,28 +18,29 @@ interface NavItem {
 // not a Stats sub-view, so it gets its own slot rather than folding under
 // Stats.
 const BottomNav = () => {
+  const { t } = useI18n();
   const items: NavItem[] = [
-    { key: '/dashboard', label: 'Home', icon: Home, end: true },
-    { key: '/dashboard/history', label: 'History', icon: History },
-    { key: '/dashboard/goals', label: 'Goals', icon: Target },
-    { key: '/dashboard/stats', label: 'Stats', icon: BarChart3 },
-    { key: '/dashboard/achievements', label: 'Awards', icon: Trophy },
-    { key: '/dashboard/settings', label: 'Settings', icon: Settings },
+    { key: '/dashboard', labelKey: 'nav.home', icon: Home, end: true },
+    { key: '/dashboard/history', labelKey: 'nav.history', icon: History },
+    { key: '/dashboard/goals', labelKey: 'nav.goals', icon: Target },
+    { key: '/dashboard/stats', labelKey: 'nav.statsShort', icon: BarChart3 },
+    { key: '/dashboard/achievements', labelKey: 'nav.achievementsShort', icon: Trophy },
+    { key: '/dashboard/settings', labelKey: 'nav.settings', icon: Settings },
   ];
 
   return (
     <nav className="bottom-nav">
-      {items.map(({ key, label, icon: Icon, end }) => (
+      {items.map(({ key, labelKey, icon: Icon, end }) => (
         <NavLink
           key={key}
           to={key}
           end={end ?? false}
 
           className={({ isActive }) => `bottom-nav__item ${isActive ? 'is-active' : ''}`}
-          aria-label={label}
+          aria-label={t(labelKey)}
         >
           <Icon size={20} />
-          <span className="bottom-nav__label">{label}</span>
+          <span className="bottom-nav__label">{t(labelKey)}</span>
         </NavLink>
       ))}
     </nav>

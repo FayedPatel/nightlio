@@ -1,0 +1,26 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 1,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [],
+        "goals": []
+      }
+    }
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). Behind require_auth: no credentials at all -> 401 BEFORE any body validation (same precedence export_pdf_post_401.json records), with the same body every require_auth rule returns. A perfectly valid envelope changes nothing — auth precedes parsing. Cookie-authenticated callers must additionally satisfy the CSRF predicate (see import_data_post_403_cookie_missing_csrf.json); Bearer callers bypass CSRF. Grade status + shape, never message text."
+}

@@ -1,0 +1,19 @@
+{
+  "method": "POST",
+  "path": "/api/i18n/es",
+  "request": {
+    "headers_that_matter": {},
+    "body": {}
+  },
+  "response": {
+    "status": 405,
+    "content_type": "application/json",
+    "body": {
+      "error": "Method not allowed"
+    },
+    "headers_that_matter": {
+      "Allow": "GET,HEAD,OPTIONS"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). Both i18n rules are GET-only; a POST takes the app-wide unified 405: JSON envelope {\"error\": \"Method not allowed\"} plus Allow. Allow is synthesized by axum from the registered methods, comma-joined without spaces (contract encoding fact recorded in time_post_405.json; method order is not graded). POST /api/i18n/languages behaves identically."
+}

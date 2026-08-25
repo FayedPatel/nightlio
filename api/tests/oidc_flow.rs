@@ -5,8 +5,15 @@
 //! off-host `FRONTEND_URL`. Also the mount contract: routes absent (JSON
 //! 404) when OIDC is unconfigured, 404 `OIDC is not configured` when the
 //! issuer is set without a client id.
+//!
+//! Since v0.6.0 every test loops over the available backends
+//! (`support::backends()`): SQLite always, exactly as before, plus a
+//! PostgreSQL twin (exercising the PG user-upsert path) when
+//! `NIGHTLIO_PG_TEST_URL` is set (see `tests/support/mod.rs`).
 
 use std::collections::HashMap;
+
+mod support;
 
 use axum::Router;
 use axum::body::Body;
@@ -72,11 +79,12 @@ GXOoU0AJ2f0b56IAaElZdJkF3T/9/d4VLifLS63P5tziN2Yh2bIiHsJx0kEWUOr1
 struct TestApp {
     app: Router,
     jwt_secret: String,
-    _dir: tempfile::TempDir,
+    _db: support::TestDb,
 }
 
-/// Development-env app on a tempfile DB, like the auth-family harness.
-fn make_app(extra: &[(&str, &str)]) -> TestApp {
+/// Development-env app on a tempfile DB (or a private PostgreSQL database
+/// when the backend is `Pg`), like the auth-family harness.
+async fn make_app_on(backend: support::Backend, extra: &[(&str, &str)]) -> TestApp {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("nightlio.db");
     let rate_limit_path = dir.path().join("rate_limit.db");
@@ -92,13 +100,32 @@ fn make_app(extra: &[(&str, &str)]) -> TestApp {
     let lookup = move |key: &str| vars.get(key).cloned();
     let mut cfg = Config::from_lookup(&lookup);
     cfg.database_path = db_path.to_string_lossy().into_owned();
-    db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
-    let pool = db::open_pool(&cfg.database_path).expect("pool");
     let jwt_secret = cfg.jwt_secret.clone();
+    let (handle, test_db) = match backend {
+        support::Backend::Sqlite => {
+            db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
+            let pool = db::open_pool(&cfg.database_path).expect("pool");
+            (
+                db::DbHandle::Sqlite(pool),
+                support::TestDb::Sqlite {
+                    path: cfg.database_path.clone(),
+                    _dir: dir,
+                },
+            )
+        }
+        support::Backend::Pg => {
+            let url = support::create_pg_db(&SelfHostSeed::from(&cfg)).await;
+            let pool = db::pg::build_pool(&url).expect("pg pool");
+            (
+                db::DbHandle::Pg(pool),
+                support::TestDb::Pg { url, _dir: dir },
+            )
+        }
+    };
     TestApp {
-        app: routes::build_router(AppState::new(cfg, pool)),
+        app: routes::build_router(AppState::new(cfg, handle)),
         jwt_secret,
-        _dir: dir,
+        _db: test_db,
     }
 }
 
@@ -349,205 +376,227 @@ fn assert_sso_error(response: &Response, fragment: &str) {
 
 #[tokio::test]
 async fn happy_path_end_to_end() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_eq!(response.status(), StatusCode::FOUND);
-    let target = location(&response);
-    // FRONTEND_URL unset → same-origin redirect, token in the fragment.
-    let token = target
-        .strip_prefix("/login#sso_token=")
-        .unwrap_or_else(|| panic!("unexpected redirect target: {target}"));
-    let claims = jwt::verify_token(&app.jwt_secret, token).expect("app JWT verifies");
-    assert_eq!(claims.exp - claims.iat, 3600);
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let target = location(&response);
+        // FRONTEND_URL unset → same-origin redirect, token in the fragment.
+        let token = target
+            .strip_prefix("/login#sso_token=")
+            .unwrap_or_else(|| panic!("unexpected redirect target: {target}"));
+        let claims = jwt::verify_token(&app.jwt_secret, token).expect("app JWT verifies");
+        assert_eq!(claims.exp - claims.iat, 3600);
 
-    // The same token is also the httpOnly session cookie.
-    let session_cookie =
-        set_cookie_starting_with(&response, "nightlio_token=").expect("session cookie");
-    assert!(session_cookie.starts_with(&format!("nightlio_token={token};")));
-    assert!(session_cookie.contains("HttpOnly"), "{session_cookie}");
-    assert!(session_cookie.contains("Max-Age=3600"), "{session_cookie}");
-    // Handshake state is single-use: the state cookie is cleared.
-    let cleared =
-        set_cookie_starting_with(&response, "nightlio_oidc=").expect("state cookie cleared");
-    assert!(cleared.contains("Max-Age=0"), "{cleared}");
+        // The same token is also the httpOnly session cookie.
+        let session_cookie =
+            set_cookie_starting_with(&response, "nightlio_token=").expect("session cookie");
+        assert!(session_cookie.starts_with(&format!("nightlio_token={token};")));
+        assert!(session_cookie.contains("HttpOnly"), "{session_cookie}");
+        assert!(session_cookie.contains("Max-Age=3600"), "{session_cookie}");
+        // Handshake state is single-use: the state cookie is cleared.
+        let cleared =
+            set_cookie_starting_with(&response, "nightlio_oidc=").expect("state cookie cleared");
+        assert!(cleared.contains("Max-Age=0"), "{cleared}");
 
-    // The upserted user is live: verify resolves it with the new token.
-    let verify = app
-        .app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/auth/verify")
-                .header("host", HOST)
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(verify.status(), StatusCode::OK);
-    let body = body_json(verify).await;
-    assert_eq!(body["user"]["email"], json!("pat@example.com"));
-    assert_eq!(body["user"]["name"], json!("Pat"));
+        // The upserted user is live: verify resolves it with the new token.
+        let verify = app
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/auth/verify")
+                    .header("host", HOST)
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(verify.status(), StatusCode::OK);
+        let body = body_json(verify).await;
+        assert_eq!(body["user"]["email"], json!("pat@example.com"));
+        assert_eq!(body["user"]["name"], json!("Pat"));
+    }
 }
 
 #[tokio::test]
 async fn state_mismatch_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (_state, _nonce, cookie_pair) = login(&app, &provider).await;
-    // Token endpoint is never reached; no mock needed.
-    let response = callback(&app, "attacker-forged-state", &cookie_pair).await;
-    assert_sso_error(&response, "callback_failed");
+        let (_state, _nonce, cookie_pair) = login(&app, &provider).await;
+        // Token endpoint is never reached; no mock needed.
+        let response = callback(&app, "attacker-forged-state", &cookie_pair).await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn missing_state_cookie_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, _nonce, _cookie_pair) = login(&app, &provider).await;
-    let response = app
-        .get(
-            &format!("/api/auth/callback/oidc?code=mock-code&state={state}"),
-            None,
-        )
-        .await;
-    assert_sso_error(&response, "callback_failed");
+        let (state, _nonce, _cookie_pair) = login(&app, &provider).await;
+        let response = app
+            .get(
+                &format!("/api/auth/callback/oidc?code=mock-code&state={state}"),
+                None,
+            )
+            .await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn nonce_mismatch_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, _nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token(&provider.uri(), CLIENT_ID, "some-other-nonce", 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, _nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token(&provider.uri(), CLIENT_ID, "some-other-nonce", 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_sso_error(&response, "callback_failed");
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn expired_id_token_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    // exp one hour in the past.
-    let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, -3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        // exp one hour in the past.
+        let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, -3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_sso_error(&response, "callback_failed");
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn wrong_audience_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token(&provider.uri(), "another-client", &nonce, 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token(&provider.uri(), "another-client", &nonce, 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_sso_error(&response, "callback_failed");
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn wrong_issuer_redirects_with_callback_failed() {
-    let provider = Provider::start().await;
-    let env = oidc_env(&provider);
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let env = oidc_env(&provider);
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token("https://evil.example", CLIENT_ID, &nonce, 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token("https://evil.example", CLIENT_ID, &nonce, 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_sso_error(&response, "callback_failed");
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_sso_error(&response, "callback_failed");
+    }
 }
 
 #[tokio::test]
 async fn off_host_frontend_url_falls_back_to_same_origin() {
-    let provider = Provider::start().await;
-    let mut env = oidc_env(&provider);
-    // The redirect would hand the token fragment to this origin — it must
-    // be ignored because its host is not the request host.
-    env.push((
-        "FRONTEND_URL".to_string(),
-        "https://evil.example".to_string(),
-    ));
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let mut env = oidc_env(&provider);
+        // The redirect would hand the token fragment to this origin — it must
+        // be ignored because its host is not the request host.
+        env.push((
+            "FRONTEND_URL".to_string(),
+            "https://evil.example".to_string(),
+        ));
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_eq!(response.status(), StatusCode::FOUND);
-    let target = location(&response);
-    assert!(
-        target.starts_with("/login#sso_token="),
-        "token fragment leaked off-host: {target}"
-    );
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let target = location(&response);
+        assert!(
+            target.starts_with("/login#sso_token="),
+            "token fragment leaked off-host: {target}"
+        );
+    }
 }
 
 #[tokio::test]
 async fn same_origin_frontend_url_is_honored() {
-    let provider = Provider::start().await;
-    let mut env = oidc_env(&provider);
-    env.push(("FRONTEND_URL".to_string(), format!("http://{HOST}")));
-    let app = make_app(&as_str_pairs(&env));
+    for backend in support::backends() {
+        let provider = Provider::start().await;
+        let mut env = oidc_env(&provider);
+        env.push(("FRONTEND_URL".to_string(), format!("http://{HOST}")));
+        let app = make_app_on(backend, &as_str_pairs(&env)).await;
 
-    let (state, nonce, cookie_pair) = login(&app, &provider).await;
-    let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
-    provider.mount_token_endpoint(&id_token).await;
+        let (state, nonce, cookie_pair) = login(&app, &provider).await;
+        let id_token = provider.id_token(&provider.uri(), CLIENT_ID, &nonce, 3600);
+        provider.mount_token_endpoint(&id_token).await;
 
-    let response = callback(&app, &state, &cookie_pair).await;
-    assert_eq!(response.status(), StatusCode::FOUND);
-    let target = location(&response);
-    assert!(
-        target.starts_with(&format!("http://{HOST}/login#sso_token=")),
-        "same-origin FRONTEND_URL not honored: {target}"
-    );
+        let response = callback(&app, &state, &cookie_pair).await;
+        assert_eq!(response.status(), StatusCode::FOUND);
+        let target = location(&response);
+        assert!(
+            target.starts_with(&format!("http://{HOST}/login#sso_token=")),
+            "same-origin FRONTEND_URL not honored: {target}"
+        );
+    }
 }
 
 #[tokio::test]
 async fn routes_absent_when_oidc_unconfigured() {
-    let app = make_app(&[]);
-    for path in ["/api/auth/login/oidc", "/api/auth/callback/oidc"] {
-        let response = app.get(path, None).await;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
-        let body = body_json(response).await;
-        assert_eq!(body, json!({ "error": "Resource not found" }), "{path}");
+    for backend in support::backends() {
+        let app = make_app_on(backend, &[]).await;
+        for path in ["/api/auth/login/oidc", "/api/auth/callback/oidc"] {
+            let response = app.get(path, None).await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+            let body = body_json(response).await;
+            assert_eq!(body, json!({ "error": "Resource not found" }), "{path}");
+        }
     }
 }
 
 #[tokio::test]
 async fn issuer_without_client_id_is_not_configured() {
-    // Blueprint mounts (issuer set) but `_get_oidc_settings` returns None.
-    let app = make_app(&[("OIDC_ISSUER_URL", "http://127.0.0.1:9/")]);
-    for path in ["/api/auth/login/oidc", "/api/auth/callback/oidc"] {
-        let response = app.get(path, None).await;
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
-        let body = body_json(response).await;
-        assert_eq!(body, json!({ "error": "OIDC is not configured" }), "{path}");
+    for backend in support::backends() {
+        // Blueprint mounts (issuer set) but `_get_oidc_settings` returns None.
+        let app = make_app_on(backend, &[("OIDC_ISSUER_URL", "http://127.0.0.1:9/")]).await;
+        for path in ["/api/auth/login/oidc", "/api/auth/callback/oidc"] {
+            let response = app.get(path, None).await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+            let body = body_json(response).await;
+            assert_eq!(body, json!({ "error": "OIDC is not configured" }), "{path}");
+        }
     }
 }

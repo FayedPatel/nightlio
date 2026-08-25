@@ -2,13 +2,14 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import api from '../services/api';
 import type { AppConfig } from '../types/api';
+import { useI18n } from '../i18n';
 
 /**
  * The config consumers see: the two flags below are always present (they are
  * the pre-fetch defaults), the rest of AppConfig only after /api/config
- * resolves — so enable_local_login and signup_url can be undefined during the
- * initial load or forever if the fetch fails. Consumers already treat them
- * with `!== false` / truthiness checks accordingly.
+ * resolves — so enable_local_login, signup_url, and version can be undefined
+ * during the initial load or forever if the fetch fails. Consumers already
+ * treat them with `!== false` / truthiness checks accordingly.
  */
 export type PublicConfig = Pick<AppConfig, 'enable_oidc' | 'enable_mood_music'> &
   Partial<AppConfig>;
@@ -28,6 +29,7 @@ export const useConfig = (): ConfigContextValue => {
 };
 
 export const ConfigProvider = ({ children }: { children: ReactNode }) => {
+  const { t } = useI18n();
   const [config, setConfig] = useState<PublicConfig>({
     enable_oidc: false,
     enable_mood_music: false,
@@ -48,7 +50,7 @@ export const ConfigProvider = ({ children }: { children: ReactNode }) => {
           // Fall back to the defaults above (OIDC off → legacy login mode).
           // Warn loudly so a silently unreachable /api/config is diagnosable.
           console.warn('Failed to load /api/config, falling back to defaults (OIDC disabled):', e);
-          setError(e instanceof Error && e.message ? e.message : 'Failed to load config');
+          setError(e instanceof Error && e.message ? e.message : t('errors.loadConfig'));
         }
       } finally {
         if (isMounted) setLoading(false);

@@ -29,9 +29,9 @@ use serde_json::{Value, json};
 
 use super::automatic_options;
 use crate::auth::extract::AuthUser;
-use crate::db::DatabaseError;
 use crate::db::achievements::{AchievementRow, AchievementsProgress};
-use crate::error::{ApiError, ApiResult};
+use crate::db::store;
+use crate::error::ApiResult;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -119,10 +119,7 @@ async fn get_user_achievements(
     user: AuthUser,
 ) -> ApiResult<Json<Vec<Value>>> {
     let user_id = user.user_id;
-    let rows = run_blocking(state, move |conn| {
-        crate::db::achievements::get_user_achievements(conn, user_id)
-    })
-    .await?;
+    let rows = store::achievements::get_user_achievements(&state.db, user_id).await?;
     let achievements = rows
         .into_iter()
         .map(merge_row_metadata)
@@ -156,20 +153,7 @@ async fn check_achievements(
     user: AuthUser,
 ) -> ApiResult<Json<Value>> {
     let user_id = user.user_id;
-    let new_types = run_blocking(state, move |conn| {
-        let new_types = crate::db::achievements::check_achievements(conn, user_id)?;
-        for achievement_type in &new_types {
-            // Best-effort activity write; must never break the award itself.
-            let _ = crate::db::activity::add_activity(
-                conn,
-                user_id,
-                "achievement_unlocked",
-                Some(&json!({ "achievement_type": achievement_type })),
-            );
-        }
-        Ok(new_types)
-    })
-    .await?;
+    let new_types = store::achievements::check_achievements(&state.db, user_id).await?;
 
     let new_achievements = new_achievement_objects(&new_types);
 
@@ -211,37 +195,8 @@ async fn achievements_progress(
     user: AuthUser,
 ) -> ApiResult<Json<AchievementsProgress>> {
     let user_id = user.user_id;
-    let progress = run_blocking(state, move |conn| {
-        crate::db::achievements::get_achievements_progress(conn, user_id)
-    })
-    .await?;
+    let progress = store::achievements::get_achievements_progress(&state.db, user_id).await?;
     Ok(Json(progress))
-}
-
-// ---------------------------------------------------------------------------
-// Blocking-call plumbing
-// ---------------------------------------------------------------------------
-
-/// Check out a pooled connection and run a data-layer call under
-/// `spawn_blocking`. Any failure maps to the generic 500 via [`ApiError`]
-/// (the Python routes' bare `except Exception` → 500; per the contract we
-/// match status and shape, never Python's leaked `str(e)` text).
-async fn run_blocking<T, F>(state: AppState, query: F) -> ApiResult<T>
-where
-    F: FnOnce(&rusqlite::Connection) -> Result<T, DatabaseError> + Send + 'static,
-    T: Send + 'static,
-{
-    tokio::task::spawn_blocking(move || {
-        let conn = state.pool.get()?;
-        query(&conn)
-    })
-    .await
-    .map_err(|join_error| ApiError::Internal(anyhow::anyhow!(join_error)))?
-    .map_err(|error| match error {
-        DatabaseError::Sqlite(cause) => ApiError::Database(cause),
-        DatabaseError::Pool(cause) => ApiError::Pool(cause),
-        DatabaseError::Message(message) => ApiError::Internal(anyhow::anyhow!(message)),
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -259,14 +214,14 @@ mod tests {
 
     use crate::auth::jwt;
     use crate::config::Config;
-    use crate::db::{self, DbPool, SelfHostSeed};
+    use crate::db::{self, DbHandle, SelfHostSeed, SqlitePool};
     use crate::state::AppState;
 
     // --- Harness -------------------------------------------------------------
 
     struct TestApp {
         app: Router,
-        pool: DbPool,
+        pool: SqlitePool,
         token: String,
         _dir: tempfile::TempDir,
     }
@@ -285,7 +240,7 @@ mod tests {
         db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
         let pool = db::open_pool(&cfg.database_path).expect("pool");
         let token = jwt::issue_token(&cfg.jwt_secret, 1).expect("token");
-        let state = AppState::new(cfg, pool.clone());
+        let state = AppState::new(cfg, DbHandle::Sqlite(pool.clone()));
         TestApp {
             app: crate::routes::build_router(state),
             pool,
@@ -359,7 +314,7 @@ mod tests {
         let conn = app.pool.get().unwrap();
         conn.execute(
             "INSERT INTO achievements (user_id, achievement_type, earned_at) VALUES (1, ?, ?)",
-            rusqlite::params![achievement_type, earned_at],
+            [achievement_type, earned_at],
         )
         .unwrap();
     }

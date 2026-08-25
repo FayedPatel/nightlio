@@ -55,8 +55,7 @@ use serde_json::{Map, Value, json};
 
 use super::{FlaskInt, FlaskPath, automatic_options};
 use crate::auth::extract::AuthUser;
-use crate::db::common::DatabaseError;
-use crate::db::{achievements, activity, moods, stats};
+use crate::db::{moods, stats, store};
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
@@ -118,40 +117,6 @@ pub fn router() -> Router<AppState> {
 // ---------------------------------------------------------------------------
 // Shared plumbing
 // ---------------------------------------------------------------------------
-
-/// Run a blocking data-layer closure on the pool via `spawn_blocking`.
-async fn with_db<T, F>(state: &AppState, f: F) -> ApiResult<T>
-where
-    T: Send + 'static,
-    F: FnOnce(&rusqlite::Connection) -> ApiResult<T> + Send + 'static,
-{
-    let pool = state.pool.clone();
-    tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        f(&conn)
-    })
-    .await
-    .map_err(|exc| ApiError::Internal(anyhow::anyhow!("blocking task failed: {exc}")))?
-}
-
-/// Data-layer failure → 500 (the Flask generic `except Exception` branch;
-/// only the status is parity-relevant, the Python message text is not).
-fn db_err(error: DatabaseError) -> ApiError {
-    match error {
-        DatabaseError::Sqlite(inner) => ApiError::Database(inner),
-        DatabaseError::Pool(inner) => ApiError::Pool(inner),
-        DatabaseError::Message(message) => ApiError::Internal(anyhow::anyhow!(message)),
-    }
-}
-
-/// Data-layer failure where `Message` is a ported Python `ValueError`
-/// (e.g. `month must be between 1 and 12` from the digest) → 400.
-fn value_err(error: DatabaseError) -> ApiError {
-    match error {
-        DatabaseError::Message(message) => ApiError::Validation(message),
-        other => db_err(other),
-    }
-}
 
 /// `request.get_json(silent=True) or {}`: only parse when the Content-Type
 /// is JSON (Flask's mimetype check); any failure or non-object collapses to
@@ -355,35 +320,15 @@ async fn create_mood_entry(
     }
 
     let user_id = user.user_id;
-    let (entry_id, new_achievements) = with_db(&state, move |conn| {
-        let entry_id = moods::add_mood_entry(
-            conn,
-            user_id,
-            &date_value,
-            mood_value,
-            &content_value,
-            time_value.as_deref(),
-            Some(&selected_options),
-        )
-        .map_err(db_err)?;
-        // Best-effort activity writes must never break the mutation.
-        let _ = activity::add_activity(
-            conn,
-            user_id,
-            "entry_created",
-            Some(&json!({ "entry_id": entry_id, "date": date_value })),
-        );
-        let new_achievements = achievements::check_achievements(conn, user_id).map_err(db_err)?;
-        for achievement_type in &new_achievements {
-            let _ = activity::add_activity(
-                conn,
-                user_id,
-                "achievement_unlocked",
-                Some(&json!({ "achievement_type": achievement_type })),
-            );
-        }
-        Ok((entry_id, new_achievements))
-    })
+    let (entry_id, new_achievements) = store::moods::create_entry(
+        &state.db,
+        user_id,
+        date_value,
+        mood_value,
+        content_value,
+        time_value,
+        selected_options,
+    )
     .await?;
 
     // contract change: `new_achievements` carries full metadata objects
@@ -412,17 +357,7 @@ async fn get_mood_entries(
     let start_date = params.get("start_date").cloned();
     let end_date = params.get("end_date").cloned();
     let user_id = user.user_id;
-    let entries = with_db(&state, move |conn| {
-        // Python: `if start_date and end_date` — truthiness, so empty
-        // strings fall through to the full list.
-        match (start_date.as_deref(), end_date.as_deref()) {
-            (Some(start), Some(end)) if !start.is_empty() && !end.is_empty() => {
-                moods::get_mood_entries_by_date_range(conn, user_id, start, end).map_err(db_err)
-            }
-            _ => moods::get_all_mood_entries(conn, user_id).map_err(db_err),
-        }
-    })
-    .await?;
+    let entries = store::moods::get_entries(&state.db, user_id, start_date, end_date).await?;
     Ok(Json(entries))
 }
 
@@ -433,11 +368,9 @@ async fn get_mood_entry(
     user: AuthUser,
 ) -> ApiResult<Json<moods::MoodEntryRow>> {
     let user_id = user.user_id;
-    let entry = with_db(&state, move |conn| {
-        moods::get_mood_entry_by_id(conn, user_id, entry_id).map_err(db_err)
-    })
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Entry not found".to_string()))?;
+    let entry = store::moods::get_entry(&state.db, user_id, entry_id)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Entry not found".to_string()))?;
     Ok(Json(entry))
 }
 
@@ -513,25 +446,9 @@ async fn update_mood_entry(
         selected_options,
     };
     let user_id = user.user_id;
-    let entry = with_db(&state, move |conn| {
-        if !moods::update_mood_entry(conn, user_id, entry_id, &update).map_err(db_err)? {
-            return Ok(None);
-        }
-        let Some(entry) =
-            moods::get_mood_entry_with_selections(conn, user_id, entry_id).map_err(db_err)?
-        else {
-            return Ok(None);
-        };
-        let _ = activity::add_activity(
-            conn,
-            user_id,
-            "entry_edited",
-            Some(&json!({ "entry_id": entry_id })),
-        );
-        Ok(Some(entry))
-    })
-    .await?
-    .ok_or_else(|| ApiError::NotFound("Entry not found or no changes made".to_string()))?;
+    let entry = store::moods::update_entry(&state.db, user_id, entry_id, update)
+        .await?
+        .ok_or_else(|| ApiError::NotFound("Entry not found or no changes made".to_string()))?;
 
     Ok(Json(json!({
         "status": "success",
@@ -547,19 +464,7 @@ async fn delete_mood_entry(
     user: AuthUser,
 ) -> ApiResult<Json<Value>> {
     let user_id = user.user_id;
-    let deleted = with_db(&state, move |conn| {
-        let deleted = moods::delete_mood_entry(conn, user_id, entry_id).map_err(db_err)?;
-        if deleted {
-            let _ = activity::add_activity(
-                conn,
-                user_id,
-                "entry_deleted",
-                Some(&json!({ "entry_id": entry_id })),
-            );
-        }
-        Ok(deleted)
-    })
-    .await?;
+    let deleted = store::moods::delete_entry(&state.db, user_id, entry_id).await?;
     if !deleted {
         return Err(ApiError::NotFound("Entry not found".to_string()));
     }
@@ -581,16 +486,7 @@ async fn get_entry_selections(
     user: AuthUser,
 ) -> ApiResult<Json<Vec<moods::EntrySelectionRow>>> {
     let user_id = user.user_id;
-    let selections = with_db(&state, move |conn| {
-        if moods::get_mood_entry_by_id(conn, user_id, entry_id)
-            .map_err(db_err)?
-            .is_none()
-        {
-            return Err(ApiError::NotFound("Entry not found".to_string()));
-        }
-        moods::get_entry_selections(conn, entry_id, Some(user_id)).map_err(db_err)
-    })
-    .await?;
+    let selections = store::moods::get_entry_selections(&state.db, user_id, entry_id).await?;
     Ok(Json(selections))
 }
 
@@ -607,17 +503,7 @@ async fn get_mood_statistics(
     user: AuthUser,
 ) -> ApiResult<Json<Value>> {
     let user_id = user.user_id;
-    let body = with_db(&state, move |conn| {
-        let statistics = achievements::get_mood_statistics(conn, user_id).map_err(db_err)?;
-        let mood_distribution = achievements::get_mood_counts(conn, user_id).map_err(db_err)?;
-        let current_streak = achievements::get_current_streak(conn, user_id);
-        Ok(json!({
-            "statistics": statistics,
-            "mood_distribution": mood_distribution,
-            "current_streak": current_streak,
-        }))
-    })
-    .await?;
+    let body = store::achievements::get_mood_statistics(&state.db, user_id).await?;
     Ok(Json(body))
 }
 
@@ -632,10 +518,7 @@ async fn record_statistics_view(
     user: AuthUser,
 ) -> ApiResult<Json<Value>> {
     let user_id = user.user_id;
-    let counted = with_db(&state, move |conn| {
-        achievements::record_stats_view(conn, user_id).map_err(db_err)
-    })
-    .await?;
+    let counted = store::achievements::record_stats_view(&state.db, user_id).await?;
     Ok(Json(json!({ "counted": counted })))
 }
 
@@ -648,20 +531,7 @@ async fn get_extended_statistics(
     let today = chrono::Local::now().date_naive();
     let (year, month) = (i64::from(today.year()), i64::from(today.month()));
     let user_id = user.user_id;
-    let body = with_db(&state, move |conn| {
-        Ok(json!({
-            "rolling_averages": stats::rolling_averages(conn, user_id).map_err(db_err)?,
-            "weekday_averages": stats::weekday_averages(conn, user_id).map_err(db_err)?,
-            "mood_volatility":
-                stats::mood_volatility(conn, user_id, stats::DEFAULT_VOLATILITY_WINDOW_DAYS)
-                    .map_err(db_err)?,
-            "tag_correlations": stats::tag_correlations(conn, user_id).map_err(db_err)?,
-            "goal_correlations": stats::goal_correlations(conn, user_id).map_err(db_err)?,
-            "monthly_digest": stats::monthly_digest(conn, user_id, year, month)
-                .map_err(db_err)?,
-        }))
-    })
-    .await?;
+    let body = store::stats::extended_statistics(&state.db, user_id, year, month).await?;
     Ok(Json(body))
 }
 
@@ -680,10 +550,7 @@ async fn get_statistics_heatmap(
         MAX_STATS_YEAR,
     )?;
     let user_id = user.user_id;
-    let heatmap = with_db(&state, move |conn| {
-        stats::heatmap(conn, user_id, year).map_err(db_err)
-    })
-    .await?;
+    let heatmap = store::stats::heatmap(&state.db, user_id, year).await?;
     Ok(Json(heatmap))
 }
 
@@ -710,12 +577,7 @@ async fn get_statistics_digest(
         12,
     )?;
     let user_id = user.user_id;
-    let digest = with_db(&state, move |conn| {
-        // The mixin's own ValueError port maps to 400, like Flask's
-        // `except ValueError` in this route.
-        stats::monthly_digest(conn, user_id, year, month).map_err(value_err)
-    })
-    .await?;
+    let digest = store::stats::monthly_digest(&state.db, user_id, year, month).await?;
     Ok(Json(digest))
 }
 
@@ -725,10 +587,7 @@ async fn get_current_streak(
     user: AuthUser,
 ) -> ApiResult<Json<Value>> {
     let user_id = user.user_id;
-    let streak = with_db(&state, move |conn| {
-        Ok(achievements::get_current_streak(conn, user_id))
-    })
-    .await?;
+    let streak = store::achievements::current_streak(&state.db, user_id).await?;
     let plural = if streak == 1 { "" } else { "s" };
     Ok(Json(json!({
         "current_streak": streak,

@@ -11,5 +11,7 @@ pub mod auth;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod i18n;
 pub mod routes;
+pub mod seed;
 pub mod state;

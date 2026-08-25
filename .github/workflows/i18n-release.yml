@@ -1,0 +1,88 @@
+# Publishes one language pack as a standalone GitHub release asset.
+#
+# Trigger: pushing a tag matching lang-*-v* (e.g. lang-es-v1.0.0,
+# lang-en-v1.0.1). The tag is the single source of truth for both the
+# language code and the pack version — scripts/build-lang-pack.mjs re-stamps
+# both onto the built asset even if the checked-in source file's own
+# schema_version/language/version fields have drifted.
+#
+# Pipeline: validate the checked-in source -> build the release asset ->
+# validate the built asset again (belt and braces -- cheap, and catches a
+# stamping bug in the build step itself) -> publish as a PRERELEASE.
+#
+# The --prerelease flag is load-bearing, not cosmetic: GitHub's
+# `releases/latest` (what nightlio-api / self-hoster upgrade tooling
+# resolves) skips prereleases entirely, so a language-pack release can never
+# be mistaken for an application release. Every lang-*-v* release stays a
+# prerelease forever, including the very first one: English itself ships as
+# a hot-swappable pack (lang-en-v1.0.0, immediately after this workflow
+# merges), so a typo fix is a new tag, never a redeploy.
+#
+# No external deps: both scripts are dependency-free Node (fs/path only),
+# so there is no `yarn install` step here.
+name: i18n release
+
+on:
+  push:
+    tags:
+      - 'lang-*-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: i18n-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Parse tag (lang-<code>-v<semver>)
+        id: tag
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # Kept in lockstep with the consumer grammar in
+          # api/src/i18n.rs::parse_release_tag + valid_code (and TAG_PATTERN
+          # in scripts/build-lang-pack.mjs): code is [a-z]{2,8} with at most
+          # one -[A-Za-z0-9]+ subtag, version is a strict X.Y.Z triple (no
+          # prerelease/build suffix). Bash ERE has no non-capturing groups,
+          # so the optional subtag group makes the version BASH_REMATCH[3].
+          if [[ ! "$TAG" =~ ^lang-([a-z]{2,8}(-[A-Za-z0-9]+)?)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::tag '$TAG' does not match lang-<code>-v<semver> (e.g. lang-es-v1.0.0)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "code=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASH_REMATCH[3]}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate source pack
+        run: node scripts/validate-lang-pack.mjs "i18n/packs/${{ steps.tag.outputs.code }}.json"
+
+      - name: Build release asset
+        run: >
+          node scripts/build-lang-pack.mjs "${{ steps.tag.outputs.tag }}"
+          --source "i18n/packs/${{ steps.tag.outputs.code }}.json"
+          --out "${{ steps.tag.outputs.code }}.json"
+
+      - name: Validate built asset
+        run: node scripts/validate-lang-pack.mjs "${{ steps.tag.outputs.code }}.json"
+
+      - name: Create prerelease with the pack asset
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            "${{ steps.tag.outputs.code }}.json" \
+            --repo "${{ github.repository }}" \
+            --prerelease \
+            --title "Language pack: ${{ steps.tag.outputs.code }} v${{ steps.tag.outputs.version }}" \
+            --notes "Automated language-pack release. Fetched at runtime by nightlio-api's i18n discovery (GET /api/i18n/${{ steps.tag.outputs.code }}); prerelease on purpose, so releases/latest (app upgrades) never resolves to a language pack."

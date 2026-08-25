@@ -10,6 +10,7 @@ import { useToast } from '../components/ui/ToastProvider';
 import { todayISO, formatEntryDate } from '../utils/dateUtils';
 import apiService from '../services/api';
 import type { GoalsLocationState } from '../types/router';
+import { useI18n } from '../i18n';
 
 /**
  * GoalForm's typed submit payload no longer carries frequencyNumber (it only
@@ -23,6 +24,7 @@ const GoalsView = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { show } = useToast();
+  const { t } = useI18n();
   const [goals, setGoals] = useState<GoalDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   // Home's "Add Goal" card navigates here with openForm so one click lands
@@ -39,13 +41,13 @@ const GoalsView = () => {
     }
   }, [locationState, navigate]);
   const suggestions = [
-    { t: 'Morning Meditation', d: '10 minutes of mindfulness' },
-    { t: 'Evening Walk', d: '30-minute walk outside' },
-    { t: 'Read Before Bed', d: 'Read 20 minutes before sleep' },
-    { t: 'Drink Water', d: '8 glasses of water daily' },
-    { t: 'Stretching Routine', d: '15 minutes of light stretching' },
-    { t: 'Learn a Language', d: 'Practice 20 minutes on Duolingo' },
-    { t: 'Journal', d: 'Write 5-minute reflection' },
+    { t: t('goals.suggestions.meditation.title'), d: t('goals.suggestions.meditation.description') },
+    { t: t('goals.suggestions.walk.title'), d: t('goals.suggestions.walk.description') },
+    { t: t('goals.suggestions.read.title'), d: t('goals.suggestions.read.description') },
+    { t: t('goals.suggestions.water.title'), d: t('goals.suggestions.water.description') },
+    { t: t('goals.suggestions.stretch.title'), d: t('goals.suggestions.stretch.description') },
+    { t: t('goals.suggestions.language.title'), d: t('goals.suggestions.language.description') },
+    { t: t('goals.suggestions.journal.title'), d: t('goals.suggestions.journal.description') },
   ];
 
   const handlePrefill = (title: string, description: string) => {
@@ -66,7 +68,7 @@ const GoalsView = () => {
           id: g.id,
           title: g.title,
           description: g.description,
-          frequency: `${g.frequency_per_week} days a week`,
+          frequency: t('goals.frequencyDaysAWeek', { count: g.frequency_per_week }),
           completed: g.completed ?? 0,
           total: g.frequency_per_week ?? 0,
           streak: g.streak ?? 0,
@@ -108,7 +110,7 @@ const GoalsView = () => {
           id,
           title: newGoal.title,
           description: newGoal.description,
-          frequency: `${Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3} days a week`,
+          frequency: t('goals.frequencyDaysAWeek', { count: Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3 }),
           completed: 0,
           total: Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3,
           streak: 0,
@@ -122,7 +124,7 @@ const GoalsView = () => {
           id: Date.now(),
           title: newGoal.title,
           description: newGoal.description,
-          frequency: `${Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3} days a week`,
+          frequency: t('goals.frequencyDaysAWeek', { count: Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3 }),
           completed: 0,
           total: Number.isFinite(freqNum) && freqNum > 0 ? freqNum : 3,
           streak: 0,
@@ -181,7 +183,7 @@ const GoalsView = () => {
             return false;
           }
         })(),
-        frequency: `${updated.frequency_per_week ?? g.total} days a week`
+        frequency: t('goals.frequencyDaysAWeek', { count: updated.frequency_per_week ?? g.total })
       } : g));
     }).catch(() => {
       // Revert lock on failure
@@ -221,15 +223,15 @@ const GoalsView = () => {
         streak: updated.streak ?? g.streak,
         last_completed_date: updated.last_completed_date || g.last_completed_date,
         _doneToday: updated.already_completed_today === true || g._doneToday === true,
-        frequency: `${updated.frequency_per_week ?? g.total} days a week`,
+        frequency: t('goals.frequencyDaysAWeek', { count: updated.frequency_per_week ?? g.total }),
       } : g));
       if (updated.already_logged) {
-        show(`Already logged for ${formatEntryDate(date)}`, 'info');
+        show(t('toast.alreadyLoggedFor', { date: formatEntryDate(date) }), 'info');
       } else {
-        show(`Logged for ${formatEntryDate(date)}`, 'success');
+        show(t('toast.loggedFor', { date: formatEntryDate(date) }), 'success');
       }
     }).catch(() => {
-      show('Could not log that day. Try again.', 'error');
+      show(t('toast.logDayFailed'), 'error');
     });
   };
 
@@ -249,9 +251,9 @@ const GoalsView = () => {
             <Target size={20} />
           </div>
           <div>
-            <h1 style={{ margin: 0, color: 'var(--text)', fontSize: '1.75rem', fontWeight: '700' }}>Add New Goal</h1>
+            <h1 style={{ margin: 0, color: 'var(--text)', fontSize: '1.75rem', fontWeight: '700' }}>{t('goals.addNew.title')}</h1>
             <p style={{ margin: 0, color: 'var(--text)', opacity: 0.8, fontSize: '0.95rem' }}>
-              Set a new goal to track your progress
+              {t('goals.addNew.subtitle')}
             </p>
           </div>
         </div>
@@ -273,7 +275,7 @@ const GoalsView = () => {
               borderRadius: 16,
               padding: 16
             }}>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>Quick suggestions</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: 8 }}>{t('goals.quickSuggestions')}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {suggestions.map(s => (
                   <button
@@ -319,9 +321,9 @@ const GoalsView = () => {
             <Target size={20} />
           </div>
           <div>
-            <h1 style={{ margin: 0, color: 'var(--text)', fontSize: '1.75rem', fontWeight: '700' }}>Goals</h1>
+            <h1 style={{ margin: 0, color: 'var(--text)', fontSize: '1.75rem', fontWeight: '700' }}>{t('goals.title')}</h1>
             <p style={{ margin: 0, color: 'var(--text)', opacity: 0.8, fontSize: '0.95rem' }}>
-              Track your personal goals and build better habits
+              {t('goals.subtitle')}
             </p>
           </div>
         </div>

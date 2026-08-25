@@ -12,6 +12,8 @@ import type {
   CreateGroupResponse,
   CreateMoodEntryRequest,
   CreateMoodEntryResponse,
+  DataExport,
+  DataImportResult,
   DeleteResponse,
   EntrySelection,
   Goal,
@@ -19,6 +21,8 @@ import type {
   GoalProgressResponse,
   GoalStatusOkResponse,
   Group,
+  LanguagePack,
+  LanguagesResponse,
   LoginResponse,
   LogoutResponse,
   MoodEntry,
@@ -403,6 +407,33 @@ class ApiService {
     if (end) params.set('end', end);
     const q = params.toString();
     return this.request<GoalCompletion[]>(`/api/goals/${goalId}/completions${q ? `?${q}` : ''}`);
+  }
+
+  // i18n language packs (v0.6.0 hot-swappable language packs, unauthenticated).
+  // Every caller of these two methods must tolerate rejection: the packs
+  // family is server-optional by design (English is always available from
+  // the bundled catalog), and this ships ahead of the Rust /api/i18n routes
+  // themselves, so a 404 here is an expected, not exceptional, path today.
+  async getLanguages(): Promise<LanguagesResponse> {
+    return this.request<LanguagesResponse>('/api/i18n/languages');
+  }
+
+  async getLanguagePack(code: string): Promise<LanguagePack> {
+    return this.request<LanguagePack>(`/api/i18n/${encodeURIComponent(code)}`);
+  }
+
+  // Versioned JSON export/import (v0.6.0, Settings → Data). The export
+  // response body IS the portable file content — the frontend serializes it
+  // to disk; import posts the same envelope back as plain JSON.
+  async exportData(): Promise<DataExport> {
+    return this.request<DataExport>('/api/export/data');
+  }
+
+  async importData(payload: DataExport): Promise<DataImportResult> {
+    return this.request<DataImportResult>('/api/import/data', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   // Export endpoint

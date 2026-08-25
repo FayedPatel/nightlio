@@ -1,0 +1,32 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/languages",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "headers_that_matter": {
+      "Cache-Control": "public, max-age=3600"
+    },
+    "body": {
+      "languages": [
+        {
+          "code": "es",
+          "name": "Spanish",
+          "native_name": "Español",
+          "version": "1.0.0"
+        },
+        {
+          "code": "fr",
+          "name": "French",
+          "native_name": "Français",
+          "version": "1.2.0"
+        }
+      ]
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). SEEDING: two packs cached (replay by pointing I18N_LOCAL_DIR at a directory containing es.json and fr.json pack files, or by wiremock-faking the GitHub releases discovery at I18N_GITHUB_API_BASE). Each entry carries exactly these four string keys — code/name/native_name/version — projected from the cached pack envelopes; never the strings map. Entries are sorted by code ascending (deterministic order is contract). version is the semver from the release tag lang-<code>-v<semver>. native_name is raw UTF-8 on the wire, never \\uXXXX escapes (contract encoding fact). English is NEVER listed even when an en pack is cached (GET /api/i18n/en still serves it — that is how English itself stays hot-swappable); the frontend unions bundled English into the picker. Unauthenticated; Cache-Control only, no ETag on the list endpoint."
+}
