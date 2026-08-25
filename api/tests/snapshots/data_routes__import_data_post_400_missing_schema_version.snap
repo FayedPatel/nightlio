@@ -1,0 +1,10 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "error": "schema_version is required"
+  },
+  "status": 400
+}

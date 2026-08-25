@@ -1,0 +1,24 @@
+{
+  "method": "GET",
+  "path": "/api/export/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "schema_version": 1,
+      "exported_at": "<TS>",
+      "app_version": "<VERSION>",
+      "data": {
+        "entries": [],
+        "goals": []
+      }
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). SEEDING: none — a freshly logged-in account with no entries and no goals. The empty state is soft: still 200, full envelope, both data arrays present and empty (never null, never missing keys). schema_version stays the pinned integer 1 and app_version the live CARGO_PKG_VERSION (<VERSION> substitution as in config_get_200.json). Round-tripping this file through POST /api/import/data is a valid no-op ({\"imported\": 0, \"skipped\": 0} both categories)."
+}

@@ -1,0 +1,10 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "error": "Bad request"
+  },
+  "status": 400
+}

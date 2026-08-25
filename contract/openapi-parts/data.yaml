@@ -1,0 +1,323 @@
+# OpenAPI 3.1 fragment — data export/import family (NEW in v0.6.0).
+# Source: api/src/routes/data.rs + api/src/db/data.rs (Rust-native; this
+# family never existed in Flask, so there are no recordings — the
+# hand-authored fixtures in contract/fixtures/data/ ARE the contract, per
+# the DECISIONS.md entry dated 2026-08-24). Merge into contract/openapi.yaml.
+#
+# Family rules (all fixture-encoded):
+#   - BOTH routes require auth (Bearer first, nightlio_token cookie
+#     fallback); the 401 precedes any body validation. Cookie-authenticated
+#     imports must additionally satisfy the CSRF predicate (Content-Type
+#     application/json + X-Requested-With: nightlio) like every mutation;
+#     Bearer callers bypass CSRF.
+#   - The v1 envelope (schema DataExport) carries NO ids and NO user_id —
+#     they are not portable across instances (fresh DBs pre-seed 3 default
+#     groups / 27 options). Entry selections are denormalized by exact name
+#     as {group_name, option_name}; import resolves-or-creates groups and
+#     options by name.
+#   - Import is merge-skip-duplicates inside ONE transaction: entry dup key
+#     (date, content), goal dup key title (a duplicate goal is skipped
+#     WHOLE — its completions are ignored, existing streak state is never
+#     mutated). Validation failure -> atomic whole-file 400 with a
+#     row-indexed message; nothing commits. NO achievement checks and NO
+#     activity_log rows — import is a pure restore.
+#   - Version dispatch: schema_version is read first; missing -> 400,
+#     unsupported (anything but 1, i.e. newer than the server knows) ->
+#     400 "Unsupported schema_version: N (supported: 1)". Unknown extra
+#     JSON keys are ignored, so future additive fields import fine; v1
+#     files import forever.
+#   - Caps: the handler rejects bodies over 8 MiB (8388608 UTF-8 bytes)
+#     with 413 (no fixture — code-derived, same pattern as the export/pdf
+#     1 MiB cap); the transport-level body limit is 16 MiB.
+#   - Routing matches the rest of the app: rules registered without
+#     trailing slashes (slash variants 404 with the JSON envelope),
+#     GET on the import rule -> unified 405 JSON envelope + Allow,
+#     OPTIONS -> automatic 204 empty + Allow (export "HEAD, GET, OPTIONS",
+#     import "OPTIONS, POST"), answered before any token check.
+#   - Export is a pure read: goal weekly state is exported with the
+#     rollover projected exactly as the goals GETs project it; nothing is
+#     persisted. Deterministic order is contract: entries ascending by
+#     date, goals in creation order.
+
+paths:
+  /api/export/data:
+    get:
+      operationId: exportData
+      summary: Export all entries and goals as a versioned JSON envelope
+      description: >-
+        Returns the complete v1 export envelope (schema DataExport) for the
+        authenticated user as the JSON response body — the frontend builds
+        the downloadable file (nightlio-export-YYYY-MM-DD.json) client-side.
+        Pure read: goal weekly state is projected (rollover) but never
+        persisted. Empty accounts still get the full envelope with both
+        data arrays present and empty. exported_at is SQLite-style UTC
+        "YYYY-MM-DD HH:MM:SS"; app_version is the server's
+        CARGO_PKG_VERSION. Normative field-by-field doc:
+        docs/EXPORT-FORMAT.md. /api/export/data/ (trailing slash) is a 404.
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: >-
+            The v1 export envelope. Deterministic order: entries ascending
+            by date, goals in creation order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/import/data:
+    post:
+      operationId: importData
+      summary: Import a previously exported envelope (merge, skip duplicates)
+      description: >-
+        Accepts the same envelope GET /api/export/data produces, as plain
+        application/json (no multipart). schema_version is dispatched
+        first: files from any supported version (currently only 1) are
+        accepted forever; a newer version -> 400. Merge semantics, all
+        inside one transaction: entries dedupe on (date, content), goals
+        dedupe on title (duplicate goals are skipped whole — their
+        completions never touch existing streak state); selections
+        resolve-or-create groups/options by exact name; file timestamps
+        are preserved (COALESCE with CURRENT_TIMESTAMP). Any invalid row
+        rejects the whole file with a row-indexed 400 and nothing is
+        imported — re-POSTing after a fix is free because duplicates skip.
+        Deliberately NO achievement checks and NO activity_log writes
+        (pure restore, DECISIONS.md 2026-08-24). Bodies over 8388608
+        UTF-8 bytes -> 413 (code-derived, no fixture).
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataExport"
+      responses:
+        "200":
+          description: >-
+            Import finished; per-category imported/skipped counts.
+            Idempotent: re-importing the same file skips everything.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataImportResult"
+        "400":
+          description: >-
+            Missing/unsupported schema_version, non-JSON body ({"error":
+            "Bad request"} via the app-level handler), or any invalid row
+            (row-indexed message, e.g. "entries[1]: mood must be between 1
+            and 5"). Atomic: nothing was imported. Message text is not
+            graded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "413":
+          description: >-
+            Body exceeds 8388608 UTF-8 bytes (in-handler cap; the transport
+            limit is 16 MiB). No fixture — code-derived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    DataExport:
+      type: object
+      required: [schema_version, exported_at, app_version, data]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          description: >-
+            Export format version. Read FIRST by the importer; only a
+            breaking envelope change bumps it (additive fields do not —
+            unknown keys are ignored on import).
+        exported_at:
+          type: string
+          description: >-
+            UTC "YYYY-MM-DD HH:MM:SS" at export time. Informational only —
+            the importer ignores it.
+        app_version:
+          type: string
+          description: >-
+            Server semver (CARGO_PKG_VERSION) that produced the file.
+            Informational only — compatibility is governed by
+            schema_version alone.
+        data:
+          type: object
+          required: [entries, goals]
+          properties:
+            entries:
+              type: array
+              items:
+                $ref: "#/components/schemas/DataExportEntry"
+              description: Ascending by date; empty array on empty accounts.
+            goals:
+              type: array
+              items:
+                $ref: "#/components/schemas/DataExportGoal"
+              description: Creation order; empty array on empty accounts.
+      description: >-
+        The portable v1 envelope — both the GET /api/export/data 200 body
+        and the POST /api/import/data request body. Carries NO ids and NO
+        user_id anywhere (not portable across instances). Normative
+        field-by-field documentation lives in docs/EXPORT-FORMAT.md.
+
+    DataExportEntry:
+      type: object
+      required: [date, mood, content, created_at, updated_at, selections]
+      properties:
+        date:
+          type: string
+          description: >-
+            Stored date string, ISO "YYYY-MM-DD" since the date
+            normalization (DECISIONS.md #4). Half of the import dup key
+            (date, content).
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+          description: Markdown body; the other half of the import dup key.
+        created_at:
+          type: string
+          description: >-
+            "YYYY-MM-DD HH:MM:SS" (or the verbatim client-supplied backdate
+            string). Preserved on import via COALESCE(?, CURRENT_TIMESTAMP).
+        updated_at:
+          type: string
+          description: Same format; preserved on import.
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataExportSelection"
+          description: >-
+            Denormalized by name, ordered by group name then option name
+            (the GET /api/mood/{id}/selections order). Empty array when the
+            entry has no selections.
+
+    DataExportSelection:
+      type: object
+      required: [group_name, option_name]
+      properties:
+        group_name:
+          type: string
+          description: >-
+            Exact group name; import resolves it against the user's groups
+            (idx_groups_user_name unique) or creates it.
+        option_name:
+          type: string
+          description: >-
+            Exact option name within the group; import resolves-or-creates
+            (deduped via a preloaded name cache — group_options has no
+            unique index).
+
+    DataExportGoal:
+      type: object
+      required:
+        - title
+        - description
+        - frequency_per_week
+        - completed
+        - streak
+        - period_start
+        - last_completed_date
+        - created_at
+        - updated_at
+        - completions
+      properties:
+        title:
+          type: string
+          description: The import dup key — a duplicate title skips the whole goal.
+        description:
+          type: [string, "null"]
+          description: >-
+            The API writes a (possibly empty) trimmed string; legacy rows
+            can surface null, exported as-is.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        completed:
+          type: integer
+          description: >-
+            Current-week completions with the rollover projected at export
+            time. Written raw on import — never recomputed; the rollover
+            projection self-heals stale periods on the next goals read.
+        streak:
+          type: integer
+          description: Consecutive fully-completed weeks; exported raw, imported raw.
+        period_start:
+          type: string
+          description: ISO Monday of the goal's current week as projected at export.
+        last_completed_date:
+          type: [string, "null"]
+          description: ISO date of the latest completion; null until the first log.
+        created_at:
+          type: string
+          description: '"YYYY-MM-DD HH:MM:SS"; preserved on import.'
+        updated_at:
+          type: string
+          description: Same format; preserved on import.
+        completions:
+          type: array
+          items:
+            type: string
+          description: >-
+            Bare ISO "YYYY-MM-DD" strings (NOT the {date} objects of
+            GET /api/goals/{id}/completions), ascending. Imported with
+            INSERT OR IGNORE semantics for a NEW goal; ignored entirely
+            when the goal is skipped as a duplicate.
+
+    DataImportResult:
+      type: object
+      required: [status, entries, goals]
+      properties:
+        status:
+          type: string
+          const: success
+        entries:
+          type: object
+          required: [imported, skipped]
+          properties:
+            imported:
+              type: integer
+            skipped:
+              type: integer
+          description: Per-file-row counts; imported + skipped = rows in the file.
+        goals:
+          type: object
+          required: [imported, skipped]
+          properties:
+            imported:
+              type: integer
+            skipped:
+              type: integer
+          description: Same shape as entries; a skipped goal counts once (whole goal).
+      description: >-
+        POST /api/import/data 200 body — exactly these three keys. Integer
+        counts only; the response never echoes rows or ids.
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+      description: >-
+        Uniform JSON error envelope (shared app-wide; grade status + shape,
+        never message text).

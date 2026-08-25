@@ -1,0 +1,21 @@
+{
+  "method": "GET",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 405,
+    "content_type": "application/json",
+    "body": {
+      "error": "Method not allowed"
+    },
+    "headers_that_matter": {
+      "Allow": "POST,OPTIONS"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). The import rule is POST-only; a GET takes the app-wide unified 405: JSON envelope {\"error\": \"Method not allowed\"} plus Allow. Allow is synthesized by axum from the registered methods, comma-joined without spaces (contract encoding fact recorded in time_post_405.json; method order is not graded). Same 405 with or without credentials — method matching precedes auth."
+}

@@ -1,0 +1,44 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 1,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [
+          {
+            "date": "2025-08-01",
+            "mood": 4,
+            "content": "Great workout day.",
+            "created_at": "2025-08-01 21:15:00",
+            "updated_at": "2025-08-01 21:15:00",
+            "selections": []
+          },
+          {
+            "date": "2025-08-02",
+            "mood": 9,
+            "content": "Off the scale.",
+            "created_at": "2025-08-02 21:15:00",
+            "updated_at": "2025-08-02 21:15:00",
+            "selections": []
+          }
+        ],
+        "goals": []
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "content_type": "application/json",
+    "body": {
+      "error": "entries[1]: mood must be between 1 and 5"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). SEEDING: none needed (fresh account). Any invalid row rejects the WHOLE file with 400 — atomic all-or-nothing: the valid entries[0] is NOT imported (the single transaction never commits), so after this response GET /api/moods is unchanged. The error message is row-indexed (zero-based array index into the failing category) to make fixing the file easy, but message text is NOT graded — grade status + {error} shape and the atomicity. Merge-skip semantics make the retry free: fix the bad row, re-POST the whole file, previously present rows just skip. Same 400 pattern for every v1 validation failure (mood out of 1..5, missing/blank content or title, frequency_per_week out of 1..7, non-string dates, malformed selections)."
+}

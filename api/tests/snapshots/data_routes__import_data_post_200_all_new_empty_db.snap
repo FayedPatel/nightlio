@@ -1,0 +1,18 @@
+---
+source: tests/data_routes.rs
+expression: "json!({ \"status\": status, \"body\": body })"
+---
+{
+  "body": {
+    "entries": {
+      "imported": 1,
+      "skipped": 0
+    },
+    "goals": {
+      "imported": 1,
+      "skipped": 0
+    },
+    "status": "success"
+  },
+  "status": 200
+}

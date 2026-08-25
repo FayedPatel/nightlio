@@ -1,0 +1,83 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 1,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [
+          {
+            "date": "2025-08-01",
+            "mood": 4,
+            "content": "Great workout day.",
+            "created_at": "2025-08-01 21:15:00",
+            "updated_at": "2025-08-01 21:15:00",
+            "selections": [
+              { "group_name": "Emotions", "option_name": "content" },
+              { "group_name": "Emotions", "option_name": "happy" }
+            ]
+          },
+          {
+            "date": "2025-08-03",
+            "mood": 5,
+            "content": "Beach day.",
+            "created_at": "2025-08-03 19:30:00",
+            "updated_at": "2025-08-03 19:30:00",
+            "selections": [
+              { "group_name": "Custom Tags", "option_name": "beach" },
+              { "group_name": "Emotions", "option_name": "happy" }
+            ]
+          }
+        ],
+        "goals": [
+          {
+            "title": "Meditate",
+            "description": "10 minutes",
+            "frequency_per_week": 3,
+            "completed": 2,
+            "streak": 1,
+            "period_start": "2025-07-28",
+            "last_completed_date": "2025-08-01",
+            "created_at": "2025-07-01 08:00:00",
+            "updated_at": "2025-08-01 08:00:00",
+            "completions": ["2025-07-31", "2025-08-01"]
+          },
+          {
+            "title": "Journal",
+            "description": "Evening pages",
+            "frequency_per_week": 5,
+            "completed": 1,
+            "streak": 0,
+            "period_start": "2025-08-04",
+            "last_completed_date": "2025-08-05",
+            "created_at": "2025-08-02 08:00:00",
+            "updated_at": "2025-08-05 08:00:00",
+            "completions": ["2025-08-05"]
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "success",
+      "entries": {
+        "imported": 1,
+        "skipped": 1
+      },
+      "goals": {
+        "imported": 1,
+        "skipped": 1
+      }
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). SEEDING (fresh DB, self-host login, BEFORE the import — one duplicate + one new per category): 1) POST /api/mood {mood: 4, date: \"2025-08-01\", content: \"Great workout day.\", selected_options: [1, 5]} — pre-seeds the first entry in the file; 2) POST /api/goals {title: \"Meditate\", description: \"10 minutes\", frequency_per_week: 3} — pre-seeds the first goal in the file. Then POST this body. Merge-skip semantics (DECISIONS.md 2026-08-24): entry dup key is (date, content) — \"Great workout day.\" on 2025-08-01 is skipped, \"Beach day.\" is imported; goal dup key is title — \"Meditate\" is skipped WHOLE (its completions are ignored; existing streak state is never mutated), \"Journal\" is imported with its completion rows. Selections resolve-or-create by exact name: Emotions/happy resolves to the pre-seeded default option, Custom Tags/beach creates both the group and the option. Imported rows keep the file's created_at/updated_at via COALESCE(?, CURRENT_TIMESTAMP). Rows are processed in file order inside ONE transaction; NO achievement checks and NO activity_log rows are produced. Response is exactly {status: \"success\", entries: {imported, skipped}, goals: {imported, skipped}} — integer counts, nothing else. Re-POSTing the same body is idempotent: everything skips (both categories then answer {\"imported\": 0, \"skipped\": 2} — counts are per file row)."
+}

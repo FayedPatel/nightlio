@@ -1,0 +1,57 @@
+{
+  "method": "POST",
+  "path": "/api/import/data",
+  "request": {
+    "headers_that_matter": {
+      "Authorization": "Bearer <JWT>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "schema_version": 1,
+      "exported_at": "2025-08-04 09:00:00",
+      "app_version": "0.6.0",
+      "data": {
+        "entries": [
+          {
+            "date": "2025-08-02",
+            "mood": 2,
+            "content": "Rough night.",
+            "created_at": "2025-08-02 23:05:00",
+            "updated_at": "2025-08-02 23:05:00",
+            "selections": []
+          }
+        ],
+        "goals": [
+          {
+            "title": "Read",
+            "description": "",
+            "frequency_per_week": 2,
+            "completed": 0,
+            "streak": 0,
+            "period_start": "2025-08-04",
+            "last_completed_date": null,
+            "created_at": "2025-08-02 08:00:00",
+            "updated_at": "2025-08-02 08:00:00",
+            "completions": []
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": {
+      "status": "success",
+      "entries": {
+        "imported": 1,
+        "skipped": 0
+      },
+      "goals": {
+        "imported": 1,
+        "skipped": 0
+      }
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). SEEDING: none — a freshly logged-in account with no entries and no goals (default groups pre-seeded as always). On an empty account nothing can be a duplicate, so both skipped counts are 0. Everything in the file is new: the entry (with an empty selections array — legal, imports with zero selection rows) and the goal (empty description string kept verbatim, null last_completed_date kept null, empty completions array legal). Goal weekly state (completed/streak/period_start) is written raw from the file; the stale 2025-08-04 period_start self-heals via the rollover projection on the next goals read — import never recomputes it."
+}

@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/export/data",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "content_type": "application/json",
+    "body": {
+      "error": "Authorization header required"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — Rust-native, no Flask recording exists; DECISIONS.md 2026-08-24). Behind require_auth like every data-bearing rule: no Bearer token and no nightlio_token cookie -> 401 with the standard body every require_auth rule returns (same body even when the missing credential is the cookie). Expired token -> {\"error\": \"Token expired\"}; malformed -> {\"error\": \"Invalid token\"}. Grade status + shape, never message text."
+}
