@@ -49,6 +49,17 @@ export function exportSVGToPNG(
   img.src = url;
 }
 
+// Pretty-printed (2-space indent) so exported backups stay hand-editable in
+// any text editor — the JSON import path is documented as accepting
+// hand-authored files.
+export function exportJSONToFile(data: unknown, filename: string): void {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  triggerDownload(url, filename);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export function exportDataToCSV<T extends object>(
   rows: readonly T[],
   headers: ReadonlyArray<keyof T & string>,
