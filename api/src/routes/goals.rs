@@ -1,8 +1,8 @@
 //! Goals route family — port of `api/routes/goal_routes.py` with the
 //! service-layer logic from `api/services/goal_service.py` folded into the
-//! handlers. Data access goes through [`crate::db::goals`] (and the
-//! best-effort activity log through [`crate::db::activity`]) under
-//! `spawn_blocking`.
+//! handlers. Data access goes through the [`crate::db::store::goals`] ops
+//! (which run [`crate::db::goals`] plus the best-effort activity log via
+//! [`crate::db::activity`] on the blocking pool).
 //!
 //! Routing notes (fixture-verified, `contract/fixtures/goals/`):
 //! - `/goals` and `/goals/{id}` are strict-slash rules: the trailing-slash
@@ -53,8 +53,7 @@ use serde_json::{Value, json};
 
 use super::{FlaskInt, FlaskPath, automatic_options};
 use crate::auth::extract::AuthUser;
-use crate::db::activity;
-use crate::db::goals::{self as db_goals, GoalsError};
+use crate::db::store;
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
@@ -142,7 +141,7 @@ fn automatic_options_with_id(allow: &'static str) -> MethodRouter<AppState> {
 /// layer (pure read), ordered by `created_at DESC`.
 async fn list_goals(State(state): State<AppState>, user: AuthUser) -> ApiResult<Response> {
     let user_id = user.user_id;
-    let goals = with_conn(state, move |conn| db_goals::get_goals(conn, user_id)).await?;
+    let goals = store::goals::get_goals(&state.db, user_id).await?;
     Ok(Json(goals).into_response())
 }
 
@@ -185,10 +184,8 @@ async fn create_goal(
         return Err(ApiError::validation("frequency_per_week must be 1..7"));
     }
     let user_id = user.user_id;
-    let goal_id = with_conn(state, move |conn| {
-        db_goals::create_goal(conn, user_id, &title, &description, frequency)
-    })
-    .await?;
+    let goal_id =
+        store::goals::create_goal(&state.db, user_id, title, description, frequency).await?;
     Ok((StatusCode::CREATED, Json(json!({ "id": goal_id }))).into_response())
 }
 
@@ -200,10 +197,7 @@ async fn get_goal(
     user: AuthUser,
 ) -> ApiResult<Response> {
     let user_id = user.user_id;
-    let goal = with_conn(state, move |conn| {
-        db_goals::get_goal_by_id(conn, user_id, goal_id)
-    })
-    .await?;
+    let goal = store::goals::get_goal_by_id(&state.db, user_id, goal_id).await?;
     match goal {
         Some(goal) => Ok(Json(goal).into_response()),
         None => Err(ApiError::NotFound("Not found".to_string())),
@@ -252,17 +246,9 @@ async fn update_goal(
         return Err(ApiError::validation("No fields to update"));
     }
     let user_id = user.user_id;
-    let success = with_conn(state, move |conn| {
-        db_goals::update_goal(
-            conn,
-            user_id,
-            goal_id,
-            title.as_deref(),
-            description.as_deref(),
-            frequency,
-        )
-    })
-    .await?;
+    let success =
+        store::goals::update_goal(&state.db, user_id, goal_id, title, description, frequency)
+            .await?;
     if success {
         Ok(Json(json!({ "status": "ok" })).into_response())
     } else {
@@ -283,10 +269,7 @@ async fn delete_goal(
     user: AuthUser,
 ) -> ApiResult<Response> {
     let user_id = user.user_id;
-    let success = with_conn(state, move |conn| {
-        db_goals::delete_goal(conn, user_id, goal_id)
-    })
-    .await?;
+    let success = store::goals::delete_goal(&state.db, user_id, goal_id).await?;
     if success {
         Ok(Json(json!({ "status": "ok" })).into_response())
     } else {
@@ -314,23 +297,7 @@ async fn increment_progress(
         _ => None,
     };
     let user_id = user.user_id;
-    let updated = with_conn(state, move |conn| {
-        let result =
-            db_goals::increment_goal_progress(conn, user_id, goal_id, date_str.as_deref())?;
-        if let Some(progress) = &result
-            && !progress.already_logged
-        {
-            let metadata = json!({
-                "goal_id": goal_id,
-                "title": progress.goal.title,
-                "date": progress.logged_date,
-            });
-            // Best-effort, like the Python try/except pass.
-            let _ = activity::add_activity(conn, user_id, "goal_completed", Some(&metadata));
-        }
-        Ok(result)
-    })
-    .await?;
+    let updated = store::goals::increment_progress(&state.db, user_id, goal_id, date_str).await?;
     match updated {
         Some(progress) => Ok(Json(progress).into_response()),
         None => Err(ApiError::NotFound("Not found".to_string())),
@@ -354,14 +321,7 @@ async fn get_completions(
     let start = query_param(query.as_deref(), "start");
     let end = query_param(query.as_deref(), "end");
     let user_id = user.user_id;
-    let rows = with_conn(state, move |conn| {
-        if db_goals::get_goal_by_id(conn, user_id, goal_id)?.is_none() {
-            return Ok(None);
-        }
-        db_goals::get_goal_completions(conn, user_id, goal_id, start.as_deref(), end.as_deref())
-            .map(Some)
-    })
-    .await?;
+    let rows = store::goals::get_completions(&state.db, user_id, goal_id, start, end).await?;
     match rows {
         Some(rows) => Ok(Json(rows).into_response()),
         None => Err(ApiError::NotFound("Not found".to_string())),
@@ -371,30 +331,6 @@ async fn get_completions(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Run a goals db call on a pooled connection under `spawn_blocking`.
-async fn with_conn<T, F>(state: AppState, f: F) -> ApiResult<T>
-where
-    T: Send + 'static,
-    F: FnOnce(&rusqlite::Connection) -> Result<T, GoalsError> + Send + 'static,
-{
-    tokio::task::spawn_blocking(move || -> ApiResult<T> {
-        let conn = state.pool.get()?;
-        f(&conn).map_err(goals_error)
-    })
-    .await
-    .map_err(|exc| ApiError::Internal(anyhow::anyhow!("blocking task failed: {exc}")))?
-}
-
-/// `GoalsError` → `ApiError`: validation messages reach the client as 400
-/// (Flask's `except ValueError`), everything else is an internal 500.
-fn goals_error(err: GoalsError) -> ApiError {
-    match err {
-        GoalsError::Validation(message) => ApiError::Validation(message),
-        GoalsError::Database(inner) => ApiError::Internal(anyhow::anyhow!(inner)),
-        GoalsError::Sqlite(inner) => ApiError::Database(inner),
-    }
-}
 
 /// Flask `request.args.get(key)`: first occurrence wins, `+` and
 /// percent-escapes decode, absent key is `None`. Never rejects the request
@@ -519,7 +455,7 @@ mod tests {
         db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
         let pool = db::open_pool(&cfg.database_path).expect("pool");
         let token = jwt::issue_token(&cfg.jwt_secret, 1).expect("token");
-        let app = crate::routes::build_router(AppState::new(cfg, pool));
+        let app = crate::routes::build_router(AppState::new(cfg, db::DbHandle::Sqlite(pool)));
         (app, token, dir)
     }
 

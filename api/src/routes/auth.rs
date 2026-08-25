@@ -41,10 +41,10 @@ use crate::auth::rate_limit::{
     self, AUTH_WINDOW_SECONDS, LOGIN_BUCKET_PREFIX, LOGIN_MAX_REQUESTS, RATE_LIMIT_MESSAGE,
     REGISTER_BUCKET_PREFIX, REGISTER_MAX_REQUESTS,
 };
-use crate::auth::{cookie, jwt, password};
+use crate::auth::{cookie, jwt};
 use crate::config::{AppEnv, Config};
+use crate::db::store;
 use crate::db::users::UserRow;
-use crate::db::{DatabaseError, activity, groups, users};
 use crate::state::AppState;
 
 /// `MIN_PASSWORD_LENGTH` (`api/routes/auth_routes.py`).
@@ -272,23 +272,10 @@ fn issue_login_response(
 /// Routed through the [`AuthUser`] extractor so a cookie-only session can
 /// be verified too (the SPA's reload path).
 async fn verify_token(State(state): State<AppState>, user: AuthUser) -> Response {
-    let pool = state.pool.clone();
-    let user_id = user.user_id;
-    let looked_up = spawn_blocking(move || -> Result<Option<UserRow>, DatabaseError> {
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        users::get_user_by_id(&conn, user_id)
-    })
-    .await;
+    let looked_up = store::users::get_user_by_id(&state.db, user.user_id).await;
     match looked_up {
-        Ok(Ok(Some(row))) => Json(json!({ "user": user_payload(&row) })).into_response(),
-        Ok(Ok(None)) => error_json(StatusCode::NOT_FOUND, "User not found"),
-        Ok(Err(exc)) => {
-            tracing::error!(error = %exc, "Token verification error");
-            error_json(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Token verification failed",
-            )
-        }
+        Ok(Some(row)) => Json(json!({ "user": user_payload(&row) })).into_response(),
+        Ok(None) => error_json(StatusCode::NOT_FOUND, "User not found"),
         Err(exc) => {
             tracing::error!(error = %exc, "Token verification error");
             error_json(
@@ -376,20 +363,10 @@ async fn credentialed_login(
     username: String,
     password: String,
 ) -> Response {
-    type Lookup = Result<Option<(UserRow, Option<String>)>, DatabaseError>;
-    let pool = state.pool.clone();
-    let looked_up = spawn_blocking(move || -> Lookup {
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        let Some(user) = users::get_user_by_provider(&conn, "local", &username)? else {
-            return Ok(None);
-        };
-        let stored_hash = users::get_user_password_hash(&conn, user.id)?;
-        Ok(Some((user, stored_hash)))
-    })
-    .await;
+    let looked_up = store::users::lookup_local_user(&state.db, username).await;
     let user_and_hash = match looked_up {
-        Ok(Ok(found)) => found,
-        _ => return auth_failed(),
+        Ok(found) => found,
+        Err(_) => return auth_failed(),
     };
     // Unknown username, user with no stored hash, and wrong password are
     // deliberately indistinguishable (same 401 body, no Set-Cookie).
@@ -398,32 +375,12 @@ async fn credentialed_login(
         _ => return error_json(StatusCode::UNAUTHORIZED, "Invalid credentials"),
     };
 
-    // scrypt/pbkdf2/argon2 verification is CPU-bound: blocking pool, never
-    // the async executor. The legacy-hash upgrade (rehash-on-login) runs in
-    // the same blocking context — argon2id hashing is just as CPU-bound,
-    // and it must only ever happen right after the plaintext verified.
-    let pool = state.pool.clone();
-    let user_id = user.id;
-    let verified = spawn_blocking(move || {
-        let verdict = password::check_password_hash(&stored_hash, &password)?;
-        if verdict && password::needs_rehash(&stored_hash) {
-            // Transparent upgrade of legacy Werkzeug rows to argon2id (the
-            // Flask rollback constraint is retired — see auth::password).
-            // Best-effort: a rehash/persist failure logs a warning and
-            // never fails the login; the legacy hash simply stays put
-            // until the next successful login.
-            let new_hash = password::generate_password_hash(&password);
-            let persisted = pool
-                .get()
-                .map_err(DatabaseError::from)
-                .and_then(|conn| users::set_user_password(&conn, user_id, &new_hash));
-            if let Err(exc) = persisted {
-                tracing::warn!(error = %exc, user_id, "Password rehash failed; keeping legacy hash");
-            }
-        }
-        Ok::<bool, password::PasswordHashError>(verdict)
-    })
-    .await;
+    // scrypt/pbkdf2/argon2 verification is CPU-bound: it runs on the
+    // blocking pool inside the store op, together with the legacy-hash
+    // upgrade (rehash-on-login).
+    let verified =
+        store::users::verify_password_and_maybe_rehash(&state.db, stored_hash, password, user.id)
+            .await;
     match verified {
         Ok(Ok(true)) => {}
         Ok(Ok(false)) => return error_json(StatusCode::UNAUTHORIZED, "Invalid credentials"),
@@ -433,17 +390,8 @@ async fn credentialed_login(
         _ => return auth_failed(),
     }
 
-    let pool = state.pool.clone();
-    let user_id = user.id;
-    let updated = spawn_blocking(move || -> Result<(), DatabaseError> {
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        users::update_user_last_login(&conn, user_id)?;
-        // record_login_activity is best-effort: never breaks the login.
-        let _ = activity::add_activity(&conn, user_id, "login", Some(&json!({"method": "local"})));
-        Ok(())
-    })
-    .await;
-    if !matches!(updated, Ok(Ok(()))) {
+    let updated = store::users::update_last_login(&state.db, user.id).await;
+    if updated.is_err() {
         return auth_failed();
     }
 
@@ -468,34 +416,11 @@ async fn selfhost_login(state: &AppState, headers: &HeaderMap) -> Response {
         .clone()
         .unwrap_or_else(|| format!("{default_user_id}@localhost"));
 
-    let pool = state.pool.clone();
-    let upserted = spawn_blocking(move || -> Result<Option<UserRow>, DatabaseError> {
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        // ensure_local_user: upsert keyed by the legacy google_id column;
-        // idempotent, refreshes the friendly name/email, burns an
-        // autoincrement id on every conflicting insert attempt (known,
-        // fixture-documented behavior).
-        let user = users::upsert_user_by_google_id(
-            &conn,
-            &default_user_id,
-            Some(&email),
-            Some(&name),
-            None,
-        )?;
-        if let Some(user) = &user {
-            let _ = activity::add_activity(
-                &conn,
-                user.id,
-                "login",
-                Some(&json!({"method": "selfhost"})),
-            );
-        }
-        Ok(user)
-    })
-    .await;
+    let upserted =
+        store::users::selfhost_login_upsert(&state.db, default_user_id, email, name).await;
 
     match upserted {
-        Ok(Ok(Some(user))) => issue_login_response(state, headers, StatusCode::OK, &user),
+        Ok(Some(user)) => issue_login_response(state, headers, StatusCode::OK, &user),
         _ => auth_failed(),
     }
 }
@@ -503,16 +428,6 @@ async fn selfhost_login(state: &AppState, headers: &HeaderMap) -> Response {
 // ---------------------------------------------------------------------------
 // POST /auth/local/register
 // ---------------------------------------------------------------------------
-
-/// `sqlite3.IntegrityError` equivalent: any constraint violation (here the
-/// UNIQUE index on `(auth_provider, external_id)`).
-fn is_integrity_error(error: &DatabaseError) -> bool {
-    matches!(
-        error,
-        DatabaseError::Sqlite(rusqlite::Error::SqliteFailure(inner, _))
-            if inner.code == rusqlite::ErrorCode::ConstraintViolation
-    )
-}
 
 async fn local_register(
     State(state): State<AppState>,
@@ -566,49 +481,18 @@ async fn local_register(
     let name = data.get("name").and_then(Value::as_str).map(str::to_string);
 
     // Ok(user) → 201; Err(()) → 409 (username taken).
-    type Registered = Result<Result<UserRow, ()>, DatabaseError>;
-    let pool = state.pool.clone();
-    let registered = spawn_blocking(move || -> Registered {
-        // argon2id hash (new-hash format since the Flask rollback
-        // constraint was retired): CPU-bound, so it stays on the blocking
-        // pool with the DB work.
-        let password_hash = password::generate_password_hash(&password);
-        let conn = pool.get().map_err(DatabaseError::from)?;
-        let user_id = match users::create_local_user(
-            &conn,
-            &username,
-            &password_hash,
-            email.as_deref(),
-            name.as_deref(),
-        ) {
-            Ok(id) => id,
-            Err(exc) if is_integrity_error(&exc) => return Ok(Err(())),
-            Err(exc) => return Err(exc),
-        };
-        groups::ensure_default_groups_for_user(&conn, user_id)
-            .map_err(|exc| DatabaseError::Message(exc.to_string()))?;
-        // Bug-compatible: register_local_user returning None (for any
-        // reason) maps to the 409 branch in the Python route.
-        match users::get_user_by_id(&conn, user_id)? {
-            Some(user) => Ok(Ok(user)),
-            None => Ok(Err(())),
-        }
-    })
-    .await;
+    let registered =
+        store::users::register_local_user(&state.db, username, password, email, name).await;
 
     match registered {
         // 201 with the user payload; registering does NOT log the new user
         // in — no token, no Set-Cookie.
-        Ok(Ok(Ok(user))) => (
+        Ok(Ok(user)) => (
             StatusCode::CREATED,
             Json(json!({ "status": "success", "user": user_payload(&user) })),
         )
             .into_response(),
-        Ok(Ok(Err(()))) => error_json(StatusCode::CONFLICT, "Username is already taken"),
-        Ok(Err(exc)) => {
-            tracing::error!(error = %exc, "Local register error");
-            register_failed()
-        }
+        Ok(Err(())) => error_json(StatusCode::CONFLICT, "Username is already taken"),
         Err(exc) => {
             tracing::error!(error = %exc, "Local register error");
             register_failed()

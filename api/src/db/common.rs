@@ -31,7 +31,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 use rusqlite::{Connection, OptionalExtension};
 use serde::Serialize;
 
-use super::DbPool;
+use super::{DbHandle, SqlitePool};
 
 /// Port of `database_common.DatabaseError`. Message prefixes mirror the
 /// Python wrapper strings so log-grepping deployments keep working.
@@ -189,7 +189,14 @@ fn apply_pool_connection_defaults(conn: &Connection) -> rusqlite::Result<()> {
 /// Fold the entire WAL back into the main DB file and truncate the `-wal`
 /// file to zero bytes. Run once after bootstrap (before serving traffic)
 /// and on graceful shutdown, so the on-disk log starts and ends empty.
-pub fn checkpoint_truncate(pool: &DbPool) -> Result<(), DatabaseError> {
+///
+/// WAL is a SQLite concept, so on a Postgres handle this is deliberately a
+/// no-op (not an error): startup/shutdown call it unconditionally.
+pub fn checkpoint_truncate(db: &DbHandle) -> Result<(), DatabaseError> {
+    let pool = match db {
+        DbHandle::Sqlite(pool) => pool,
+        DbHandle::Pg(_) => return Ok(()),
+    };
     let conn = pool.get()?;
     // Returns a (busy, log, checkpointed) row.
     conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_row| Ok(()))?;
@@ -211,7 +218,7 @@ pub fn ensure_parent_dir(db_path: &str) -> Result<(), DatabaseError> {
 
 /// Build the shared r2d2 pool for the main DB. Every pooled connection gets
 /// the `_connect` defaults plus the bounded-WAL setup (see module docs).
-pub fn open_pool(db_path: &str) -> Result<DbPool, DatabaseError> {
+pub fn open_pool(db_path: &str) -> Result<SqlitePool, DatabaseError> {
     ensure_parent_dir(db_path)?;
     let manager = SqliteConnectionManager::file(db_path)
         .with_init(|conn| apply_pool_connection_defaults(conn));
@@ -243,7 +250,7 @@ pub struct ExecuteResult {
 /// `0.1 * (attempt + 1)` seconds backoff. Each attempt checks a connection
 /// out of the pool (the Python opens a fresh connection per attempt).
 pub fn execute_with_retry(
-    pool: &DbPool,
+    pool: &SqlitePool,
     query: &str,
     params: &[&dyn rusqlite::ToSql],
 ) -> Result<ExecuteResult, DatabaseError> {
@@ -389,7 +396,10 @@ mod tests {
             tx.commit().unwrap();
         }
 
-        checkpoint_truncate(&pool).unwrap();
+        // Keep the handle (and its pool) alive across the assertion: closing
+        // the last connection would delete the -wal file outright.
+        let db = DbHandle::Sqlite(pool);
+        checkpoint_truncate(&db).unwrap();
 
         let truncated = std::fs::metadata(&wal_path).unwrap().len();
         assert!(

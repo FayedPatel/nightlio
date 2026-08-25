@@ -46,8 +46,8 @@ use serde_json::{Value, json};
 
 use super::{FlaskInt, FlaskPath, automatic_options};
 use crate::auth::extract::AuthUser;
-use crate::db::DbPool;
-use crate::db::groups::{self as db_groups, GroupsError};
+use crate::db::groups as db_groups;
+use crate::db::store;
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
@@ -80,21 +80,6 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-/// Run a groups data-layer call on a pooled connection under
-/// `spawn_blocking` (rusqlite is synchronous).
-async fn with_conn<T, F>(pool: DbPool, op: F) -> Result<T, ApiError>
-where
-    T: Send + 'static,
-    F: FnOnce(&rusqlite::Connection) -> Result<T, GroupsError> + Send + 'static,
-{
-    tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        op(&conn).map_err(ApiError::from)
-    })
-    .await
-    .map_err(|exc| ApiError::Internal(anyhow::anyhow!(exc)))?
-}
-
 /// Port of the route-layer `if not name:` falsy check on `data.get("name")`.
 /// Missing/invalid body, missing key, null, or empty string → 400 with the
 /// route's exact message (see module docs for the drift on non-string
@@ -118,10 +103,7 @@ async fn get_groups(
     State(state): State<AppState>,
 ) -> ApiResult<Json<Vec<db_groups::Group>>> {
     let default_id = state.config.default_self_host_id.clone();
-    let groups = with_conn(state.pool.clone(), move |conn| {
-        db_groups::get_all_groups(conn, Some(user.user_id), &default_id)
-    })
-    .await?;
+    let groups = store::groups::get_all_groups(&state.db, user.user_id, default_id).await?;
     Ok(Json(groups))
 }
 
@@ -139,10 +121,8 @@ async fn create_group(
         return Err(ApiError::validation("Group name cannot be empty"));
     }
     let default_id = state.config.default_self_host_id.clone();
-    let group_id = with_conn(state.pool.clone(), move |conn| {
-        db_groups::create_group(conn, &trimmed, Some(user.user_id), &default_id)
-    })
-    .await?;
+    let group_id =
+        store::groups::create_group(&state.db, trimmed, user.user_id, default_id).await?;
     Ok((
         StatusCode::CREATED,
         Json(json!({
@@ -171,16 +151,15 @@ async fn create_group_option(
         return Err(ApiError::validation("Option name cannot be empty"));
     }
     let default_id = state.config.default_self_host_id.clone();
-    let option_id = with_conn(state.pool.clone(), move |conn| {
-        db_groups::create_group_option(conn, group_id, &trimmed, Some(user.user_id), &default_id)
-    })
-    .await
-    .map_err(|error| match error {
-        ApiError::Validation(message) if message == "Group not found for user" => {
-            ApiError::NotFound("Group not found".to_string())
-        }
-        other => other,
-    })?;
+    let option_id =
+        store::groups::create_group_option(&state.db, group_id, trimmed, user.user_id, default_id)
+            .await
+            .map_err(|error| match error {
+                ApiError::Validation(message) if message == "Group not found for user" => {
+                    ApiError::NotFound("Group not found".to_string())
+                }
+                other => other,
+            })?;
     Ok((
         StatusCode::CREATED,
         Json(json!({
@@ -199,10 +178,8 @@ async fn delete_group(
     State(state): State<AppState>,
 ) -> ApiResult<Json<Value>> {
     let default_id = state.config.default_self_host_id.clone();
-    let deleted = with_conn(state.pool.clone(), move |conn| {
-        db_groups::delete_group(conn, group_id, Some(user.user_id), &default_id)
-    })
-    .await?;
+    let deleted =
+        store::groups::delete_group(&state.db, group_id, user.user_id, default_id).await?;
     if deleted {
         Ok(Json(json!({
             "status": "success",
@@ -221,10 +198,8 @@ async fn delete_option(
     State(state): State<AppState>,
 ) -> ApiResult<Json<Value>> {
     let default_id = state.config.default_self_host_id.clone();
-    let deleted = with_conn(state.pool.clone(), move |conn| {
-        db_groups::delete_group_option(conn, option_id, Some(user.user_id), &default_id)
-    })
-    .await?;
+    let deleted =
+        store::groups::delete_group_option(&state.db, option_id, user.user_id, default_id).await?;
     if deleted {
         Ok(Json(json!({
             "status": "success",

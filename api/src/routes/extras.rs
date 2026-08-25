@@ -36,12 +36,11 @@ use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get, post};
 use axum::{Json, Router};
-use rusqlite::Connection;
 use serde_json::{Value, json};
 
 use super::{automatic_options, resource_not_found};
 use crate::auth::extract::AuthUser;
-use crate::db::{self, DatabaseError};
+use crate::db;
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 
@@ -101,22 +100,6 @@ pub fn router() -> Router<AppState> {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
-
-/// Run a data-layer call on the blocking pool (`spawn_blocking`), checking a
-/// connection out of the shared pool inside the task.
-async fn run_db<T, F>(state: &AppState, func: F) -> Result<T, DatabaseError>
-where
-    T: Send + 'static,
-    F: FnOnce(&Connection) -> Result<T, DatabaseError> + Send + 'static,
-{
-    let pool = state.pool.clone();
-    tokio::task::spawn_blocking(move || {
-        let conn = pool.get()?;
-        func(&conn)
-    })
-    .await
-    .map_err(|exc| DatabaseError::Message(format!("Database error: blocking task failed: {exc}")))?
-}
 
 /// Flask `request.is_json`: mimetype `application/json` or an
 /// `application/*+json` suffix type.
@@ -233,11 +216,9 @@ fn internal_error() -> Response {
 /// `GET /api/preferences`. Fresh users have no stored theme → `null`; reads
 /// echo any stored string (the enum is enforced only on PUT).
 async fn get_preferences(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<Value>> {
-    let theme = run_db(&state, move |conn| {
-        db::users::get_user_theme(conn, user.user_id)
-    })
-    .await
-    .map_err(|exc| ApiError::Internal(exc.into()))?;
+    let theme = db::store::users::get_user_theme(&state.db, user.user_id)
+        .await
+        .map_err(|exc| ApiError::Internal(exc.into()))?;
     Ok(Json(json!({ "theme": theme })))
 }
 
@@ -260,11 +241,9 @@ async fn update_preferences(
     };
     let theme = theme.to_string();
     let stored = theme.clone();
-    run_db(&state, move |conn| {
-        db::users::set_user_theme(conn, user.user_id, &stored)
-    })
-    .await
-    .map_err(|exc| ApiError::Internal(exc.into()))?;
+    db::store::users::set_user_theme(&state.db, user.user_id, stored)
+        .await
+        .map_err(|exc| ApiError::Internal(exc.into()))?;
     Ok(Json(json!({ "status": "success", "theme": theme })))
 }
 
@@ -299,11 +278,7 @@ async fn get_activity(
         None => 50,
     };
 
-    match run_db(&state, move |conn| {
-        db::activity::get_activity_page(conn, user.user_id, before, limit)
-    })
-    .await
-    {
+    match db::store::activity::get_activity_page(&state.db, user.user_id, before, limit).await {
         Ok(page) => Json(page).into_response(),
         Err(exc) => {
             tracing::error!(error = %exc, "Failed to load activity");
@@ -590,7 +565,7 @@ mod tests {
         seed_activity(&db_path);
         let token = jwt::issue_token(&cfg.jwt_secret, 1).expect("token");
         let pool = db::open_pool(&cfg.database_path).expect("pool");
-        let state = crate::state::AppState::new(cfg, pool);
+        let state = crate::state::AppState::new(cfg, db::DbHandle::Sqlite(pool));
         TestApp {
             app: crate::routes::build_router(state),
             token,
