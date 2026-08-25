@@ -12,9 +12,10 @@
 //     must additionally match the release-tag code grammar — [a-z]{2,8}
 //     with at most one -[A-Za-z0-9]+ subtag, in lockstep with the consumer
 //     in api/src/i18n.rs::valid_code), and
-//     strings — either the flat dot-key wire map or a nested object like
-//     src/i18n/en.json (nested sources are flattened before checking; the
-//     wire format itself stays flat)
+//     strings — a NESTED object like src/i18n/en.json (the wire format is
+//     nested — contract/DECISIONS.md, 2026-08-22 amendment). A flat dot-key
+//     map is also accepted for convenience; both are flattened internally
+//     purely to compare key paths against the catalog.
 //   - every string leaf inside `strings` is itself a string
 //   - key coverage against src/i18n/en.json, the bundled canonical catalog:
 //       * keys present in en.json but missing from the pack  -> WARN only.
@@ -148,9 +149,10 @@ export function validatePack(candidate, enCatalog) {
   if (!isPlainObject(candidate.strings)) {
     errors.push('"strings" must be a JSON object mapping keys to string values');
   } else {
-    // Source packs may be authored NESTED (like src/i18n/en.json); release
-    // assets on the wire are flat. Flattening is identity on a flat map, so
-    // one path handles both. Non-string leaves are collected as errors.
+    // Packs are nested on the wire (like src/i18n/en.json); flattening here
+    // is only for key-path comparison against the catalog, and is identity
+    // on an already-flat map so hand-authored flat sources validate too.
+    // Non-string leaves are collected as errors.
     const badValueKeys = [];
     strings = flattenStrings(candidate.strings, '', {}, badValueKeys);
     if (badValueKeys.length > 0) {

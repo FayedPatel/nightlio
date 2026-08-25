@@ -47,12 +47,15 @@ rm -f "$DATABASE_PATH"
 # Output is captured and only shown on failure, so a healthy build stays
 # quiet under Playwright's ignored stdio.
 BUILD_LOG="$(mktemp)"
+trap 'rm -f "$BUILD_LOG"' EXIT INT TERM
 if ! cargo build --release --manifest-path api/Cargo.toml --bin nightlio-api >"$BUILD_LOG" 2>&1; then
   cat "$BUILD_LOG" >&2
-  rm -f "$BUILD_LOG"
   exit 1
 fi
+# Explicit cleanup: the exec below replaces the shell, so the EXIT trap
+# would never fire on the success path.
 rm -f "$BUILD_LOG"
+trap - EXIT INT TERM
 
 # The Rust config maps E2E_API_PORT -> PORT (Config::from_env reads PORT,
 # default 5000). DATABASE_PATH / RATE_LIMIT_DB_PATH / OIDC_* / FRONTEND_URL /

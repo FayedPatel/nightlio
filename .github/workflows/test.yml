@@ -1,5 +1,9 @@
 name: Tests
 
+# This workflow only checks out and tests code — never writes to the repo.
+permissions:
+  contents: read
+
 on:
   pull_request:
     paths-ignore:
