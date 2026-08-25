@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import apiService from '../services/api';
 import type { User } from '../types/api';
 import { useConfig } from './ConfigContext';
+import { useI18n } from '../i18n';
 
 /** Result of a login attempt; `error` only accompanies `success: false`. */
 export interface AuthResult {
@@ -45,6 +46,7 @@ const consumeSsoToken = (): string | null => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const { t } = useI18n();
   const { config, loading: configLoading } = useConfig();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,11 +103,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       return { success: true };
     } catch {
-      return { success: false, error: 'Local login failed' };
+      return { success: false, error: t('auth.localLoginFailed') };
     } finally {
       setLoading(false);
     }
-  }, [applyLogin]);
+  }, [applyLogin, t]);
 
   const loginWithPassword = useCallback(async (username: string, password: string): Promise<AuthResult> => {
     try {
@@ -113,18 +115,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const response = await apiService.localLogin(username, password);
       const { token: jwtToken, user: userData } = response;
       if (!jwtToken) {
-        return { success: false, error: 'Login failed. Please try again.' };
+        return { success: false, error: t('auth.loginFailed') };
       }
       applyLogin(jwtToken, userData);
       return { success: true };
     } catch (error) {
       const message =
-        error instanceof Error && error.message ? error.message : 'Login failed. Please try again.';
+        error instanceof Error && error.message ? error.message : t('auth.loginFailed');
       return { success: false, error: message };
     } finally {
       setLoading(false);
     }
-  }, [applyLogin]);
+  }, [applyLogin, t]);
 
   const verifyToken = useCallback(async () => {
     try {

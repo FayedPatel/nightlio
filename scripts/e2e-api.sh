@@ -29,6 +29,12 @@ rm -f "$RATE_LIMIT_DB_PATH"
 export OIDC_ISSUER_URL="" OIDC_CLIENT_ID="" OIDC_CLIENT_SECRET="" \
   OIDC_CALLBACK_URL="" FRONTEND_URL="" TRUST_PROXY_HEADERS="" \
   DISABLE_LOCAL_LOGIN=""
+# Hermetic i18n: never let e2e workers hit the live GitHub releases API.
+# Once a real lang-*-v* release exists, discovery would otherwise fetch it
+# (nondeterministic strings + unauthenticated 60/h rate limit shared across
+# parallel workers). Offline with a cold cache = empty language list, which
+# is exactly the degrade path the suite pins.
+export I18N_OFFLINE=1
 rm -f "$DATABASE_PATH"
 
 # cargo build's own fingerprinting makes this a ~0.2s no-op once the release

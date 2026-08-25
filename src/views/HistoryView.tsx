@@ -3,6 +3,7 @@ import MoodPicker from '../components/mood/MoodPicker';
 import TodayEntryCard from '../components/history/TodayEntryCard';
 import RecentEntries from '../components/history/RecentEntries';
 import GoalsSection from '../components/goals/GoalsSection';
+import { useI18n } from '../i18n';
 import type { MoodValue } from '../types/api';
 import type { MoodEntryWithSelections } from '../hooks/useMoodData';
 import type { GoalsLocationState } from '../types/router';
@@ -24,6 +25,7 @@ interface HistoryViewProps {
 // `dashboard-section` top-margin so the vertical rhythm stays consistent.
 const HistoryView = ({ pastEntries, onMoodSelect, onDelete, onEdit }: HistoryViewProps) => {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const currentDate = new Date();
   const dateString = currentDate.toLocaleDateString('en-US', {
     weekday: 'long',
@@ -42,7 +44,7 @@ const HistoryView = ({ pastEntries, onMoodSelect, onDelete, onEdit }: HistoryVie
       <div className="history-header">
         <MoodPicker onMoodSelect={onMoodSelect} />
         <div className="history-date">
-          <h2 className="history-today-title">Today</h2>
+          <h2 className="history-today-title">{t('common.today')}</h2>
           <div className="history-datetime-group">
             <span className="history-date-part">{dateString}</span>
             <span className="history-time-part">{timeString}</span>
@@ -50,11 +52,11 @@ const HistoryView = ({ pastEntries, onMoodSelect, onDelete, onEdit }: HistoryVie
         </div>
       </div>
 
-      <section className="dashboard-section" aria-label="Today's entry">
+      <section className="dashboard-section" aria-label={t('history.todaysEntryAria')}>
         <TodayEntryCard pastEntries={pastEntries} onDelete={onDelete} onEdit={onEdit} />
       </section>
 
-      <section className="dashboard-section" aria-label="Active goals">
+      <section className="dashboard-section" aria-label={t('history.activeGoalsAria')}>
         <GoalsSection onNavigateToGoals={() => navigate('goals', { state: { openForm: true } satisfies GoalsLocationState })} />
       </section>
 

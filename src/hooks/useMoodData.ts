@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiService from '../services/api';
+import { translate } from '../i18n';
 import type { EntrySelection, MoodEntry } from '../types/api';
 
 export type MoodEntryWithSelections = MoodEntry & { selections: EntrySelection[] };
@@ -32,7 +33,7 @@ export const useMoodData = () => {
       setPastEntries(entriesWithSelections);
     } catch (error) {
       console.error('Failed to load history:', error);
-      setError('Failed to load mood history');
+      setError(translate('errors.loadMoodHistory'));
     } finally {
       setLoading(false);
     }

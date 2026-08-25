@@ -1,6 +1,7 @@
 import { ArrowRight } from 'lucide-react';
 import HistoryEntry from './HistoryEntry';
 import { isTodayEntry } from './TodayEntryCard';
+import { useI18n } from '../../i18n';
 import type { MoodEntryWithSelections } from '../../hooks/useMoodData';
 
 const RECENT_LIMIT = 5;
@@ -17,6 +18,7 @@ interface RecentEntriesProps {
 // excluded here since the dashboard already shows it via TodayEntryCard
 // right above this section; showing it twice would just be noise.
 const RecentEntries = ({ entries = [], onDelete, onEdit, onViewAll }: RecentEntriesProps) => {
+  const { t } = useI18n();
   const recent = entries.filter((entry) => !isTodayEntry(entry)).slice(0, RECENT_LIMIT);
 
   // Render only when there is something to show — an empty-history one-liner
@@ -26,7 +28,7 @@ const RecentEntries = ({ entries = [], onDelete, onEdit, onViewAll }: RecentEntr
   if (recent.length === 0) return null;
 
   return (
-    <section className="dashboard-section" aria-label="Recent entries">
+    <section className="dashboard-section" aria-label={t('history.recentEntriesAria')}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <h2
           style={{
@@ -37,14 +39,14 @@ const RecentEntries = ({ entries = [], onDelete, onEdit, onViewAll }: RecentEntr
             fontSize: '1.1rem',
           }}
         >
-          Recent Entries
+          {t('history.recentEntries')}
         </h2>
         <button
           type="button"
           onClick={onViewAll}
           className="dashboard-section__view-all"
         >
-          View All
+          {t('common.viewAll')}
           <ArrowRight size={14} aria-hidden="true" />
         </button>
       </div>

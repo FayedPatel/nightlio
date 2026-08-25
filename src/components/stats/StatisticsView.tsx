@@ -30,10 +30,11 @@ import {
   RANGE_OPTIONS,
   TOOLTIP_STYLE,
   MOOD_LEGEND,
-  MOOD_SHORTHANDS,
-  WEEK_DAYS,
+  moodShorthand,
+  weekdayLabel,
   formatTrendTooltip,
 } from './statisticsViewUtils';
+import { useI18n } from '../../i18n';
 import type {
   CalendarDay,
   MoodDistributionDatum,
@@ -97,20 +98,23 @@ interface RangeSelectorProps {
   onChange: (range: RangeOption) => void;
 }
 
-const RangeSelector = ({ range, onChange }: RangeSelectorProps) => (
-  <div className="statistics-view__range-buttons">
-    {RANGE_OPTIONS.map((option) => (
-      <button
-        key={option}
-        type="button"
-        onClick={() => onChange(option)}
-        className={`statistics-view__range-button${range === option ? ' is-active' : ''}`}
-      >
-        {option}d
-      </button>
-    ))}
-  </div>
-);
+const RangeSelector = ({ range, onChange }: RangeSelectorProps) => {
+  const { t } = useI18n();
+  return (
+    <div className="statistics-view__range-buttons">
+      {RANGE_OPTIONS.map((option) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={`statistics-view__range-button${range === option ? ' is-active' : ''}`}
+        >
+          {t('stats.rangeD', { count: option })}
+        </button>
+      ))}
+    </div>
+  );
+};
 
 interface MoodTrendSectionProps {
   chartData: TrendChartPoint[];
@@ -122,68 +126,71 @@ interface MoodTrendSectionProps {
   rollingNote: ReactNode;
 }
 
-const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExportCSV, containerRef, rollingNote }: MoodTrendSectionProps) => (
-  <div ref={containerRef} className="statistics-view__card statistics-view__section" id="mood-trend">
-    <SectionHeader title="Mood Trend">
-      <RangeSelector range={range} onChange={onChangeRange} />
-      <button type="button" className="statistics-view__ghost-button" onClick={onExportPNG}>
-        Export PNG
-      </button>
-      <button type="button" className="statistics-view__ghost-button" onClick={onExportCSV}>
-        Export CSV
-      </button>
-    </SectionHeader>
+const MoodTrendSection = ({ chartData, range, onChangeRange, onExportPNG, onExportCSV, containerRef, rollingNote }: MoodTrendSectionProps) => {
+  const { t } = useI18n();
+  return (
+    <div ref={containerRef} className="statistics-view__card statistics-view__section" id="mood-trend">
+      <SectionHeader title={t('stats.moodTrend')}>
+        <RangeSelector range={range} onChange={onChangeRange} />
+        <button type="button" className="statistics-view__ghost-button" onClick={onExportPNG}>
+          {t('stats.exportPng')}
+        </button>
+        <button type="button" className="statistics-view__ghost-button" onClick={onExportCSV}>
+          {t('stats.exportCsv')}
+        </button>
+      </SectionHeader>
 
-    <ResponsiveContainer width="100%" height={320}>
-      <LineChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-        <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border)' }} />
-        <YAxis
-          domain={[0.5, 5.5]}
-          ticks={[1, 2, 3, 4, 5]}
-          tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
-          axisLine={{ stroke: 'var(--border)' }}
-          width={20}
-          tickFormatter={(value) => MOOD_SHORTHANDS[value] || ''}
-        />
-        <Tooltip contentStyle={TOOLTIP_STYLE} formatter={formatTrendTooltip} />
-        <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
-        <Line
-          type="monotone"
-          name="Mood"
-          dataKey="mood"
-          stroke="var(--accent-600)"
-          strokeWidth={3}
-          dot={{ fill: 'var(--accent-600)', strokeWidth: 2, r: 6 }}
-          connectNulls={false}
-        />
-        <Line
-          type="monotone"
-          name="7-day avg"
-          dataKey="avg7"
-          stroke="var(--danger)"
-          strokeDasharray="6 6"
-          strokeWidth={2}
-          dot={false}
-          connectNulls
-        />
-        <Line
-          type="monotone"
-          name="30-day avg"
-          dataKey="avg30"
-          stroke="var(--text-muted)"
-          strokeDasharray="2 6"
-          strokeWidth={2}
-          dot={false}
-          connectNulls
-        />
-      </LineChart>
-    </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="date" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border)' }} />
+          <YAxis
+            domain={[0.5, 5.5]}
+            ticks={[1, 2, 3, 4, 5]}
+            tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
+            axisLine={{ stroke: 'var(--border)' }}
+            width={20}
+            tickFormatter={(value) => moodShorthand(value)}
+          />
+          <Tooltip contentStyle={TOOLTIP_STYLE} formatter={formatTrendTooltip} />
+          <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+          <Line
+            type="monotone"
+            name={t('stats.mood')}
+            dataKey="mood"
+            stroke="var(--accent-600)"
+            strokeWidth={3}
+            dot={{ fill: 'var(--accent-600)', strokeWidth: 2, r: 6 }}
+            connectNulls={false}
+          />
+          <Line
+            type="monotone"
+            name={t('stats.avg7')}
+            dataKey="avg7"
+            stroke="var(--danger)"
+            strokeDasharray="6 6"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+          />
+          <Line
+            type="monotone"
+            name={t('stats.avg30')}
+            dataKey="avg30"
+            stroke="var(--text-muted)"
+            strokeDasharray="2 6"
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+          />
+        </LineChart>
+      </ResponsiveContainer>
 
-    {rollingNote && <div className="statistics-view__tag-note">{rollingNote}</div>}
-    <MoodLegend />
-  </div>
-);
+      {rollingNote && <div className="statistics-view__tag-note">{rollingNote}</div>}
+      <MoodLegend />
+    </div>
+  );
+};
 
 interface DistributionSectionProps {
   chartData: MoodDistributionDatum[];
@@ -192,44 +199,47 @@ interface DistributionSectionProps {
   containerRef: RefObject<HTMLDivElement | null>;
 }
 
-const DistributionSection = ({ chartData, onExportPNG, onExportCSV, containerRef }: DistributionSectionProps) => (
-  <div ref={containerRef} className="statistics-view__card statistics-view__section" id="mood-distribution">
-    <SectionHeader title="Mood Distribution">
-      <button type="button" className="statistics-view__ghost-button" onClick={onExportPNG}>
-        Export PNG
-      </button>
-      <button type="button" className="statistics-view__ghost-button" onClick={onExportCSV}>
-        Export CSV
-      </button>
-    </SectionHeader>
+const DistributionSection = ({ chartData, onExportPNG, onExportCSV, containerRef }: DistributionSectionProps) => {
+  const { t } = useI18n();
+  return (
+    <div ref={containerRef} className="statistics-view__card statistics-view__section" id="mood-distribution">
+      <SectionHeader title={t('stats.moodDistribution')}>
+        <button type="button" className="statistics-view__ghost-button" onClick={onExportPNG}>
+          {t('stats.exportPng')}
+        </button>
+        <button type="button" className="statistics-view__ghost-button" onClick={onExportCSV}>
+          {t('stats.exportCsv')}
+        </button>
+      </SectionHeader>
 
-    <ResponsiveContainer width="100%" height={320}>
-      <BarChart data={chartData} margin={{ top: 30, right: 20, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-        <XAxis dataKey="mood" tick={{ fontSize: 16, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border)' }} />
-        <YAxis
-          tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
-          axisLine={{ stroke: 'var(--border)' }}
-          allowDecimals={false}
-          domain={[0, 'dataMax + 1']}
-          width={20}
-        />
-        <Tooltip
-          contentStyle={TOOLTIP_STYLE}
-          // recharts Payload.payload is typed `any`; the datum is always a MoodDistributionDatum.
-          formatter={(value: ValueType, _name: NameType, props: Payload<ValueType, NameType>) => [`${value} entries`, props.payload.label]}
-        />
-        <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 12, fontWeight: 600, fill: 'var(--text)' }}>
-          {chartData.map((entry) => (
-            <Cell key={entry.key} fill={entry.fill} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+      <ResponsiveContainer width="100%" height={320}>
+        <BarChart data={chartData} margin={{ top: 30, right: 20, left: 0, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+          <XAxis dataKey="mood" tick={{ fontSize: 16, fill: 'var(--text-muted)' }} axisLine={{ stroke: 'var(--border)' }} />
+          <YAxis
+            tick={{ fontSize: 12, fill: 'var(--text-muted)' }}
+            axisLine={{ stroke: 'var(--border)' }}
+            allowDecimals={false}
+            domain={[0, 'dataMax + 1']}
+            width={20}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            // recharts Payload.payload is typed `any`; the datum is always a MoodDistributionDatum.
+            formatter={(value: ValueType, _name: NameType, props: Payload<ValueType, NameType>) => [t('stats.entriesTooltip', { count: String(value) }), props.payload.label]}
+          />
+          <Bar dataKey="count" radius={[4, 4, 0, 0]} label={{ position: 'top', fontSize: 12, fontWeight: 600, fill: 'var(--text)' }}>
+            {chartData.map((entry) => (
+              <Cell key={entry.key} fill={entry.fill} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
 
-    <MoodLegend />
-  </div>
-);
+      <MoodLegend />
+    </div>
+  );
+};
 
 interface TagListProps {
   heading: string;
@@ -260,66 +270,70 @@ interface TagCorrelationsSectionProps {
 }
 
 const TagCorrelationsSection = ({ tagStats, onExportCSV }: TagCorrelationsSectionProps) => {
+  const { t } = useI18n();
   const hasTags = tagStats.topPositive.length > 0 || tagStats.topNegative.length > 0;
   if (!hasTags) return null;
 
   return (
     <div className="statistics-view__card statistics-view__section">
-      <SectionHeader title="Tag Correlations">
+      <SectionHeader title={t('stats.tagCorrelations')}>
         <button type="button" className="statistics-view__ghost-button" onClick={onExportCSV}>
-          Export CSV
+          {t('stats.exportCsv')}
         </button>
       </SectionHeader>
 
       <div className="statistics-view__tag-grid">
         <TagList
-          heading="Top Positive"
+          heading={t('stats.topPositive')}
           toneClass="statistics-view__tag-heading--positive"
           tags={tagStats.topPositive}
-          emptyLabel="No tags yet"
+          emptyLabel={t('stats.noTagsYet')}
           valueColor="var(--mood-4)"
         />
         <TagList
-          heading="Top Negative"
+          heading={t('stats.topNegative')}
           toneClass="statistics-view__tag-heading--negative"
           tags={tagStats.topNegative}
-          emptyLabel="No tags yet"
+          emptyLabel={t('stats.noTagsYet')}
           valueColor="var(--mood-1)"
         />
       </div>
 
       <div className="statistics-view__tag-note">
-        Note: simple average mood per tag; requires at least 2 occurrences to rank.
+        {t('stats.tagNote')}
       </div>
     </div>
   );
 };
 
-const MoodCalendarSection = ({ days }: { days: CalendarDay[] }) => (
-  <div className="statistics-view__card statistics-view__calendar-card">
-    <h3 className="statistics-view__calendar-title">Mood Calendar</h3>
-    <div className="statistics-view__calendar-grid">
-      {WEEK_DAYS.map((day) => (
-        <div key={day} className="statistics-view__calendar-label">
-          {day}
-        </div>
-      ))}
+const MoodCalendarSection = ({ days }: { days: CalendarDay[] }) => {
+  const { t } = useI18n();
+  return (
+    <div className="statistics-view__card statistics-view__calendar-card">
+      <h3 className="statistics-view__calendar-title">{t('stats.moodCalendar')}</h3>
+      <div className="statistics-view__calendar-grid">
+        {[0, 1, 2, 3, 4, 5, 6].map((weekday) => (
+          <div key={weekday} className="statistics-view__calendar-label">
+            {weekdayLabel(weekday)}
+          </div>
+        ))}
 
-      {days.map(({ key, label, entry, IconComponent, iconColor, isCurrentMonth, isToday }) => (
-        <div
-          key={key}
-          className={`statistics-view__calendar-day${entry ? ' has-entry' : ''}${isCurrentMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}`}
-          style={{
-            background: entry && iconColor ? `color-mix(in oklab, ${iconColor} 18%, transparent)` : undefined,
-            color: entry && iconColor ? iconColor : undefined,
-          }}
-        >
-          {entry && IconComponent ? <IconComponent size={16} /> : label}
-        </div>
-      ))}
+        {days.map(({ key, label, entry, IconComponent, iconColor, isCurrentMonth, isToday }) => (
+          <div
+            key={key}
+            className={`statistics-view__calendar-day${entry ? ' has-entry' : ''}${isCurrentMonth ? '' : ' is-outside'}${isToday ? ' is-today' : ''}`}
+            style={{
+              background: entry && iconColor ? `color-mix(in oklab, ${iconColor} 18%, transparent)` : undefined,
+              color: entry && iconColor ? iconColor : undefined,
+            }}
+          >
+            {entry && IconComponent ? <IconComponent size={16} /> : label}
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const LoadingState = () => (
   <div className="statistics-view">
@@ -337,9 +351,12 @@ const ErrorState = ({ message }: { message: string }) => (
   <div className="statistics-view statistics-view__status statistics-view__status--error">{message}</div>
 );
 
-const EmptyState = () => (
-  <div className="statistics-view statistics-view__status">No statistics available</div>
-);
+const EmptyState = () => {
+  const { t } = useI18n();
+  return (
+    <div className="statistics-view statistics-view__status">{t('stats.noStatistics')}</div>
+  );
+};
 
 interface StatisticsViewProps {
   statistics: Statistics | null;
@@ -349,6 +366,7 @@ interface StatisticsViewProps {
 }
 
 const StatisticsView = ({ statistics, pastEntries, loading, error }: StatisticsViewProps) => {
+  const { t } = useI18n();
   const [range, setRange] = useState<RangeOption>(DEFAULT_RANGE);
   const trendRef = useRef<HTMLDivElement>(null);
   const distributionRef = useRef<HTMLDivElement>(null);
@@ -442,8 +460,8 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }: StatisticsV
         containerRef={trendRef}
         rollingNote={
           extendedError
-            ? 'Rolling averages unavailable right now.'
-            : 'Rolling averages are trailing means over the preceding 7 / 30 logged days.'
+            ? t('stats.rollingUnavailable')
+            : t('stats.rollingNote')
         }
       />
       <DistributionSection
@@ -458,21 +476,21 @@ const StatisticsView = ({ statistics, pastEntries, loading, error }: StatisticsV
         error={extendedError}
       />
       <CorrelationSection
-        title="Tag Impact"
+        title={t('stats.tagImpact')}
         rows={tagCorrelationRows}
-        withoutLabel="without"
-        emptyLabel="No tags selected yet — tag some entries to compare days with and without them."
-        note="Average mood on days a tag was used versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples."
+        withoutLabel={t('stats.without')}
+        emptyLabel={t('stats.tagImpactEmpty')}
+        note={t('stats.tagImpactNote')}
         loading={extendedLoading}
         error={extendedError}
       />
       <CorrelationSection
-        title="Goal Impact"
+        title={t('stats.goalImpact')}
         rows={goalCorrelationRows}
-        withLabel="completed"
-        withoutLabel="without"
-        emptyLabel="No goals yet — add goals to compare mood on completion days."
-        note="Average mood on days a goal was completed versus days it was not; both sample sizes shown. Sides with fewer than 3 entries count as small samples."
+        withLabel={t('stats.completed')}
+        withoutLabel={t('stats.without')}
+        emptyLabel={t('stats.goalImpactEmpty')}
+        note={t('stats.goalImpactNote')}
         loading={extendedLoading}
         error={extendedError}
       />

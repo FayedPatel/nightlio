@@ -4,6 +4,7 @@ import { useToast } from '../ui/ToastProvider';
 import { todayISO, yesterdayISO } from '../../utils/dateUtils';
 import GoalStatsCalendar from './GoalStatsCalendar';
 import Modal from '../ui/Modal';
+import { useI18n } from '../../i18n';
 
 /**
  * Client-side view model for a goal card. Built by GoalsView/GoalsSection
@@ -40,15 +41,16 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
   const [showBackdate, setShowBackdate] = useState(false);
   const [backdate, setBackdate] = useState(() => yesterdayISO());
   const { show } = useToast();
+  const { t } = useI18n();
 
   const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this goal?')) return;
+    if (!window.confirm(t('goals.deleteConfirm'))) return;
     setIsDeleting(true);
-    
+
     // Simulate API call delay
     setTimeout(() => {
       onDelete(goal.id);
-      show('Goal deleted successfully', 'success');
+      show(t('toast.goalDeleted'), 'success');
       setIsDeleting(false);
     }, 500);
   };
@@ -58,22 +60,22 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
     try {
       const localVal = typeof localStorage !== 'undefined' ? localStorage.getItem(`goal_done_${goal.id}`) : null;
       if (localVal === today) {
-        show('Already completed for today', 'info');
+        show(t('toast.alreadyCompletedToday'), 'info');
         return;
       }
     } catch {
       // localStorage access failed
     }
     if (goal.last_completed_date === today) {
-      show('Already completed for today', 'info');
+      show(t('toast.alreadyCompletedToday'), 'info');
       return;
     }
     if (goal.completed >= goal.total) {
-      show('Goal already completed for this period!', 'info');
+      show(t('toast.goalCompletedPeriod'), 'info');
       return;
     }
     onUpdateProgress(goal.id);
-    show('Progress updated!', 'success');
+    show(t('toast.progressUpdated'), 'success');
   };
 
   const handleLogDay = () => {
@@ -120,16 +122,16 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
       {/* Header: icon + delete button */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: goal.streak > 0 ? '60px' : '40px' }}>
-          <span style={{ 
-            color: 'var(--accent-600)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            width: 28, 
-            height: 28, 
-            borderRadius: '50%', 
-            background: 'var(--accent-bg-softer)', 
-            border: '1px solid var(--border)' 
+          <span style={{
+            color: 'var(--accent-600)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'var(--accent-bg-softer)',
+            border: '1px solid var(--border)'
           }}>
             <Target size={16} strokeWidth={2} />
           </span>
@@ -138,7 +140,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
             <span>{goal.frequency}</span>
           </div>
         </div>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)' }}>
           {goal.streak > 0 && (
             <div style={{
@@ -170,7 +172,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
               alignItems: 'center',
               justifyContent: 'center'
             }}
-            aria-label="Delete goal"
+            aria-label={t('goals.deleteAria')}
           >
             <Trash2 size={14} />
           </button>
@@ -191,16 +193,16 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
 
       {/* Progress Bar */}
       <div style={{ marginBottom: '12px', marginTop: 'auto' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '6px',
           fontSize: '0.85rem',
           color: 'var(--text)',
           opacity: 0.9
         }}>
-          <span>Progress</span>
+          <span>{t('common.progress')}</span>
           <span>{goal.completed}/{goal.total}</span>
         </div>
         <div style={{
@@ -243,7 +245,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
         }}
       >
         <CheckCircle size={14} />
-        {isDoneToday ? 'Completed' : 'Mark as done'}
+        {isDoneToday ? t('goals.completed') : t('goals.markAsDone')}
       </button>
 
       {/* Backdate: log a completion for a day the user forgot to record.
@@ -259,7 +261,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
           <button
             type="button"
             onClick={() => setShowBackdate(true)}
-            aria-label={`Log past day for ${goal.title}`}
+            aria-label={t('goals.logPastDayFor', { title: goal.title })}
             style={{
               width: '100%',
               padding: '8px 12px',
@@ -278,7 +280,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
             }}
           >
             <CalendarPlus size={14} />
-            Log past day
+            {t('goals.logPastDay')}
           </button>
         ) : (
           <div className="entry-date-section" style={{ marginBottom: 0 }}>
@@ -286,7 +288,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
               className="entry-date-section__label"
               htmlFor={`goal-backdate-${goal.id}`}
             >
-              Day you did it
+              {t('goals.dayYouDidIt')}
             </label>
             <div className="entry-date-section__controls">
               <input
@@ -305,7 +307,7 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
                 className={`entry-date-chip${backdate === yesterdayISO() ? ' is-active' : ''}`}
                 onClick={() => setBackdate(yesterdayISO())}
               >
-                Yesterday
+                {t('common.yesterday')}
               </button>
               <button
                 type="button"
@@ -317,21 +319,21 @@ const GoalCard = ({ goal, onDelete, onUpdateProgress, onLogDay }: GoalCardProps)
                 }}
                 onClick={handleLogDay}
               >
-                Log it
+                {t('goals.logIt')}
               </button>
               <button
                 type="button"
                 className="entry-date-chip"
                 onClick={() => setShowBackdate(false)}
-                aria-label="Cancel logging a past day"
+                aria-label={t('goals.cancelLogAria')}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
           </div>
         )}
       </div>
-      <Modal open={showStats} title="Goal Statistics" onClose={() => setShowStats(false)}>
+      <Modal open={showStats} title={t('goals.statsTitle')} onClose={() => setShowStats(false)}>
         <GoalStatsCalendar goalId={goal.id} />
       </Modal>
     </div>

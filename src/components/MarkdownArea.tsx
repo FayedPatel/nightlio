@@ -31,6 +31,7 @@ import {
 import type { MDXEditorMethods } from '@mdxeditor/editor';
 import '@mdxeditor/editor/style.css';
 import useMediaQuery from '../hooks/useMediaQuery';
+import { useI18n } from '../i18n';
 
 /**
  * Imperative surface consumers reach through the forwarded ref
@@ -47,6 +48,7 @@ interface MarkdownAreaProps {
 }
 
 const MyComponent = forwardRef<MarkdownAreaHandle, MarkdownAreaProps>(({ initialMarkdown, onChange }, ref) => {
+  const { t } = useI18n();
   const editorRef = useRef<MDXEditorMethods | null>(null);
   // Full toolbar wraps into a messy multi-row mess at 640px. Mobile keeps
   // only the essentials (bold/italic, lists, link); desktop keeps everything.
@@ -119,8 +121,8 @@ const MyComponent = forwardRef<MarkdownAreaHandle, MarkdownAreaProps>(({ initial
         contentEditableClassName="prose"
         placeholder={
           <span className="entry-placeholder">
-            <span className="entry-placeholder-title">How was your day?</span>
-            Write about your thoughts, feelings, and experiences...
+            <span className="entry-placeholder-title">{t('entry.placeholderTitle')}</span>
+            {t('entry.placeholderBody')}
           </span>
         }
         plugins={[

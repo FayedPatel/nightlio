@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import apiService from '../../services/api';
 import useMediaQuery from '../../hooks/useMediaQuery';
+import { useI18n } from '../../i18n';
+
+const WEEKDAY_KEYS = [
+  'common.day.sun',
+  'common.day.mon',
+  'common.day.tue',
+  'common.day.wed',
+  'common.day.thu',
+  'common.day.fri',
+  'common.day.sat',
+] as const;
 
 interface MonthCalendarProps {
   year: number;
@@ -17,6 +28,7 @@ const MonthCalendar = ({ year, month, dates = new Set() }: MonthCalendarProps) =
   // 1fr grid column via aspect-ratio (square, matches the 7-wide layout at
   // any container width) with a mobile floor so they can't shrink below a
   // thumb-safe size on narrow screens.
+  const { t } = useI18n();
   const isMobile = useMediaQuery('(max-width: 640px)');
   const firstDay = new Date(year, month, 1);
   const startWeekday = firstDay.getDay(); // 0-6 Sun..Sat
@@ -29,8 +41,8 @@ const MonthCalendar = ({ year, month, dates = new Set() }: MonthCalendarProps) =
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, marginBottom: 8, fontSize: 12, color: 'var(--text-muted)' }}>
-        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => (
-          <div key={d} style={{ textAlign: 'center' }}>{d}</div>
+        {WEEKDAY_KEYS.map(k => (
+          <div key={k} style={{ textAlign: 'center' }}>{t(k)}</div>
         ))}
       </div>
   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>

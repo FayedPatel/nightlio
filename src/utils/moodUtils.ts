@@ -2,6 +2,7 @@ import { Frown, Meh, Smile, Heart } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MoodEntry, MoodValue } from '../types/api';
 import { entryDateKey, formatEntryDate, toISODateKey } from './dateUtils';
+import { translate } from '../i18n';
 
 // Resolve a CSS variable to its computed value (fallback to provided value)
 const cssVar = (name: string, fallback: string): string => {
@@ -25,11 +26,11 @@ export interface Mood {
 }
 
 export const MOODS: Mood[] = [
-  { icon: Frown, value: 1, color: 'var(--mood-1)', label: 'Terrible', tag: 'dark+ambient' },
-  { icon: Frown, value: 2, color: 'var(--mood-2)', label: 'Bad', tag: 'melancholic' },
-  { icon: Meh,   value: 3, color: 'var(--mood-3)', label: 'Okay', tag: 'lofi+chill' },
-  { icon: Smile, value: 4, color: 'var(--mood-4)', label: 'Good', tag: 'upbeat+pop' },
-  { icon: Heart, value: 5, color: 'var(--mood-5)', label: 'Amazing', tag: 'synthwave+energy' },
+  { icon: Frown, value: 1, color: 'var(--mood-1)', label: translate('moods.1.label'), tag: 'dark+ambient' },
+  { icon: Frown, value: 2, color: 'var(--mood-2)', label: translate('moods.2.label'), tag: 'melancholic' },
+  { icon: Meh,   value: 3, color: 'var(--mood-3)', label: translate('moods.3.label'), tag: 'lofi+chill' },
+  { icon: Smile, value: 4, color: 'var(--mood-4)', label: translate('moods.4.label'), tag: 'upbeat+pop' },
+  { icon: Heart, value: 5, color: 'var(--mood-5)', label: translate('moods.5.label'), tag: 'synthwave+energy' },
 ];
 
 /**
@@ -54,7 +55,7 @@ export const getMoodIcon = (moodValue: number): MoodIconInfo => {
 
 export const getMoodLabel = (moodValue: number): string => {
   const mood = MOODS.find(m => m.value === moodValue);
-  return mood ? mood.label : 'Unknown';
+  return mood ? mood.label : translate('moods.unknown');
 };
 
 export const formatEntryTime = (
@@ -67,7 +68,7 @@ export const formatEntryTime = (
       minute: '2-digit',
       hour12: true,
     });
-    return `${formatEntryDate(entry.date)} at ${time}`;
+    return translate('common.dateAtTime', { date: formatEntryDate(entry.date), time });
   }
   return formatEntryDate(entry.date);
 };

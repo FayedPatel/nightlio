@@ -9,6 +9,8 @@ import type {
 import type { CoreStatistics, MoodDistribution, MoodValue } from '../../types/api';
 import { getMoodIcon } from '../../utils/moodUtils';
 import { entryDateKey, toISODateKey } from '../../utils/dateUtils';
+import { translate } from '../../i18n';
+import type { I18nKey } from '../../i18n';
 
 export type RangeOption = 7 | 30 | 90;
 
@@ -36,53 +38,64 @@ export interface MoodLegendEntry {
   shorthand: string;
 }
 
+// `label`/`shorthand` are getters (not baked-in strings) so a hot-swapped
+// language pack is picked up on next render instead of freezing English at
+// module-load time — `translate()` always reads the currently active
+// translator (see src/i18n/index.tsx).
 export const MOOD_LEGEND: readonly MoodLegendEntry[] = Object.freeze([
-  { value: 1, icon: Frown, color: 'var(--mood-1)', label: 'Terrible', shorthand: 'T' },
-  { value: 2, icon: Frown, color: 'var(--mood-2)', label: 'Bad', shorthand: 'B' },
-  { value: 3, icon: Meh, color: 'var(--mood-3)', label: 'Okay', shorthand: 'O' },
-  { value: 4, icon: Smile, color: 'var(--mood-4)', label: 'Good', shorthand: 'G' },
-  { value: 5, icon: Heart, color: 'var(--mood-5)', label: 'Amazing', shorthand: 'A' },
+  { value: 1, icon: Frown, color: 'var(--mood-1)', get label() { return translate('moods.1.label'); }, get shorthand() { return translate('moods.1.short'); } },
+  { value: 2, icon: Frown, color: 'var(--mood-2)', get label() { return translate('moods.2.label'); }, get shorthand() { return translate('moods.2.short'); } },
+  { value: 3, icon: Meh, color: 'var(--mood-3)', get label() { return translate('moods.3.label'); }, get shorthand() { return translate('moods.3.short'); } },
+  { value: 4, icon: Smile, color: 'var(--mood-4)', get label() { return translate('moods.4.label'); }, get shorthand() { return translate('moods.4.short'); } },
+  { value: 5, icon: Heart, color: 'var(--mood-5)', get label() { return translate('moods.5.label'); }, get shorthand() { return translate('moods.5.short'); } },
 ]);
 
-export const MOOD_FULL_LABELS = MOOD_LEGEND.reduce<Partial<Record<string | number, string>>>(
-  (acc, { value, label }) => {
-    acc[value] = label;
-    return acc;
-  },
-  {},
-);
+// Matches the pre-i18n MOOD_FULL_LABELS/MOOD_SHORTHANDS behavior exactly:
+// String(value) mirrors JS property-key coercion for the numeric mood
+// values recharts passes, so only the literal keys "1".."5" resolve.
+const MOOD_VALUE_KEYS: ReadonlySet<string> = new Set(['1', '2', '3', '4', '5']);
 
-export const MOOD_SHORTHANDS = MOOD_LEGEND.reduce<Partial<Record<string | number, string>>>(
-  (acc, { value, shorthand }) => {
-    acc[value] = shorthand;
-    return acc;
-  },
-  {},
-);
+/** Full mood label ("Terrible".."Amazing") for a numeric/string mood value; '' when unrecognised. */
+export const moodFullLabel = (value: unknown): string => {
+  const key = String(value);
+  return MOOD_VALUE_KEYS.has(key) ? translate(`moods.${key}.label` as I18nKey) : '';
+};
 
-export const WEEK_DAYS: readonly string[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/** Single-letter mood shorthand ("T".."A") for a numeric/string mood value; '' when unrecognised. */
+export const moodShorthand = (value: unknown): string => {
+  const key = String(value);
+  return MOOD_VALUE_KEYS.has(key) ? translate(`moods.${key}.short` as I18nKey) : '';
+};
 
-const ROLLING_LABELS: Partial<Record<string | number, string>> = Object.freeze({
-  avg7: '7-day avg',
-  avg30: '30-day avg',
-});
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
+/** Short weekday label ("Sun".."Sat") for a 0 (Sunday) - 6 (Saturday) index. */
+export const weekdayLabel = (weekday: number): string => {
+  const key = WEEKDAY_KEYS[weekday];
+  return key ? translate(`common.day.${key}` as I18nKey) : '';
+};
+
+const rollingLabelFor = (dataKey: string): string | undefined => {
+  if (dataKey === 'avg7') return translate('stats.avg7');
+  if (dataKey === 'avg30') return translate('stats.avg30');
+  return undefined;
+};
 
 export const formatTrendTooltip: Formatter<ValueType, NameType> = (value, _name, props) => {
-  const rollingLabel = props?.dataKey != null ? ROLLING_LABELS[props.dataKey] : undefined;
+  const rollingLabel = props?.dataKey != null ? rollingLabelFor(String(props.dataKey)) : undefined;
   if (rollingLabel) {
     if (value == null || (typeof value === 'number' && Number.isNaN(value))) {
-      return ['No data', rollingLabel];
+      return [translate('stats.noData'), rollingLabel];
     }
     return [Number(value).toFixed(2), rollingLabel];
   }
 
   if (value == null) {
-    return ['No entry', 'Mood'];
+    return [translate('stats.noEntry'), translate('stats.mood')];
   }
 
-  // String() mirrors JS property-key coercion for the numeric mood values recharts passes.
-  const label = MOOD_FULL_LABELS[String(value)] ?? '';
-  return [label, 'Mood'];
+  const label = moodFullLabel(value);
+  return [label, translate('stats.mood')];
 };
 
 // ISO day key for calendar bucketing. Stored date strings go through
@@ -257,25 +270,25 @@ export const buildOverviewCards = ({
   {
     key: 'totalEntries',
     value: totalEntries,
-    label: 'Total Entries',
+    label: translate('stats.totalEntries'),
     tone: 'default',
   },
   {
     key: 'averageMood',
     value: typeof averageMood === 'number' ? averageMood.toFixed(1) : averageMood ?? '0.0',
-    label: 'Average Mood',
+    label: translate('stats.averageMood'),
     tone: 'default',
   },
   {
     key: 'currentStreak',
     value: currentStreak,
-    label: 'Current Streak',
+    label: translate('stats.currentStreak'),
     tone: 'danger',
   },
   {
     key: 'bestDay',
     value: bestDayCount,
-    label: 'Best Day',
+    label: translate('stats.bestDay'),
     tone: 'default',
   },
 ];

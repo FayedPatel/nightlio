@@ -4,12 +4,14 @@ import Skeleton from '../ui/Skeleton';
 import apiService from '../../services/api';
 import AddGoalCard from './AddGoalCard';
 import type { GoalDisplay } from './GoalCard';
+import { useI18n } from '../../i18n';
 
 interface GoalsSectionProps {
   onNavigateToGoals: () => void;
 }
 
 const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
+  const { t } = useI18n();
   const [goals, setGoals] = useState<GoalDisplay[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +28,7 @@ const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
           id: g.id,
           title: g.title,
           description: g.description,
-          frequency: `${g.frequency_per_week} days a week`,
+          frequency: t('goals.frequencyDaysAWeek', { count: g.frequency_per_week }),
           completed: g.completed ?? 0,
           total: g.frequency_per_week ?? 0,
           streak: g.streak ?? 0,
@@ -101,7 +103,7 @@ const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
             return false;
           }
         })(),
-        frequency: `${updated.frequency_per_week ?? g.total} days a week`
+        frequency: t('goals.frequencyDaysAWeek', { count: updated.frequency_per_week ?? g.total })
       } : g));
     }).catch(() => {
       // Revert if failed
@@ -129,14 +131,14 @@ const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
           fontWeight: '600',
           fontSize: '1.1rem'
         }}>
-          Active Goals
+          {t('goals.activeGoals')}
         </h2>
         <button
           type="button"
           onClick={onNavigateToGoals}
           className="dashboard-section__view-all"
         >
-          View All
+          {t('common.viewAll')}
           <ArrowRight size={14} aria-hidden="true" />
         </button>
       </div>
@@ -156,20 +158,20 @@ const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'var(--text)' }}>
-            <span style={{ 
-              color: 'var(--accent-600)', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              width: 28, 
-              height: 28, 
-              borderRadius: '50%', 
-              background: 'var(--accent-bg-softer)', 
+            <span style={{
+              color: 'var(--accent-600)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: 'var(--accent-bg-softer)',
               border: '1px solid var(--border)'
             }}>
               <Target size={16} strokeWidth={2} />
             </span>
-            <p style={{ margin: 0, fontSize: '1rem', opacity: 0.9 }}>No goals yet.</p>
+            <p style={{ margin: 0, fontSize: '1rem', opacity: 0.9 }}>{t('goals.noGoalsYet')}</p>
           </div>
           <button
             type="button"
@@ -178,16 +180,16 @@ const GoalsSection = ({ onNavigateToGoals }: GoalsSectionProps) => {
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', minHeight: 44 }}
           >
             <Plus size={16} aria-hidden="true" />
-            Add First Goal
+            {t('goals.addFirstGoal')}
           </button>
         </div>
       ) : (
         <div className="card-grid">
           <AddGoalCard onAdd={onNavigateToGoals} />
           {goals.map(goal => (
-            <GoalPreviewCard 
-              key={goal.id} 
-              goal={goal} 
+            <GoalPreviewCard
+              key={goal.id}
+              goal={goal}
               onMarkComplete={handleMarkComplete}
             />
           ))}
@@ -203,6 +205,7 @@ interface GoalPreviewCardProps {
 }
 
 const GoalPreviewCard = ({ goal, onMarkComplete }: GoalPreviewCardProps) => {
+  const { t } = useI18n();
   const [isHovered, setIsHovered] = useState(false);
   const progressPercentage = (goal.completed / goal.total) * 100;
   const isCompletedWeek = goal.completed >= goal.total;
@@ -234,16 +237,16 @@ const GoalPreviewCard = ({ goal, onMarkComplete }: GoalPreviewCardProps) => {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, marginRight: goal.streak > 0 ? '50px' : '0' }}>
-          <span style={{ 
-            color: 'var(--accent-600)', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            width: 28, 
-            height: 28, 
-            borderRadius: '50%', 
-            background: 'var(--accent-bg-softer)', 
-            border: '1px solid var(--border)' 
+          <span style={{
+            color: 'var(--accent-600)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 28,
+            height: 28,
+            borderRadius: '50%',
+            background: 'var(--accent-bg-softer)',
+            border: '1px solid var(--border)'
           }}>
             <Target size={16} strokeWidth={2} />
           </span>
@@ -252,7 +255,7 @@ const GoalPreviewCard = ({ goal, onMarkComplete }: GoalPreviewCardProps) => {
             <span>{goal.frequency}</span>
           </div>
         </div>
-        
+
         {goal.streak > 0 && (
           <div style={{
             display: 'flex',
@@ -284,16 +287,16 @@ const GoalPreviewCard = ({ goal, onMarkComplete }: GoalPreviewCardProps) => {
 
   {/* Progress Bar */}
       <div style={{ marginBottom: '12px', marginTop: 'auto' }}>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '6px',
           fontSize: '0.85rem',
           color: 'var(--text)',
           opacity: 0.9
         }}>
-          <span>Progress</span>
+          <span>{t('common.progress')}</span>
           <span>{goal.completed}/{goal.total}</span>
         </div>
         <div style={{
@@ -339,7 +342,7 @@ const GoalPreviewCard = ({ goal, onMarkComplete }: GoalPreviewCardProps) => {
         }}
       >
         <CheckCircle size={14} aria-hidden="true" />
-        {isDoneToday ? 'Completed' : 'Mark as done'}
+        {isDoneToday ? t('goals.completed') : t('goals.markAsDone')}
       </button>
     </div>
   );

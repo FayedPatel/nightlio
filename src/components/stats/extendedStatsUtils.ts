@@ -1,5 +1,7 @@
-import { WEEK_DAYS } from './statisticsViewUtils';
+import { weekdayLabel } from './statisticsViewUtils';
 import type { OverviewCard } from './statisticsViewUtils';
+import { translate } from '../../i18n';
+import type { I18nKey } from '../../i18n';
 import type {
   GoalCorrelation,
   HeatmapDay,
@@ -13,15 +15,14 @@ import type {
 // small sample and hidden behind the "show small samples" toggle.
 export const MIN_CORRELATION_SAMPLE = 3;
 
-export const MONTH_NAMES_SHORT: readonly string[] = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
+// en.json months are 1-indexed ("common.monthShort.1".."12"); callers pass
+// a 1-indexed month number (JS Date#getMonth() is 0-indexed, so call sites
+// add 1). Live via translate() so a hot-swapped pack applies on next call.
+export const monthShortLabel = (month: number): string =>
+  translate(`common.monthShort.${month}` as I18nKey);
 
-export const MONTH_NAMES_FULL: readonly string[] = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
+export const monthFullLabel = (month: number): string =>
+  translate(`common.monthFull.${month}` as I18nKey);
 
 // Canonical implementation moved to utils/dateUtils; re-exported here so
 // existing imports keep working.
@@ -81,7 +82,7 @@ export const buildWeekdayChartData = (
   weekdayAverages: readonly WeekdayAverage[] | null | undefined,
 ): WeekdayChartDatum[] =>
   (weekdayAverages ?? []).map((row) => ({
-    day: WEEK_DAYS[row.weekday] ?? row.name,
+    day: weekdayLabel(row.weekday) || row.name,
     avg: row.average_mood,
     count: row.entry_count ?? 0,
   }));
@@ -99,7 +100,7 @@ export const buildVolatilityCard = (
   return {
     key: 'volatility',
     value: loading ? '…' : stddev != null ? stddev.toFixed(2) : '—',
-    label: `Volatility (${windowDays}d · ${count} ${count === 1 ? 'entry' : 'entries'})`,
+    label: translate('stats.volatility', { days: windowDays, count }),
     tone: 'default',
   };
 };
@@ -221,7 +222,7 @@ export const buildHeatmapGrid = (
   while (cursor.getFullYear() === year) {
     const weekIndex = Math.floor((startOffset + index) / 7);
     if (cursor.getDate() === 1) {
-      monthLabels.push({ weekIndex, label: MONTH_NAMES_SHORT[cursor.getMonth()] ?? '' });
+      monthLabels.push({ weekIndex, label: monthShortLabel(cursor.getMonth() + 1) });
     }
     const iso = toISODateKey(cursor);
     const logged = lookup.get(iso);
@@ -231,7 +232,7 @@ export const buildHeatmapGrid = (
       weekday: cursor.getDay(),
       mood: logged?.average_mood ?? null,
       count: logged?.entry_count ?? 0,
-      label: `${MONTH_NAMES_SHORT[cursor.getMonth()]} ${cursor.getDate()}, ${year}`,
+      label: `${monthShortLabel(cursor.getMonth() + 1)} ${cursor.getDate()}, ${year}`,
     });
     cursor.setDate(cursor.getDate() + 1);
     index += 1;

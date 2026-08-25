@@ -3,6 +3,7 @@ import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } fro
 import { Play, Pause, Square, Disc, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext'; // Consuming your app's global Theme context
 import useMediaQuery from '../../hooks/useMediaQuery';
+import { useI18n } from '../../i18n';
 import type { MusicTrack } from '../../types/api';
 
 /**
@@ -29,6 +30,7 @@ const MusicDock = () => {
   // created with a non-null default), so the old `|| {}` fallback and the
   // destructuring defaults were dead branches; theme/cycle are always present.
   const { theme, cycle: toggleTheme } = useTheme();
+  const { t } = useI18n();
   const isDarkMode = theme === 'dark';
   // Shares the 640px mobile breakpoint convention (src/index.css) instead of
   // an ad-hoc window.innerWidth check, so JS and CSS agree.
@@ -213,10 +215,10 @@ const MusicDock = () => {
       {/* Info Section */}
       <div className="music-dock__info" style={{ userSelect: 'none' }}>
         <div className="music-dock__track-name" style={{ color: track ? (isDarkMode ? 'white' : '#0f172a') : (isDarkMode ? '#666' : '#94a3b8') }}>
-          {track ? track.track_name : "No vibe detected"}
+          {track ? track.track_name : t('moods.noVibeDetected')}
         </div>
         <div className="music-dock__artist" style={{ color: isDarkMode ? '#888' : '#64748b' }}>
-          {track ? track.artist : "Select a mood"}
+          {track ? track.artist : t('moods.selectMood')}
         </div>
       </div>
 
@@ -246,7 +248,7 @@ const MusicDock = () => {
           <button
             onClick={toggleTheme}
             className="music-dock__btn music-dock__btn--theme"
-            aria-label="Toggle layout theme"
+            aria-label={t('common.toggleLayoutThemeAria')}
           >
             {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>

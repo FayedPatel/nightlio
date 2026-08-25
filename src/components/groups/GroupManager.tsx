@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Settings, X } from 'lucide-react';
+import { useI18n } from '../../i18n';
 import type { Group } from '../../types/api';
 
 interface GroupManagerProps {
@@ -9,6 +10,7 @@ interface GroupManagerProps {
 }
 
 const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerProps) => {
+  const { t } = useI18n();
   const [showManager, setShowManager] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newOptionName, setNewOptionName] = useState('');
@@ -71,7 +73,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
           }}
         >
           <Settings size={16} />
-          Manage Categories
+          {t('groups.manageCategories')}
         </button>
       </div>
     );
@@ -103,7 +105,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
             fontWeight: '600',
           }}
         >
-          Manage Categories
+          {t('groups.manageCategories')}
         </h3>
         <button
           onClick={() => setShowManager(false)}
@@ -122,12 +124,12 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
       {/* Create New Group */}
       <div style={{ marginBottom: '2rem' }}>
             <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text)', opacity: 0.9, fontSize: '1rem' }}>
-          Create New Category
+          {t('groups.createNew')}
         </h4>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <input
             type="text"
-            placeholder="Category name (e.g., Activities, Weather)"
+            placeholder={t('groups.categoryNamePlaceholder')}
             value={newGroupName}
             onChange={(e) => setNewGroupName(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleCreateGroup()}
@@ -154,7 +156,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
               opacity: !newGroupName.trim() || isCreatingGroup ? 0.6 : 1,
             }}
           >
-            {isCreatingGroup ? 'Creating...' : 'Create'}
+            {isCreatingGroup ? t('groups.creating') : t('groups.create')}
           </button>
         </div>
       </div>
@@ -163,7 +165,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
       {groups.length > 0 && (
         <div style={{ marginBottom: '2rem' }}>
           <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text)', opacity: 0.9, fontSize: '1rem' }}>
-            Add Option to Category
+            {t('groups.addOption')}
           </h4>
           <div
             style={{
@@ -184,7 +186,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
                 minWidth: '150px',
               }}
             >
-              <option value="">Select category...</option>
+              <option value="">{t('groups.selectCategory')}</option>
               {groups.map(group => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -193,7 +195,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
             </select>
       <input
               type="text"
-              placeholder="Option name (e.g., happy, tired)"
+              placeholder={t('groups.optionNamePlaceholder')}
               value={newOptionName}
               onChange={(e) => setNewOptionName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleCreateOption()}
@@ -221,7 +223,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
                 opacity: (!newOptionName.trim() || !selectedGroupForOption || isCreatingOption) ? 0.6 : 1,
               }}
             >
-              {isCreatingOption ? 'Adding...' : 'Add'}
+              {isCreatingOption ? t('groups.adding') : t('groups.add')}
             </button>
           </div>
         </div>
@@ -231,7 +233,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
       {groups.length > 0 && (
         <div>
           <h4 style={{ margin: '0 0 1rem 0', color: 'var(--text)', opacity: 0.9, fontSize: '1rem' }}>
-            Current Categories
+            {t('groups.current')}
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
             {groups.map(group => (
@@ -251,7 +253,7 @@ const GroupManager = ({ groups, onCreateGroup, onCreateOption }: GroupManagerPro
                     marginBottom: '0.5rem',
                   }}
                 >
-                  {group.name} ({group.options.length} options)
+                  {t('groups.optionsCount', { name: group.name, count: group.options.length })}
                 </div>
                 <div
                   style={{
