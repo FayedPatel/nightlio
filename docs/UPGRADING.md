@@ -5,6 +5,51 @@ what changes, why your data is safe, and the exact commands to run. Sections
 are newest-first; older sections are kept as history for anyone upgrading
 across several versions.
 
+## Upgrading v0.5.x → v0.6.0
+
+Nothing manual — the standard `git pull` / `docker compose up -d --build`
+flow applies. SQLite stays the default backend and your data volume is
+untouched. What to expect:
+
+- **A `schema_migrations` ledger appears in your database.** v0.6.0 adds a
+  real migration framework: after the existing legacy bootstrap runs
+  (unchanged), startup records the schema in a `schema_migrations` table and
+  applies any newer migrations, fully automatically. There is no command to
+  run and no change to the upgrade steps; the rules the framework enforces
+  (and what its "Refusing to start" messages mean) are in
+  [docs/MIGRATIONS.md](MIGRATIONS.md).
+- **PostgreSQL is now available, opt-in and experimental.** Set
+  `DATABASE_URL=postgres://…` to run the main data store on PostgreSQL 16+;
+  a matching `postgres` compose profile ships in `docker-compose.yml`.
+  Leave `DATABASE_URL` unset and **nothing changes** — SQLite remains the
+  default and the only fully e2e-graded backend in 0.6.0. Setup, TLS notes,
+  and the SQLite-data import flow: [docs/POSTGRES.md](POSTGRES.md).
+- **PostgreSQL deployments are backfilled with the default seed.** If you
+  were already running the PG backend from a pre-release build, note that a
+  fresh PG database previously got no self-host user or default tag groups
+  (SQLite always seeded them). Startup now applies that baseline seed on
+  PostgreSQL idempotently, so an affected deployment is backfilled
+  automatically at its next restart — no action needed.
+- **`/api/v1` is a new, purely additive URL alias.** Every route also
+  answers under `/api/v1/…`, byte-identical to `/api/…`. Nothing existing
+  moved; `/api` remains canonical and the shipped frontend keeps using it.
+- **`GET /api/config` now carries a `version` field** — the running API's
+  crate version. Additive; clients that ignore unknown fields are
+  unaffected.
+- **i18n needs zero configuration.** The UI now runs on a bundled English
+  catalog, and additional languages arrive as hot-swappable language packs
+  discovered at runtime. All six new `I18N_*` variables are optional
+  (defaults work out of the box); air-gapped instances can set
+  `I18N_OFFLINE=1` or serve packs from `I18N_LOCAL_DIR` — see
+  [docs/I18N.md](I18N.md).
+- **Ship the API and frontend images together, as usual.** v0.6.0 also
+  improves deploy freshness for the *next* upgrade: nginx now serves
+  `/index.html`, `/sw.js`, and the manifest with `Cache-Control: no-cache`,
+  and the service worker re-checks for a new build hourly and on tab focus,
+  so open tabs pick up deploys without hard reloads. The normal compose
+  flow rebuilds both images at once; this only matters if you pin the two
+  images to different versions.
+
 ## Upgrading to the Rust rewrite (statistics view tracking, OPTIONS 204)
 
 Nothing manual — the standard `git pull` / `docker compose up -d --build`
@@ -365,6 +410,17 @@ migration logic. The tables and columns added by the auth overhaul
 `activity_log` table) are created and backfilled by that same automatic
 path — you do not run any migration command by hand; `docker compose up -d
 --build` is sufficient.
+
+Since v0.6.0, that legacy bootstrap is joined by a real migration framework:
+after the bootstrap completes, startup records the schema in a
+`schema_migrations` ledger and applies any newer migrations, still fully
+automatic (no command to run, no change to the upgrade steps above). The
+rules it enforces — and what its "Refusing to start" messages mean — are
+documented in [docs/MIGRATIONS.md](MIGRATIONS.md). v0.6.0 also adds an
+opt-in, experimental PostgreSQL backend selected via `DATABASE_URL`; SQLite
+stays the default and nothing changes unless you set that variable — see
+[docs/POSTGRES.md](POSTGRES.md), including how to move existing SQLite data
+over.
 
 ## Rollback (compose files only)
 
