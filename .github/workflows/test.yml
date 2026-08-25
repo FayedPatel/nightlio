@@ -34,6 +34,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Fail fast if package.json / api/Cargo.toml / contract/openapi.yaml
+      # versions have drifted apart (publish.yml gates on this workflow, so
+      # a drifted version can never ship). Lives in this job because it is
+      # the cheapest: plain POSIX sh, no toolchain, runs before the
+      # node/yarn setup below.
+      - run: sh scripts/check-version-sync.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -66,6 +72,52 @@ jobs:
           shared-key: api-target
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  # PostgreSQL backend gate (v0.6.0): the exact same `cargo test` as the
+  # rust job, but with NIGHTLIO_PG_TEST_URL set so the PG-gated cases
+  # activate — every integration harness replays its recorded fixtures a
+  # second time against a PG-backed app (template-database cloning per
+  # test, see api/tests/support/mod.rs), the db/pg quirk tests run against
+  # the live server, and the migrate-to-postgres round trip executes.
+  # Without the variable those cases skip, which is why the rust job above
+  # stays byte-identical and PG-free.
+  rust-pg:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        # Matches the docker-compose `postgres` profile service; PostgreSQL
+        # >= 16 is a hard schema requirement (pg_input_is_valid).
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: nightlio_test
+          POSTGRES_USER: nightlio
+          POSTGRES_PASSWORD: nightlio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nightlio -d nightlio_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NIGHTLIO_PG_TEST_URL: postgres://nightlio:nightlio@localhost:5432/nightlio_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+        # Same pinned toolchain as the rust job; no clippy/rustfmt
+        # components — lint gates run once, in the rust job.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: api -> target
+          # Same shared cache as the rust job and the e2e shards (their
+          # step comments explain why the default per-job keys would not
+          # be shared). This job compiles the same test artifacts, so a
+          # warm cache makes it restore-only.
+          shared-key: api-target
       - run: cargo test
 
   e2e:
