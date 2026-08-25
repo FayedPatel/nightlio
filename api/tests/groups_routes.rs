@@ -10,8 +10,15 @@
 //! `routing__get-selections-negative-id.json`. The cascade interplay behind
 //! `get-mood-selections__after-group-delete.json` is covered at the DB
 //! level by [`delete_group_cascades_to_entry_selections`].
+//!
+//! Since v0.6.0 every test loops over the available backends
+//! (`support::backends()`): SQLite always, exactly as before, plus a
+//! PostgreSQL twin replaying the same fixtures byte-identically when
+//! `NIGHTLIO_PG_TEST_URL` is set (see `tests/support/mod.rs`).
 
 use std::collections::HashMap;
+
+mod support;
 
 use axum::Router;
 use axum::body::Body;
@@ -32,16 +39,24 @@ use nightlio_api::state::AppState;
 
 struct TestApp {
     app: Router,
-    pool: db::DbPool,
     /// Bearer token for the bootstrapped self-host user (id 1).
     token: String,
-    _dir: tempfile::TempDir,
+    db: support::TestDb,
 }
 
-/// Fresh bootstrapped state: self-host user id 1, default groups 1-3
-/// (Emotions, Sleep, Productivity), options 1-27 — the exact baseline the
-/// fixtures were recorded against.
-fn make_app() -> TestApp {
+/// Fresh bootstrapped state on each available backend: self-host user id 1,
+/// default groups 1-3 (Emotions, Sleep, Productivity), options 1-27 — the
+/// exact baseline the fixtures were recorded against. SQLite always;
+/// a PostgreSQL twin when `NIGHTLIO_PG_TEST_URL` is set.
+async fn make_apps() -> Vec<TestApp> {
+    let mut apps = Vec::new();
+    for backend in support::backends() {
+        apps.push(make_app_on(backend).await);
+    }
+    apps
+}
+
+async fn make_app_on(backend: support::Backend) -> TestApp {
     let dir = tempfile::tempdir().expect("tempdir");
     let db_path = dir.path().join("nightlio.db");
     let vars: HashMap<String, String> =
@@ -49,15 +64,33 @@ fn make_app() -> TestApp {
     let lookup = move |key: &str| vars.get(key).cloned();
     let mut cfg = Config::from_lookup(&lookup);
     cfg.database_path = db_path.to_string_lossy().into_owned();
-    db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
-    let pool = db::open_pool(&cfg.database_path).expect("pool");
     let token = jwt::issue_token(&cfg.jwt_secret, 1).expect("token");
-    let state = AppState::new(cfg, pool.clone());
+    let (handle, test_db) = match backend {
+        support::Backend::Sqlite => {
+            db::bootstrap(&cfg.database_path, &SelfHostSeed::from(&cfg)).expect("bootstrap");
+            let pool = db::open_pool(&cfg.database_path).expect("pool");
+            (
+                db::DbHandle::Sqlite(pool),
+                support::TestDb::Sqlite {
+                    path: cfg.database_path.clone(),
+                    _dir: dir,
+                },
+            )
+        }
+        support::Backend::Pg => {
+            let url = support::create_pg_db(&SelfHostSeed::from(&cfg)).await;
+            let pool = db::pg::build_pool(&url).expect("pg pool");
+            (
+                db::DbHandle::Pg(pool),
+                support::TestDb::Pg { url, _dir: dir },
+            )
+        }
+    };
+    let state = AppState::new(cfg, handle);
     TestApp {
         app: routes::build_router(state),
-        pool,
         token,
-        _dir: dir,
+        db: test_db,
     }
 }
 
@@ -163,53 +196,57 @@ async fn setup_request(app: &TestApp, method: &str, path: &str, body: Value) -> 
 
 #[tokio::test]
 async fn get_groups_fresh_account_defaults() {
-    let app = make_app();
-    assert_fixture_parity(&app, "get-groups__fresh-account-defaults.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "get-groups__fresh-account-defaults.json").await;
+    }
 }
 
 #[tokio::test]
 async fn get_groups_happy() {
-    let app = make_app();
-    // Recorded state: groups 4 (Activities) and 5 (Weather) with no
-    // options; options 28 (Exercise) and 29 (Reading) under Emotions (1).
-    setup_request(&app, "POST", "/api/groups", json!({"name": "Activities"})).await;
-    setup_request(&app, "POST", "/api/groups", json!({"name": "Weather"})).await;
-    setup_request(
-        &app,
-        "POST",
-        "/api/groups/1/options",
-        json!({"name": "Exercise"}),
-    )
-    .await;
-    setup_request(
-        &app,
-        "POST",
-        "/api/groups/1/options",
-        json!({"name": "Reading"}),
-    )
-    .await;
-    assert_fixture_parity(&app, "get-groups__happy.json").await;
+    for app in make_apps().await {
+        // Recorded state: groups 4 (Activities) and 5 (Weather) with no
+        // options; options 28 (Exercise) and 29 (Reading) under Emotions (1).
+        setup_request(&app, "POST", "/api/groups", json!({"name": "Activities"})).await;
+        setup_request(&app, "POST", "/api/groups", json!({"name": "Weather"})).await;
+        setup_request(
+            &app,
+            "POST",
+            "/api/groups/1/options",
+            json!({"name": "Exercise"}),
+        )
+        .await;
+        setup_request(
+            &app,
+            "POST",
+            "/api/groups/1/options",
+            json!({"name": "Reading"}),
+        )
+        .await;
+        assert_fixture_parity(&app, "get-groups__happy.json").await;
+    }
 }
 
 #[tokio::test]
 async fn get_groups_empty_after_deleting_the_seeded_defaults() {
-    let app = make_app();
-    for group_id in 1..=3 {
-        setup_request(
-            &app,
-            "DELETE",
-            &format!("/api/groups/{group_id}"),
-            Value::Null,
-        )
-        .await;
+    for app in make_apps().await {
+        for group_id in 1..=3 {
+            setup_request(
+                &app,
+                "DELETE",
+                &format!("/api/groups/{group_id}"),
+                Value::Null,
+            )
+            .await;
+        }
+        assert_fixture_parity(&app, "get-groups__empty.json").await;
     }
-    assert_fixture_parity(&app, "get-groups__empty.json").await;
 }
 
 #[tokio::test]
 async fn get_groups_401_no_auth() {
-    let app = make_app();
-    assert_fixture_parity(&app, "get-groups__401-no-auth.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "get-groups__401-no-auth.json").await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -218,28 +255,32 @@ async fn get_groups_401_no_auth() {
 
 #[tokio::test]
 async fn post_groups_happy() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-groups__happy.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-groups__happy.json").await;
+    }
 }
 
 #[tokio::test]
 async fn post_groups_400_empty_name() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-groups__400-empty-name.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-groups__400-empty-name.json").await;
+    }
 }
 
 #[tokio::test]
 async fn post_groups_400_whitespace_name() {
     // Whitespace passes the route-layer falsy check and fails the service
     // strip check: a DIFFERENT 400 string than the empty-name case.
-    let app = make_app();
-    assert_fixture_parity(&app, "post-groups__400-whitespace-name.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-groups__400-whitespace-name.json").await;
+    }
 }
 
 #[tokio::test]
 async fn post_groups_401_no_auth() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-groups__401-no-auth.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-groups__401-no-auth.json").await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -248,14 +289,16 @@ async fn post_groups_401_no_auth() {
 
 #[tokio::test]
 async fn post_group_options_happy() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-group-options__happy.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-group-options__happy.json").await;
+    }
 }
 
 #[tokio::test]
 async fn post_group_options_400_empty_name() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-group-options__400-empty-name.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-group-options__400-empty-name.json").await;
+    }
 }
 
 #[tokio::test]
@@ -264,56 +307,81 @@ async fn post_group_options_404_unknown_group() {
     // 6): an unknown group id is now a 404 "Group not found" (the same
     // resource-not-found convention as DELETE /groups/{id}) instead of
     // Flask's recorded 400 "Group not found for user".
-    let app = make_app();
-    assert_fixture_parity(&app, "post-group-options__404-unknown-group.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-group-options__404-unknown-group.json").await;
+    }
 }
 
 #[tokio::test]
 async fn post_group_options_404_foreign_group() {
     // contract change: a group owned by ANOTHER user 404s exactly
     // like a nonexistent one.
-    let app = make_app();
-    {
-        let conn = app.pool.get().expect("conn");
-        conn.execute(
-            "INSERT INTO users (google_id, email, name) VALUES ('other-user', 'other@example.com', 'Other')",
-            [],
-        )
-        .unwrap();
-        // Defaults occupy group ids 1..=3, so the foreign group gets id 4.
-        conn.execute(
-            "INSERT INTO groups (user_id, name) VALUES (2, 'Theirs')",
-            [],
-        )
-        .unwrap();
+    for app in make_apps().await {
+        match &app.db {
+            support::TestDb::Sqlite { path, .. } => {
+                let conn = db::connect(path).expect("connect");
+                conn.execute(
+                "INSERT INTO users (google_id, email, name) VALUES ('other-user', 'other@example.com', 'Other')",
+                [],
+            )
+            .unwrap();
+                // Defaults occupy group ids 1..=3, so the foreign group gets id 4.
+                conn.execute(
+                    "INSERT INTO groups (user_id, name) VALUES (2, 'Theirs')",
+                    [],
+                )
+                .unwrap();
+            }
+            support::TestDb::Pg { .. } => {
+                let client = app.db.pg_client().await;
+                client
+                .execute(
+                    "INSERT INTO users (google_id, email, name) VALUES ('other-user', 'other@example.com', 'Other')",
+                    &[],
+                )
+                .await
+                .unwrap();
+                // Defaults occupy group ids 1..=3, so the foreign group gets id 4.
+                let group_id: i64 = client
+                    .query_one(
+                        "INSERT INTO groups (user_id, name) VALUES (2, 'Theirs') RETURNING id",
+                        &[],
+                    )
+                    .await
+                    .unwrap()
+                    .get(0);
+                assert_eq!(group_id, 4, "foreign group must get id 4");
+            }
+        }
+        let response = app
+            .app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/groups/4/options")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&json!({"name": "X"})).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .expect("infallible");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            body_json(response).await,
+            json!({ "error": "Group not found" })
+        );
     }
-    let response = app
-        .app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/api/groups/4/options")
-                .header(header::AUTHORIZATION, format!("Bearer {}", app.token))
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(
-                    serde_json::to_vec(&json!({"name": "X"})).unwrap(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .expect("infallible");
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    assert_eq!(
-        body_json(response).await,
-        json!({ "error": "Group not found" })
-    );
 }
 
 #[tokio::test]
 async fn post_group_options_401_no_auth() {
-    let app = make_app();
-    assert_fixture_parity(&app, "post-group-options__401-no-auth.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "post-group-options__401-no-auth.json").await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -322,23 +390,26 @@ async fn post_group_options_401_no_auth() {
 
 #[tokio::test]
 async fn delete_group_happy() {
-    let app = make_app();
-    // The fixture deletes group 5: create groups 4 and 5 first.
-    setup_request(&app, "POST", "/api/groups", json!({"name": "Activities"})).await;
-    setup_request(&app, "POST", "/api/groups", json!({"name": "Weather"})).await;
-    assert_fixture_parity(&app, "delete-group__happy.json").await;
+    for app in make_apps().await {
+        // The fixture deletes group 5: create groups 4 and 5 first.
+        setup_request(&app, "POST", "/api/groups", json!({"name": "Activities"})).await;
+        setup_request(&app, "POST", "/api/groups", json!({"name": "Weather"})).await;
+        assert_fixture_parity(&app, "delete-group__happy.json").await;
+    }
 }
 
 #[tokio::test]
 async fn delete_group_404_not_found() {
-    let app = make_app();
-    assert_fixture_parity(&app, "delete-group__404-not-found.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "delete-group__404-not-found.json").await;
+    }
 }
 
 #[tokio::test]
 async fn delete_group_401_no_auth() {
-    let app = make_app();
-    assert_fixture_parity(&app, "delete-group__401-no-auth.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "delete-group__401-no-auth.json").await;
+    }
 }
 
 /// Interplay behind `get-mood-selections__after-group-delete.json` (the
@@ -346,40 +417,70 @@ async fn delete_group_401_no_auth() {
 /// the real route cascades `group_options` → `entry_selections`.
 #[tokio::test]
 async fn delete_group_cascades_to_entry_selections() {
-    let app = make_app();
-    {
-        let conn = app.pool.get().expect("conn");
-        conn.execute(
-            "INSERT INTO mood_entries (user_id, date, mood, content) VALUES (1, '2026-08-15', 4, 'x')",
-            [],
-        )
-        .unwrap();
-        // Options 1 (happy) and 2 (excited) belong to group 1 (Emotions).
-        conn.execute(
-            "INSERT INTO entry_selections (entry_id, option_id) VALUES (1, 1), (1, 2)",
-            [],
-        )
-        .unwrap();
+    for app in make_apps().await {
+        match &app.db {
+            support::TestDb::Sqlite { path, .. } => {
+                let conn = db::connect(path).expect("connect");
+                conn.execute(
+                "INSERT INTO mood_entries (user_id, date, mood, content) VALUES (1, '2026-08-15', 4, 'x')",
+                [],
+            )
+            .unwrap();
+                // Options 1 (happy) and 2 (excited) belong to group 1 (Emotions).
+                conn.execute(
+                    "INSERT INTO entry_selections (entry_id, option_id) VALUES (1, 1), (1, 2)",
+                    [],
+                )
+                .unwrap();
+            }
+            support::TestDb::Pg { .. } => {
+                let client = app.db.pg_client().await;
+                client
+                .batch_execute(
+                    "INSERT INTO mood_entries (user_id, date, mood, content) VALUES (1, '2026-08-15', 4, 'x'); \
+                     INSERT INTO entry_selections (entry_id, option_id) VALUES (1, 1), (1, 2);",
+                )
+                .await
+                .unwrap();
+            }
+        }
+        setup_request(&app, "DELETE", "/api/groups/1", Value::Null).await;
+        let (selections, options): (i64, i64) = match &app.db {
+            support::TestDb::Sqlite { path, .. } => {
+                let conn = db::connect(path).expect("connect");
+                let selections: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM entry_selections", [], |row| {
+                        row.get(0)
+                    })
+                    .unwrap();
+                let options: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM group_options WHERE group_id = 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                (selections, options)
+            }
+            support::TestDb::Pg { .. } => {
+                let client = app.db.pg_client().await;
+                let row = client
+                    .query_one(
+                        "SELECT (SELECT COUNT(*) FROM entry_selections), \
+                            (SELECT COUNT(*) FROM group_options WHERE group_id = 1)",
+                        &[],
+                    )
+                    .await
+                    .unwrap();
+                (row.get(0), row.get(1))
+            }
+        };
+        assert_eq!(
+            (selections, options),
+            (0, 0),
+            "cascade must prune both tables"
+        );
     }
-    setup_request(&app, "DELETE", "/api/groups/1", Value::Null).await;
-    let conn = app.pool.get().expect("conn");
-    let selections: i64 = conn
-        .query_row("SELECT COUNT(*) FROM entry_selections", [], |row| {
-            row.get(0)
-        })
-        .unwrap();
-    let options: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM group_options WHERE group_id = 1",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(
-        (selections, options),
-        (0, 0),
-        "cascade must prune both tables"
-    );
 }
 
 // ---------------------------------------------------------------------------
@@ -388,20 +489,23 @@ async fn delete_group_cascades_to_entry_selections() {
 
 #[tokio::test]
 async fn delete_option_happy() {
-    let app = make_app();
-    assert_fixture_parity(&app, "delete-option__happy.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "delete-option__happy.json").await;
+    }
 }
 
 #[tokio::test]
 async fn delete_option_404_not_found() {
-    let app = make_app();
-    assert_fixture_parity(&app, "delete-option__404-not-found.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "delete-option__404-not-found.json").await;
+    }
 }
 
 #[tokio::test]
 async fn delete_option_401_no_auth() {
-    let app = make_app();
-    assert_fixture_parity(&app, "delete-option__401-no-auth.json").await;
+    for app in make_apps().await {
+        assert_fixture_parity(&app, "delete-option__401-no-auth.json").await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -410,16 +514,17 @@ async fn delete_option_401_no_auth() {
 
 #[tokio::test]
 async fn routing_bad_ids_and_trailing_slashes_are_json_404() {
-    let app = make_app();
-    for name in [
-        "routing__delete-group-negative-id.json",
-        "routing__delete-group-noninteger-id.json",
-        "routing__delete-group-trailing-slash.json",
-        "routing__delete-option-negative-id.json",
-        "routing__get-groups-trailing-slash.json",
-        "routing__post-options-trailing-slash.json",
-    ] {
-        assert_fixture_parity(&app, name).await;
+    for app in make_apps().await {
+        for name in [
+            "routing__delete-group-negative-id.json",
+            "routing__delete-group-noninteger-id.json",
+            "routing__delete-group-trailing-slash.json",
+            "routing__delete-option-negative-id.json",
+            "routing__get-groups-trailing-slash.json",
+            "routing__post-options-trailing-slash.json",
+        ] {
+            assert_fixture_parity(&app, name).await;
+        }
     }
 }
 
@@ -429,16 +534,17 @@ async fn routing_overflow_id_is_clean_404_documented_drift() {
     // leaking "Python int too large to convert to SQLite INTEGER"; the
     // Rust port returns the clean JSON 404 instead. Assert the Rust
     // expectation, not the recorded fixture body.
-    let app = make_app();
-    let fix = fixture("routing__delete-group-overflow-id.json");
-    let response = replay(&app, &fix).await;
-    assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    let body = body_json(response).await;
-    assert_eq!(body, json!({ "error": "Resource not found" }));
-    insta::assert_json_snapshot!(
-        "routing__delete_group_overflow_id_rust_drift",
-        json!({ "status": 404, "body": body })
-    );
+    for app in make_apps().await {
+        let fix = fixture("routing__delete-group-overflow-id.json");
+        let response = replay(&app, &fix).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = body_json(response).await;
+        assert_eq!(body, json!({ "error": "Resource not found" }));
+        insta::assert_json_snapshot!(
+            "routing__delete_group_overflow_id_rust_drift",
+            json!({ "status": 404, "body": body })
+        );
+    }
 }
 
 /// Routing 404s fire BEFORE auth, exactly like Flask (URL matching happens
@@ -446,26 +552,27 @@ async fn routing_overflow_id_is_clean_404_documented_drift() {
 /// still 404, never 401.
 #[tokio::test]
 async fn routing_404_beats_missing_auth() {
-    let app = make_app();
-    for path in ["/api/groups/abc", "/api/groups/-1", "/api/options/-1"] {
-        let response = app
-            .app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri(path)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .expect("infallible");
-        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
-        assert_eq!(
-            body_json(response).await,
-            json!({ "error": "Resource not found" }),
-            "{path}"
-        );
+    for app in make_apps().await {
+        for path in ["/api/groups/abc", "/api/groups/-1", "/api/options/-1"] {
+            let response = app
+                .app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("DELETE")
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .expect("infallible");
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+            assert_eq!(
+                body_json(response).await,
+                json!({ "error": "Resource not found" }),
+                "{path}"
+            );
+        }
     }
 }
 
@@ -474,37 +581,38 @@ async fn routing_404_beats_missing_auth() {
 /// change).
 #[tokio::test]
 async fn automatic_options_on_every_groups_rule() {
-    let app = make_app();
-    for (path, allow) in [
-        ("/api/groups", "HEAD, GET, OPTIONS, POST"),
-        ("/api/groups/1", "OPTIONS, DELETE"),
-        ("/api/groups/1/options", "POST, OPTIONS"),
-        ("/api/options/1", "OPTIONS, DELETE"),
-    ] {
-        let response = app
-            .app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("OPTIONS")
-                    .uri(path)
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .expect("infallible");
-        assert_eq!(response.status(), StatusCode::NO_CONTENT, "{path}");
-        assert_eq!(
-            response
-                .headers()
-                .get(header::ALLOW)
-                .and_then(|value| value.to_str().ok()),
-            Some(allow),
-            "{path}"
-        );
-        let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
-            .await
-            .expect("body");
-        assert!(bytes.is_empty(), "{path}: automatic OPTIONS body is empty");
+    for app in make_apps().await {
+        for (path, allow) in [
+            ("/api/groups", "HEAD, GET, OPTIONS, POST"),
+            ("/api/groups/1", "OPTIONS, DELETE"),
+            ("/api/groups/1/options", "POST, OPTIONS"),
+            ("/api/options/1", "OPTIONS, DELETE"),
+        ] {
+            let response = app
+                .app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("OPTIONS")
+                        .uri(path)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .expect("infallible");
+            assert_eq!(response.status(), StatusCode::NO_CONTENT, "{path}");
+            assert_eq!(
+                response
+                    .headers()
+                    .get(header::ALLOW)
+                    .and_then(|value| value.to_str().ok()),
+                Some(allow),
+                "{path}"
+            );
+            let bytes = axum::body::to_bytes(response.into_body(), 1 << 20)
+                .await
+                .expect("body");
+            assert!(bytes.is_empty(), "{path}: automatic OPTIONS body is empty");
+        }
     }
 }
