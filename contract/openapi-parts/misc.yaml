@@ -59,7 +59,8 @@ paths:
       operationId: getPublicConfig
       summary: Public feature flags
       description: >-
-        Unauthenticated. Exactly four keys. signup_url is forced to null
+        Unauthenticated. Exactly five keys: the four public flags plus the
+        server version (added 0.6.0). signup_url is forced to null
         whenever OIDC is disabled, even if OIDC_SIGNUP_URL is set.
       responses:
         "200":
@@ -369,7 +370,8 @@ components:
 
     PublicConfig:
       type: object
-      required: [enable_oidc, enable_mood_music, enable_local_login, signup_url]
+      required:
+        [enable_oidc, enable_mood_music, enable_local_login, signup_url, version]
       properties:
         enable_oidc:
           type: boolean
@@ -385,6 +387,13 @@ components:
           description: >-
             OIDC_SIGNUP_URL only when OIDC is enabled AND the value is an
             absolute http(s) URL; null otherwise (even if the env var is set).
+        version:
+          type: string
+          description: >-
+            Server semver, baked in at compile time (CARGO_PKG_VERSION;
+            added 0.6.0). Kept in lockstep with package.json and this
+            document's info.version by scripts/check-version-sync.sh.
+            Normalized to "<VERSION>" in fixtures, like "<TS>" timestamps.
 
     ActivityPage:
       type: object

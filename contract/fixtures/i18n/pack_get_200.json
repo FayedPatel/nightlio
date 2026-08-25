@@ -1,0 +1,42 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/es",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "headers_that_matter": {
+      "ETag": "\"es-1.0.0\"",
+      "Cache-Control": "public, max-age=3600"
+    },
+    "body": {
+      "schema_version": 1,
+      "language": "es",
+      "name": "Spanish",
+      "native_name": "Español",
+      "version": "1.0.0",
+      "strings": {
+        "common": {
+          "appName": "Nightlio",
+          "cancel": "Cancelar",
+          "loading": "Cargando...",
+          "today": "Hoy",
+          "yesterday": "Ayer",
+          "dateAtTime": "{date} a las {time}"
+        },
+        "nav": {
+          "home": "Inicio",
+          "history": "Historial",
+          "goals": "Metas",
+          "stats": "Estadísticas",
+          "statsShort": "Stats",
+          "settings": "Ajustes"
+        }
+      }
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). SEEDING: same cached es pack as languages_get_200_with_packs. Pack envelope: exactly these six keys; schema_version is pinned integer 1 (a future envelope break bumps it); strings is a NESTED object mirroring the src/i18n/en.json source format — each object key is one segment of the dot-path id and every leaf is a string, so strings.nav.home carries the id nav.home (owner decision, DECISIONS.md 2026-08-22 amendment: nested end-to-end; clients flatten the tree to dot-keys for lookup; a flat dot-key map is accepted on input as the degenerate nesting, but the canonical wire form is nested and the server serves packs exactly as validated). Partial packs are legal — the client lookup order flat(pack.strings)[key] ?? en[key] ?? key makes missing keys safe, so this fixture's 12-leaf tree is a valid pack, not a truncation artifact. {date}-style interpolation placeholders pass through verbatim as literal braces in the translated value. Values are raw UTF-8 (Estadísticas, Español), never \\uXXXX escapes. Headers are the caching contract: strong ETag \"<code>-<version>\" plus Cache-Control public, max-age=3600 — the browser HTTP cache is the caching layer (the service worker is NetworkOnly for /api/*). Unauthenticated."
+}

@@ -1,0 +1,12 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": "",
+  "content_type": "text/html; charset=utf-8",
+  "headers": {
+    "Allow": "HEAD, GET, OPTIONS"
+  },
+  "status": 204
+}

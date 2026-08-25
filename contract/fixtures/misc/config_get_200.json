@@ -12,8 +12,9 @@
       "enable_local_login": true,
       "enable_mood_music": false,
       "enable_oidc": false,
-      "signup_url": null
+      "signup_url": null,
+      "version": "<VERSION>"
     }
   },
-  "note": "OIDC env blanked and ENABLE_MOOD_MUSIC unset: the four public flags are enable_oidc=false, enable_mood_music=false, enable_local_login=true, signup_url=null (signup_url is forced null whenever OIDC is disabled)."
+  "note": "OIDC env blanked and ENABLE_MOOD_MUSIC unset: the four public flags are enable_oidc=false, enable_mood_music=false, enable_local_login=true, signup_url=null (signup_url is forced null whenever OIDC is disabled). version (added 0.6.0) is the compile-time crate version, normalized to <VERSION> like the <TS> timestamps — future bumps never touch this fixture."
 }

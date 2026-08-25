@@ -1,6 +1,7 @@
 //! HTTP routes — port of `api/routes/*.py` as axum handlers mounted under
-//! `/api`, plus the CORS / security-header / proxy-header / tracing
-//! middleware from `create_app()` (`api/app.py`).
+//! `/api` (and, since 0.6.0, aliased byte-identically under `/api/v1`),
+//! plus the CORS / security-header / proxy-header / tracing middleware
+//! from `create_app()` (`api/app.py`).
 //!
 //! The shell agent owns this file (router assembly + middleware + shared
 //! routing helpers); each family module below is owned wholesale by its
@@ -9,11 +10,14 @@
 //! # Conventions for route-family agents
 //!
 //! - Family routers ([`auth`], [`mood`], [`goals`], [`groups`],
-//!   [`achievements`], [`extras`]) register paths RELATIVE to `/api`
-//!   (e.g. `/moods`, `/goal/{id}`): they are nested at `/api` here.
-//!   [`misc`] is the one exception — it owns the `/api` ↔ `/api/` slash
-//!   pair, which nesting cannot express, so it registers absolute paths
-//!   and is merged.
+//!   [`achievements`], [`extras`], [`i18n`]) register paths RELATIVE to
+//!   the mount prefix (e.g. `/moods`, `/goal/{id}`): [`family_router`]
+//!   merges them and [`api_router`] nests that merge at BOTH `/api`
+//!   (canonical, fixture-graded) and `/api/v1` (alias, spot-checked) —
+//!   never hardcode either prefix inside a family. [`misc`] is the one
+//!   exception — it owns the `/api` ↔ `/api/` slash pair, which nesting
+//!   cannot express, so it registers absolute paths built from the prefix
+//!   ([`misc::router_at`]) and is merged once per prefix.
 //! - Flask `strict_slashes` semantics come for free: axum matches paths
 //!   exactly, so a rule registered without a trailing slash 404s the
 //!   slashed variant (via the JSON fallback). Do NOT add any
@@ -37,9 +41,11 @@
 
 pub mod achievements;
 pub mod auth;
+pub mod data;
 pub mod extras;
 pub mod goals;
 pub mod groups;
+pub mod i18n;
 pub mod misc;
 pub mod mood;
 
@@ -73,18 +79,35 @@ pub const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; \
 // Router assembly
 // ---------------------------------------------------------------------------
 
-/// All `/api` routes, before state and middleware are applied.
+/// One instance of every route family, registered relative to the mount
+/// prefix. A `fn` rather than a value because axum `Router`s are consumed
+/// by `.nest`/`.merge` — [`api_router`] calls it once per prefix.
+fn family_router() -> Router<AppState> {
+    Router::new()
+        .merge(auth::router())
+        .merge(mood::router())
+        .merge(groups::router())
+        .merge(goals::router())
+        .merge(achievements::router())
+        .merge(data::router())
+        .merge(extras::router())
+        .merge(i18n::router())
+}
+
+/// All routes, before state and middleware are applied. The full surface
+/// is mounted twice: `/api` is canonical and fixture-graded; `/api/v1`
+/// (added 0.6.0) is a byte-identical alias, spot-checked in
+/// `api/tests/shell_router.rs`. A second registration, never a redirect —
+/// a cross-prefix redirect would break CORS preflights.
 fn api_router() -> Router<AppState> {
     Router::new()
-        // misc owns the /api ↔ /api/ slash pair → absolute paths, merged.
-        .merge(misc::router())
-        // Family routers register paths relative to /api.
-        .nest("/api", auth::router())
-        .nest("/api", mood::router())
-        .nest("/api", groups::router())
-        .nest("/api", goals::router())
-        .nest("/api", achievements::router())
-        .nest("/api", extras::router())
+        // misc owns each prefix's slash pair (`/api` ↔ `/api/`,
+        // `/api/v1` ↔ `/api/v1/`) → absolute paths, merged per prefix.
+        .merge(misc::router_at("/api"))
+        .merge(misc::router_at("/api/v1"))
+        // Family routers register paths relative to the mount prefix.
+        .nest("/api", family_router())
+        .nest("/api/v1", family_router())
 }
 
 /// The complete application: routes + state + the `create_app()` middleware
@@ -95,8 +118,15 @@ pub fn build_router(state: AppState) -> Router {
     // OIDC routes exist only when configured, mirroring the conditional
     // blueprint registration in `create_app()` (`api/app.py`) — when the
     // issuer is unset the paths fall through to the standard JSON 404.
+    // Mounted under both prefixes like every other family; the OIDC
+    // redirect_uri is unaffected by the arrival prefix — it is either the
+    // configured absolute OIDC_CALLBACK_URL or built from scheme + host
+    // with a hardcoded `/api/auth/callback/oidc` path (`api/src/auth/
+    // oidc.rs`), so the issuer-registered callback stays on `/api`.
     if config.oidc_enabled() {
-        api = api.nest("/api", crate::auth::oidc::router());
+        api = api
+            .nest("/api", crate::auth::oidc::router())
+            .nest("/api/v1", crate::auth::oidc::router());
     }
     let router = api
         .method_not_allowed_fallback(method_not_allowed)

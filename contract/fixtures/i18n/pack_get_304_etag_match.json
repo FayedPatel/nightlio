@@ -1,0 +1,20 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/es",
+  "request": {
+    "headers_that_matter": {
+      "If-None-Match": "\"es-1.0.0\""
+    },
+    "body": null
+  },
+  "response": {
+    "status": 304,
+    "content_type": null,
+    "headers_that_matter": {
+      "ETag": "\"es-1.0.0\"",
+      "Cache-Control": "public, max-age=3600"
+    },
+    "body": ""
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). SEEDING: same cached es pack as pack_get_200. If-None-Match carrying the current ETag token (exact string compare against \"<code>-<version>\", quotes included) yields 304 with an EMPTY body, no Content-Type, and the SAME ETag + Cache-Control as the 200 would carry. A stale or absent If-None-Match yields the full 200 envelope. This joins GET /api 308 as the only empty-body non-OPTIONS responses in the API; the frontend's throw-on-non-JSON-2xx rule is not violated because 304 is not a 2xx and browsers revalidate transparently — fetch() surfaces the cached 200, never the 304, unless the client sets If-None-Match by hand. Unauthenticated."
+}

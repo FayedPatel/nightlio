@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/languages/",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). Strict-slash routing like every other rule in the app: the i18n rules are registered WITHOUT trailing slashes, so the slash variant 404s with the JSON envelope and no redirect (GET /api/ health stays the only slash-registered rule). The slash variant does NOT fall through to the {code} route either — /api/i18n/es/ 404s the same way."
+}

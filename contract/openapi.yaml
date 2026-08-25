@@ -1,10 +1,14 @@
 # Nightlio API contract — merged OpenAPI 3.1 document.
 #
 # Assembled from the per-family fragments in contract/openapi-parts/ (auth,
-# mood+statistics, goals, groups, achievements, misc) and cross-checked against
-# the golden fixtures in contract/fixtures/**. This file is the single source
-# of truth the TypeScript frontend (src/types/api.ts) and the Rust API rewrite
-# are graded against. See contract/README.md for the replay and grading rules.
+# mood+statistics, goals, groups, achievements, misc, i18n, data) and
+# cross-checked against the golden fixtures in contract/fixtures/**. This file
+# is the single source of truth the TypeScript frontend (src/types/api.ts) and
+# the Rust API rewrite are graded against. See contract/README.md for the
+# replay and grading rules. The i18n family (added 0.6.0) and the data
+# export/import family (added 0.6.0) are Rust-native — they never existed in
+# Flask, so their fixtures are hand-authored spec, not recordings
+# (DECISIONS.md 2026-08-22 and 2026-08-24).
 #
 # Vendor extensions used in this document:
 #   x-nightlio-conditional : the path is registered ONLY when the named env
@@ -21,7 +25,7 @@ openapi: 3.1.0
 
 info:
   title: Nightlio API
-  version: 0.4.0-dev
+  version: 0.6.0
   description: |
     Wire contract for the Nightlio Rust API (api/src/routes/*.rs). The golden
     fixtures it is cross-checked against were recorded against live instances
@@ -57,8 +61,10 @@ info:
       variants — answered 204 while Flask's automatic OPTIONS answered
       200-empty. Fixture auth/verify_options-204.json records the unified
       behavior.)
-    - **Auth.** 33 rules sit behind require_auth (`POST /api/export/pdf`
-      joined them on 2026-08-17 — contract change): `Authorization: Bearer <jwt>`
+    - **Auth.** 35 rules sit behind require_auth (`POST /api/export/pdf`
+      joined them on 2026-08-17 — contract change; the two data rules
+      `GET /api/export/data` + `POST /api/import/data` joined in 0.6.0):
+      `Authorization: Bearer <jwt>`
       is checked first; the `nightlio_token` httpOnly cookie is the fallback.
       Missing credentials -> 401 `{"error": "Authorization header required"}`
       (same body even when the missing credential is the cookie); expired ->
@@ -98,6 +104,42 @@ info:
     - **Rate limits** (sqlite-backed, per client): /api/auth/local/login
       30/min, /api/auth/local/register 10/min; excess -> 429. No 429 fixture
       was recorded; the `{error}` body shape is documented from code only.
+    - **i18n caching (added 0.6.0).** The two /api/i18n routes are
+      unauthenticated and HTTP-cacheable: pack 200s carry the strong
+      validator `ETag: "<code>-<version>"` + `Cache-Control: public,
+      max-age=3600` and honor If-None-Match with a 304 (empty body, same
+      ETag + Cache-Control — with OPTIONS aside, the 304 joins the /api
+      308 as the only empty-body responses; neither is a 2xx, so the
+      JSON-only client rule holds). The languages list carries
+      Cache-Control only, NO ETag. English is never listed by the server;
+      /api/i18n/en still serves a cached en pack.
+    - **Data export/import (added 0.6.0).** `GET /api/export/data` returns
+      the versioned v1 envelope (DataExport: `{schema_version: 1,
+      exported_at, app_version, data: {entries, goals}}`, NO ids/user_id);
+      `POST /api/import/data` accepts the same envelope as plain JSON and
+      merges it, skipping duplicates (entries dedupe on (date, content),
+      goals on title), inside one transaction — any invalid row rejects
+      the whole file with a row-indexed 400 and nothing commits. Import
+      performs NO achievement checks and writes NO activity_log rows.
+      schema_version is dispatched first (unsupported → 400); unknown JSON
+      keys are ignored, so v1 files import forever. In-handler body cap
+      8 MiB → 413. Both rules require auth; the family is Rust-native and
+      its fixtures (contract/fixtures/data/) are hand-authored spec
+      (DECISIONS.md 2026-08-24). Normative format doc:
+      docs/EXPORT-FORMAT.md.
+    - **`/api/v1` prefix alias (added 0.6.0).** The entire surface is
+      additionally mounted under `/api/v1`: every operation in this
+      document answers byte-identically at the same path with `/api`
+      replaced by `/api/v1`, including the slash pair (`GET /api/v1`
+      308-redirects to `/api/v1/`, never across prefixes) and the
+      conditional OIDC rules. The alias is a second registration of the
+      same routers, never a redirect between prefixes (a cross-prefix
+      redirect would break CORS preflights). `/api` remains the canonical,
+      fixture-graded prefix — the paths below, the golden fixtures, and
+      the frontend all use `/api`; alias behavior is spot-checked in
+      api/tests/shell_router.rs. The frontend switches no earlier than
+      v0.7 (contract/DECISIONS.md 2026-08-22). Paths are deliberately NOT
+      duplicated under /api/v1 in this document.
 
 security: []
 
@@ -1423,7 +1465,8 @@ paths:
       operationId: getPublicConfig
       summary: Public feature flags (unauthenticated).
       description: >-
-        Exactly four keys. signup_url is forced to null whenever OIDC is
+        Exactly five keys: the four public flags plus the server version
+        (added 0.6.0). signup_url is forced to null whenever OIDC is
         disabled, even if OIDC_SIGNUP_URL is set. enable_local_login is
         false by default whenever OIDC is configured (DISABLE_LOCAL_LOGIN
         unset/empty defaults to the OIDC-configured state; explicit 0/1
@@ -1666,6 +1709,210 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  # ── i18n language packs (added 0.6.0 — Rust-native; hand-authored spec
+  #    fixtures in contract/fixtures/i18n/, DECISIONS.md 2026-08-22) ────────
+  /api/i18n/languages:
+    get:
+      operationId: listLanguages
+      summary: List server-cached language packs (unauthenticated).
+      description: >-
+        Object envelope, never a bare array. Entries are projections of the
+        cached pack envelopes (code/name/native_name/version — never the
+        strings map), sorted by code ascending. Empty list when nothing is
+        cached (fresh instance, I18N_OFFLINE, or GitHub unreachable with a
+        cold cache) — clients run on bundled English. English is NEVER
+        listed by the server, even when an en pack is cached; the frontend
+        unions bundled English into its picker. Upstream (GitHub) failures
+        never surface here — the server serves stale cache forever or the
+        empty state. Response carries Cache-Control public, max-age=3600
+        and NO ETag (the list has no single stable version identity —
+        owner decision, DECISIONS.md 2026-08-22). /api/i18n/languages/
+        (trailing slash) is a 404; the static "languages" segment wins
+        over the {code} route.
+      responses:
+        "200":
+          description: >-
+            Available packs (possibly none). Headers: Cache-Control
+            "public, max-age=3600"; no ETag on this endpoint.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguagesResponse"
+
+  /api/i18n/{code}:
+    get:
+      operationId: getLanguagePack
+      summary: Fetch a cached language pack by code (unauthenticated).
+      description: >-
+        Serves the cached pack envelope for the code, or the standard
+        app-level 404 envelope when no pack for that code is cached (cold
+        cache ⇒ every code 404s, including en; a cached en pack IS served —
+        that is how English itself stays hot-swappable). 200s carry the
+        strong validator ETag "<code>-<version>" and Cache-Control public,
+        max-age=3600; If-None-Match with the current ETag (exact string
+        compare, quotes included) yields 304 — empty body, no Content-Type,
+        same ETag + Cache-Control. Browsers revalidate transparently (the
+        service worker is NetworkOnly for /api/*, so the browser HTTP cache
+        is the caching layer) and fetch() surfaces the cached 200, so the
+        frontend's throw-on-non-JSON-2xx rule is never violated by the 304
+        (not a 2xx).
+      parameters:
+        - $ref: "#/components/parameters/LanguageCode"
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: >-
+            Conditional-request validator; send the previously returned
+            ETag verbatim (quotes included) to get a 304 when the pack
+            version is unchanged.
+      responses:
+        "200":
+          description: >-
+            The pack envelope. Headers: ETag "<code>-<version>" (strong),
+            Cache-Control "public, max-age=3600".
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Strong validator, exactly "<code>-<version>" in quotes.
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LanguagePack"
+        "304":
+          description: >-
+            If-None-Match matched the current ETag. Empty body, no
+            Content-Type; same ETag + Cache-Control headers as the 200.
+          headers:
+            ETag:
+              schema:
+                type: string
+            Cache-Control:
+              schema:
+                type: string
+                const: "public, max-age=3600"
+        "404":
+          description: >-
+            No pack cached for this code — standard app-level JSON 404
+            {"error": "Resource not found"}, indistinguishable from an
+            unknown path. No caching headers on the 404.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ── data export/import (added 0.6.0 — Rust-native; hand-authored spec
+  #    fixtures in contract/fixtures/data/, DECISIONS.md 2026-08-24) ───────
+  /api/export/data:
+    get:
+      operationId: exportData
+      summary: Export all entries and goals as a versioned JSON envelope
+      description: >-
+        Returns the complete v1 export envelope (schema DataExport) for the
+        authenticated user as the JSON response body — the frontend builds
+        the downloadable file (nightlio-export-YYYY-MM-DD.json) client-side.
+        Pure read: goal weekly state is projected (rollover) but never
+        persisted. Empty accounts still get the full envelope with both
+        data arrays present and empty. exported_at is SQLite-style UTC
+        "YYYY-MM-DD HH:MM:SS"; app_version is the server's
+        CARGO_PKG_VERSION. Deterministic order is contract: entries
+        ascending by date, goals in creation order. The envelope carries NO
+        ids and NO user_id (not portable across instances). Normative
+        field-by-field doc: docs/EXPORT-FORMAT.md. /api/export/data/
+        (trailing slash) is a 404; OPTIONS answers the automatic 204 with
+        Allow "HEAD, GET, OPTIONS".
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: >-
+            The v1 export envelope. Deterministic order: entries ascending
+            by date, goals in creation order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/import/data:
+    post:
+      operationId: importData
+      summary: Import a previously exported envelope (merge, skip duplicates)
+      description: >-
+        Accepts the same envelope GET /api/export/data produces, as plain
+        application/json (no multipart). schema_version is dispatched
+        first: files from any supported version (currently only 1) are
+        accepted forever; a newer version -> 400 "Unsupported
+        schema_version: N (supported: 1)". Merge semantics, all inside one
+        transaction: entries dedupe on (date, content), goals dedupe on
+        title (duplicate goals are skipped whole — their completions never
+        touch existing streak state); selections resolve-or-create
+        groups/options by exact name; file timestamps are preserved
+        (COALESCE with CURRENT_TIMESTAMP). Any invalid row rejects the
+        whole file with a row-indexed 400 and nothing is imported —
+        re-POSTing after a fix is free because duplicates skip.
+        Deliberately NO achievement checks and NO activity_log writes
+        (pure restore, DECISIONS.md 2026-08-24). Bodies over 8388608 UTF-8
+        bytes -> 413 (code-derived, no fixture). GET on this rule -> the
+        unified 405 envelope + Allow; OPTIONS answers the automatic 204
+        with Allow "OPTIONS, POST".
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/XRequestedWith"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataExport"
+      responses:
+        "200":
+          description: >-
+            Import finished; per-category imported/skipped counts.
+            Idempotent: re-importing the same file skips everything.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataImportResult"
+        "400":
+          description: >-
+            Missing/unsupported schema_version, non-JSON body ({"error":
+            "Bad request"} via the app-level handler), or any invalid row
+            (row-indexed message, e.g. "entries[1]: mood must be between 1
+            and 5"). Atomic: nothing was imported. Message text is not
+            graded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfForbidden"
+        "413":
+          description: >-
+            Body exceeds 8388608 UTF-8 bytes (in-handler cap; the transport
+            limit is 16 MiB). No fixture — code-derived.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1747,6 +1994,19 @@ components:
         type: integer
         minimum: 0
       description: Same <int:> converter semantics as EntryId (404 before auth; overflow 404 in Rust, accepted drift #1).
+
+    LanguageCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+      description: >-
+        Opaque lowercase language code (e.g. es), matching the pack's
+        language field and the lang-<code>-v<semver> release tag. A plain
+        string path segment — no <int:> converter semantics. The literal
+        segment "languages" is unreachable here (the static
+        /api/i18n/languages route wins).
 
   responses:
     Unauthorized:
@@ -2554,7 +2814,8 @@ components:
 
     PublicConfig:
       type: object
-      required: [enable_oidc, enable_mood_music, enable_local_login, signup_url]
+      required:
+        [enable_oidc, enable_mood_music, enable_local_login, signup_url, version]
       properties:
         enable_oidc:
           type: boolean
@@ -2575,6 +2836,13 @@ components:
             OIDC_SIGNUP_URL only when OIDC is enabled AND the value is an
             absolute http(s) URL; null otherwise (even if the env var is
             set).
+        version:
+          type: string
+          description: >-
+            Server semver, baked in at compile time (CARGO_PKG_VERSION;
+            added 0.6.0). Kept in lockstep with package.json and this
+            document's info.version by scripts/check-version-sync.sh.
+            Normalized to "<VERSION>" in fixtures, like "<TS>" timestamps.
 
     ActivityPage:
       type: object
@@ -2626,3 +2894,267 @@ components:
           type: string
         artist:
           type: string
+
+    LanguagesResponse:
+      type: object
+      required: [languages]
+      properties:
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageInfo"
+      description: >-
+        Object envelope (never a bare array — the six bare-array endpoints
+        are a closed set). Sorted by code ascending; empty when nothing is
+        cached; never includes English.
+
+    LanguageInfo:
+      type: object
+      required: [code, name, native_name, version]
+      properties:
+        code:
+          type: string
+          description: Language code, matches the GET /api/i18n/{code} segment.
+        name:
+          type: string
+          description: English display name (e.g. Spanish).
+        native_name:
+          type: string
+          description: >-
+            Self-name in the language itself (e.g. Español). Raw UTF-8 on
+            the wire, never \uXXXX escapes (contract encoding fact).
+        version:
+          type: string
+          description: Pack semver from the lang-<code>-v<semver> release tag.
+
+    LanguagePack:
+      type: object
+      required: [schema_version, language, name, native_name, version, strings]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          description: >-
+            Envelope format version, pinned integer 1; a future breaking
+            envelope change bumps it.
+        language:
+          type: string
+          description: Language code; equals the {code} path segment.
+        name:
+          type: string
+        native_name:
+          type: string
+        version:
+          type: string
+          description: Pack semver; also the second half of the ETag.
+        strings:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/I18nStringsNode"
+          description: >-
+            NESTED translation tree mirroring the src/i18n/en.json source
+            format: each object key is one segment of the dot-path id and
+            every leaf is a string, so {"nav": {"home": "Inicio"}} carries
+            the id nav.home (owner decision, DECISIONS.md 2026-08-22
+            amendment — nested end-to-end). Clients flatten the tree to
+            dot-keys for lookup; partial packs are legal — the lookup order
+            flat(pack.strings)[key] ?? en[key] ?? key makes missing keys
+            safe. A flat dot-key map is accepted on input as the degenerate
+            nesting (a top-level "nav.home" key flattens identically), but
+            the canonical wire form is nested and the server serves packs
+            exactly as validated. {date}-style interpolation placeholders
+            pass through verbatim. Server-side validation caps the pack at
+            1 MiB and rejects non-string leaves before caching.
+      description: >-
+        Exactly these six keys. schema_version/language/name/native_name/
+        version echo the release asset; strings carries the translations.
+
+    I18nStringsNode:
+      oneOf:
+        - type: string
+        - type: object
+          additionalProperties:
+            $ref: "#/components/schemas/I18nStringsNode"
+      description: >-
+        One node of the nested strings tree: either a translated string
+        (leaf) or a deeper object whose keys are further dot-path segments.
+        Nothing else is legal — arrays, numbers, booleans, and null are
+        rejected anywhere in the tree by server-side validation.
+
+    DataExport:
+      type: object
+      required: [schema_version, exported_at, app_version, data]
+      properties:
+        schema_version:
+          type: integer
+          const: 1
+          description: >-
+            Export format version. Read FIRST by the importer; only a
+            breaking envelope change bumps it (additive fields do not —
+            unknown keys are ignored on import).
+        exported_at:
+          type: string
+          description: >-
+            UTC "YYYY-MM-DD HH:MM:SS" at export time. Informational only —
+            the importer ignores it.
+        app_version:
+          type: string
+          description: >-
+            Server semver (CARGO_PKG_VERSION) that produced the file.
+            Informational only — compatibility is governed by
+            schema_version alone.
+        data:
+          type: object
+          required: [entries, goals]
+          properties:
+            entries:
+              type: array
+              items:
+                $ref: "#/components/schemas/DataExportEntry"
+              description: Ascending by date; empty array on empty accounts.
+            goals:
+              type: array
+              items:
+                $ref: "#/components/schemas/DataExportGoal"
+              description: Creation order; empty array on empty accounts.
+      description: >-
+        The portable v1 envelope — both the GET /api/export/data 200 body
+        and the POST /api/import/data request body. Carries NO ids and NO
+        user_id anywhere (not portable across instances). Normative
+        field-by-field documentation lives in docs/EXPORT-FORMAT.md.
+
+    DataExportEntry:
+      type: object
+      required: [date, mood, content, created_at, updated_at, selections]
+      properties:
+        date:
+          type: string
+          description: >-
+            Stored date string, ISO "YYYY-MM-DD" since the date
+            normalization (DECISIONS.md #4). Half of the import dup key
+            (date, content).
+        mood:
+          type: integer
+          minimum: 1
+          maximum: 5
+        content:
+          type: string
+          description: Markdown body; the other half of the import dup key.
+        created_at:
+          type: string
+          description: >-
+            "YYYY-MM-DD HH:MM:SS" (or the verbatim client-supplied backdate
+            string). Preserved on import via COALESCE(?, CURRENT_TIMESTAMP).
+        updated_at:
+          type: string
+          description: Same format; preserved on import.
+        selections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataExportSelection"
+          description: >-
+            Denormalized by name, ordered by group name then option name
+            (the GET /api/mood/{id}/selections order). Empty array when the
+            entry has no selections.
+
+    DataExportSelection:
+      type: object
+      required: [group_name, option_name]
+      properties:
+        group_name:
+          type: string
+          description: >-
+            Exact group name; import resolves it against the user's groups
+            (idx_groups_user_name unique) or creates it.
+        option_name:
+          type: string
+          description: >-
+            Exact option name within the group; import resolves-or-creates
+            (deduped via a preloaded name cache — group_options has no
+            unique index).
+
+    DataExportGoal:
+      type: object
+      required:
+        - title
+        - description
+        - frequency_per_week
+        - completed
+        - streak
+        - period_start
+        - last_completed_date
+        - created_at
+        - updated_at
+        - completions
+      properties:
+        title:
+          type: string
+          description: The import dup key — a duplicate title skips the whole goal.
+        description:
+          type: [string, "null"]
+          description: >-
+            The API writes a (possibly empty) trimmed string; legacy rows
+            can surface null, exported as-is.
+        frequency_per_week:
+          type: integer
+          minimum: 1
+          maximum: 7
+        completed:
+          type: integer
+          description: >-
+            Current-week completions with the rollover projected at export
+            time. Written raw on import — never recomputed; the rollover
+            projection self-heals stale periods on the next goals read.
+        streak:
+          type: integer
+          description: Consecutive fully-completed weeks; exported raw, imported raw.
+        period_start:
+          type: string
+          description: ISO Monday of the goal's current week as projected at export.
+        last_completed_date:
+          type: [string, "null"]
+          description: ISO date of the latest completion; null until the first log.
+        created_at:
+          type: string
+          description: '"YYYY-MM-DD HH:MM:SS"; preserved on import.'
+        updated_at:
+          type: string
+          description: Same format; preserved on import.
+        completions:
+          type: array
+          items:
+            type: string
+          description: >-
+            Bare ISO "YYYY-MM-DD" strings (NOT the {date} objects of
+            GET /api/goals/{id}/completions), ascending. Imported with
+            INSERT OR IGNORE semantics for a NEW goal; ignored entirely
+            when the goal is skipped as a duplicate.
+
+    DataImportResult:
+      type: object
+      required: [status, entries, goals]
+      properties:
+        status:
+          type: string
+          const: success
+        entries:
+          type: object
+          required: [imported, skipped]
+          properties:
+            imported:
+              type: integer
+            skipped:
+              type: integer
+          description: Per-file-row counts; imported + skipped = rows in the file.
+        goals:
+          type: object
+          required: [imported, skipped]
+          properties:
+            imported:
+              type: integer
+            skipped:
+              type: integer
+          description: Same shape as entries; a skipped goal counts once (whole goal).
+      description: >-
+        POST /api/import/data 200 body — exactly these three keys. Integer
+        counts only; the response never echoes rows or ids.

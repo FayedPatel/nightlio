@@ -1,0 +1,13 @@
+---
+source: src/routes/i18n.rs
+expression: graded
+---
+{
+  "body": "",
+  "content_type": null,
+  "headers": {
+    "Cache-Control": "public, max-age=3600",
+    "ETag": "\"es-1.0.0\""
+  },
+  "status": 304
+}

@@ -1,0 +1,19 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/languages",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "headers_that_matter": {
+      "Cache-Control": "public, max-age=3600"
+    },
+    "body": {
+      "languages": []
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — the i18n routes never existed in Flask; there is no recording, this fixture IS the contract, DECISIONS.md 2026-08-22). Unauthenticated — no Authorization header, no cookie, no 401 path exists on this family. Empty list whenever the server has no packs cached (fresh instance, I18N_OFFLINE=1, or GitHub unreachable with a cold cache): the object envelope with an empty array, never a bare array and never an error. English is NEVER listed by the server even when an en pack is cached — the frontend unions bundled English into the picker itself. Cache-Control only on this endpoint; the languages list carries no ETag (owner decision — the list has no single stable version identity; see DECISIONS.md 2026-08-22)."
+}

@@ -1,0 +1,16 @@
+{
+  "method": "GET",
+  "path": "/api/i18n/xx",
+  "request": {
+    "headers_that_matter": {},
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "content_type": "application/json",
+    "body": {
+      "error": "Resource not found"
+    }
+  },
+  "note": "NEW FAMILY (v0.6.0, hand-authored spec fixture — no Flask recording exists; DECISIONS.md 2026-08-22). A code with no cached pack returns the standard app-level 404 envelope, indistinguishable from any unknown path (grade status + {error} shape, never message text). The {code} segment is an opaque string — no <int:> converter semantics apply; any single path segment reaches the handler and misses the cache. The literal segment \"languages\" is unreachable as a code (the static /api/i18n/languages route wins), which is harmless — no such language code exists. On a cold cache every code 404s, including en; no ETag or Cache-Control on the 404. Unauthenticated."
+}
