@@ -72,7 +72,7 @@ This builds the images from source (the `build:` stanzas) and starts `api`
 on `5000` and `frontend` on `5173`. Set `API_IMAGE` / `WEB_IMAGE` env vars
 instead if you'd rather pull the published GHCR images
 (`ghcr.io/fayedpatel/nightlio-api`, `ghcr.io/fayedpatel/nightlio-frontend`;
-private, needs `docker login ghcr.io` with a `read:packages` token) than
+public, no login needed) than
 build locally — `docker compose up -d` (no `--build`) then uses whichever
 image tag you set, defaulting to `nightlio-api:local` /
 `nightlio-frontend:local` if you built them yourself previously.
