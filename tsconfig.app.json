@@ -6,6 +6,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
+    /* Typed i18n catalog: `keyof typeof en` over src/i18n/en.json. */
+    "resolveJsonModule": true,
     "jsx": "react-jsx",
     "types": ["vite/client", "vite-plugin-pwa/client"],
 

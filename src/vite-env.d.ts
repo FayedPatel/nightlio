@@ -10,3 +10,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Compile-time constant injected via `define` in vite.config.ts (and mirrored
+// in vitest.config.ts): the package.json version string, e.g. "0.6.0".
+declare const __APP_VERSION__: string
+

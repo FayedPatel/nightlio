@@ -28,7 +28,24 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-registerSW({ immediate: true });
+// The browser only re-fetches sw.js on its own schedule (navigation +
+// ~24h cap). Long-lived tabs (installed PWA left open) would otherwise not
+// learn about a deploy for up to a day, so poll for a new worker hourly and
+// whenever the tab becomes visible again. Once a new worker is found, the
+// controllerchange handler above does the actual silent reload.
+registerSW({
+  immediate: true,
+  onRegisteredSW(_url, registration) {
+    if (!registration) return;
+    const checkForUpdate = () => {
+      registration.update().catch(() => {});
+    };
+    setInterval(checkForUpdate, 60 * 60 * 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') checkForUpdate();
+    });
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

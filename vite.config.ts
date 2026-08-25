@@ -70,6 +70,10 @@ const THEME_DARK_BG = '#282a36'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Compile-time app version (mirrored in vitest.config.ts — keep in sync).
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     e2eApiRouter(),
     react(),
