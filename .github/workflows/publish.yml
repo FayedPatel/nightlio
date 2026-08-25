@@ -3,12 +3,11 @@
 # .../nightlio-frontend).
 #
 # Publishing with the workflow's GITHUB_TOKEN links each package to this
-# repository. Because the repository is private, the packages are created
-# private as well — nothing becomes publicly pullable unless the package
-# visibility is changed by hand in the package settings afterwards.
-#
-# Pulling on a server therefore needs a login first:
-#   echo <PAT with read:packages> | docker login ghcr.io -u <user> --password-stdin
+# repository. The repository and both packages are PUBLIC — anyone can
+# `docker pull` them without a GHCR login. (Package visibility does not
+# follow the repository automatically: it was set public by hand in the
+# package settings, and a brand-new package created by this workflow would
+# start private until flipped there again.)
 #
 # Exactly ONE build happens per commit, on the push to main. A release tag
 # (v*) does NOT rebuild: the retag job re-points the semver tag at the

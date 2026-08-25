@@ -40,12 +40,10 @@ docker compose up -d --build
 
 Your instance is now live at http://localhost:5173/.
 
-To pull this fork's prebuilt images instead of building locally, log in to
-GHCR first (the packages are private, so a personal access token with
-`read:packages` is required) and point compose at them:
+To pull this fork's prebuilt images instead of building locally, point
+compose at them — the packages are public, no GHCR login required:
 
 ```bash
-echo <PAT> | docker login ghcr.io -u FayedPatel --password-stdin
 API_IMAGE=ghcr.io/fayedpatel/nightlio-api:latest \
 WEB_IMAGE=ghcr.io/fayedpatel/nightlio-frontend:latest \
 docker compose up -d
