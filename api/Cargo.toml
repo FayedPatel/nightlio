@@ -1,6 +1,6 @@
 [package]
 name = "nightlio-api"
-version = "0.1.0"
+version = "0.6.0"
 edition = "2024"
 # Rust 1.90 is what CI / dev machines have installed.
 rust-version = "1.90"
@@ -8,6 +8,12 @@ rust-version = "1.90"
 # Single source of truth for the whole Rust rewrite's dependency set.
 # Later agents (routes, auth, data layer) must NOT touch this file —
 # everything the port needs is already declared below.
+#
+# v0.6.0 amendment (owner-approved): the frozen set gains the PostgreSQL
+# driver stack — tokio-postgres, deadpool-postgres, and tokio-postgres-rustls
+# (reusing the existing rustls 0.23 stack) — for the opt-in DATABASE_URL
+# backend. Deliberately no ORM: sqlx was rejected because it would replace
+# the hand-written SQL that the byte-parity corpus goldens grade.
 
 [dependencies]
 # HTTP surface
@@ -22,6 +28,19 @@ tokio = { version = "1.53.1", features = ["full"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 r2d2 = "0.8.10"
 r2d2_sqlite = "0.35.0"
+
+# PostgreSQL (opt-in backend selected via DATABASE_URL; SQLite stays the
+# default). Native async driver + pool; TLS reuses the rustls 0.23 stack
+# already pulled in by reqwest.
+tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4", "with-serde_json-1"] }
+deadpool-postgres = "0.14.1"
+tokio-postgres-rustls = "0.13.0"
+# Client-config construction for the connector above: rustls itself (ring
+# provider, matching the feature set reqwest already resolves — deliberately
+# not aws-lc-rs, which would add a second crypto provider) and the bundled
+# web-PKI root store.
+rustls = { version = "0.23.43", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1.0.9"
 
 # Auth / crypto (JWT signing, werkzeug-compatible password hashes, OIDC SSO)
 jsonwebtoken = "9.3.1"

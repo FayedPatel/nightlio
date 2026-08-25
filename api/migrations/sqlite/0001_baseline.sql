@@ -1,0 +1,13 @@
+-- 0001_baseline (SQLite) — intentionally a no-op.
+--
+-- On SQLite the baseline schema is owned by the legacy bootstrap()
+-- (api/src/db/bootstrap.rs): it is the idempotent v0 -> v3 upgrade path for
+-- every database file in the wild, and it must keep producing byte-identical
+-- sqlite_master output (graded by contract/corpus/). The migration runner
+-- therefore never creates the baseline schema on SQLite; it records this
+-- version as an adopted baseline on databases the bootstrap has brought to
+-- PRAGMA user_version = 3 (frozen there forever). Real schema changes start
+-- at 0002.
+--
+-- This file is frozen: its checksum is recorded in schema_migrations at
+-- adoption time, and the runner refuses to start if it ever changes.
