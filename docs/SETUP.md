@@ -125,6 +125,14 @@ SECRET_KEY=change-this-to-a-long-random-string
 JWT_SECRET=change-this-too
 DATABASE_PATH=/app/data/nightlio.db
 
+# Optional PostgreSQL backend (v0.6.0, EXPERIMENTAL; PostgreSQL 16+).
+# Unset/empty keeps the default SQLite backend at DATABASE_PATH. A
+# postgres:// URL switches the main data store to Postgres — a matching
+# compose profile service ships in docker-compose.yml
+# (docker compose --profile postgres up -d). Full walkthrough, TLS notes,
+# and the SQLite-data import flow: docs/POSTGRES.md
+# DATABASE_URL=
+
 # User id assigned to entries created in single-user (self-host) mode
 DEFAULT_SELF_HOST_ID=selfhost_default_user
 
@@ -183,12 +191,25 @@ VITE_API_URL=http://localhost:5000
 | `ENABLE_MOOD_MUSIC` | `1` enables mood-based music recommendations (needs `JAMENDO_CLIENT_ID`). |
 | `JAMENDO_CLIENT_ID` | Jamendo API client id, only read when mood music is enabled. |
 | `DEFAULT_SELF_HOST_ID` | User id for entries created in single-user self-hosted mode. |
+| `DATABASE_URL` | Database backend selector (v0.6.0, experimental): unset/empty keeps the default SQLite file; a `postgres://…` URL switches the api to PostgreSQL 16+. See [docs/POSTGRES.md](POSTGRES.md). |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Only read by the bundled `postgres` compose profile (they configure its server container, not the api). `POSTGRES_PASSWORD` is required when that profile is active; db/user default to `nightlio`. |
 | `APP_ENV` | Environment selector (`production` / `development`). Replaces `RAILWAY_ENVIRONMENT`, which is still honored as a fallback. |
 | `CORS_ORIGINS` | Comma-separated allowed origins. Must match the public origin your users actually hit. |
 | `FRONTEND_URL` | Only needed if the frontend is served from a different origin than the api. |
 | `TRUST_PROXY_HEADERS` | `1` only if the api sits behind a **trusted** reverse proxy. |
 | `API_IMAGE` / `WEB_IMAGE` | Pull published images instead of building from source. |
 | `POCKET_ID_ENCRYPTION_KEY` | Required only when running the optional `oidc` compose profile; ≥ 16 bytes, `openssl rand -hex 32`. |
+| `I18N_GITHUB_REPO` | `owner/repo` whose `lang-<code>-vX.Y.Z` releases carry language packs. Default `FayedPatel/nightlio`. |
+| `I18N_GITHUB_API_BASE` | GitHub API base URL for language-pack discovery. Default `https://api.github.com`. |
+| `I18N_REFRESH_SECS` | Seconds between language-pack discovery refreshes. Default `3600`. |
+| `I18N_OFFLINE` | `1` never contacts GitHub for language packs; serves only what the disk cache already holds. |
+| `I18N_LOCAL_DIR` | Directory of `<code>.json` language-pack files served straight from disk (air-gapped mode; takes precedence over GitHub discovery entirely). |
+| `I18N_GITHUB_TOKEN` | Optional GitHub token for pack discovery (raises the unauthenticated 60 requests/hour API limit). |
+
+The `I18N_*` group configures runtime language packs and is entirely
+optional — bundled English works with zero configuration. The self-hoster
+guide, including air-gapped setups and how new languages get added, is
+[`I18N.md`](I18N.md).
 
 ### Ports
 

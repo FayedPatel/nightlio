@@ -20,6 +20,11 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:5000}
       - DEFAULT_SELF_HOST_ID=${DEFAULT_SELF_HOST_ID:-selfhost_default_user}
       - DATABASE_PATH=/app/data/nightlio.db
+      # Optional PostgreSQL backend (v0.6.0, EXPERIMENTAL): set DATABASE_URL
+      # in .env to point at the postgres profile service below (see
+      # docs/POSTGRES.md). Unset/empty keeps the default SQLite backend at
+      # DATABASE_PATH — existing deployments change nothing.
+      - DATABASE_URL=${DATABASE_URL:-}
       - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
@@ -33,6 +38,15 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-}
       - ENABLE_MOOD_MUSIC=${ENABLE_MOOD_MUSIC:-0}
       - JAMENDO_CLIENT_ID=${JAMENDO_CLIENT_ID:-}
+      # Language packs / i18n — all optional, and empty-safe: the api treats
+      # empty values as unset and falls back to its own defaults, so bundled
+      # English always works with nothing set. See docs/I18N.md.
+      - I18N_GITHUB_REPO=${I18N_GITHUB_REPO:-}
+      - I18N_GITHUB_API_BASE=${I18N_GITHUB_API_BASE:-}
+      - I18N_REFRESH_SECS=${I18N_REFRESH_SECS:-}
+      - I18N_OFFLINE=${I18N_OFFLINE:-}
+      - I18N_LOCAL_DIR=${I18N_LOCAL_DIR:-}
+      - I18N_GITHUB_TOKEN=${I18N_GITHUB_TOKEN:-}
       - PORT=5000
     volumes:
       - nightlio_data:/app/data
@@ -132,6 +146,50 @@ services:
       timeout: 3s
       retries: 3
 
+  # PostgreSQL: optional, EXPERIMENTAL database backend for the api
+  # (v0.6.0). SQLite on the nightlio_data volume stays the default and the
+  # only e2e-graded backend; nothing changes unless you opt in.
+  # PostgreSQL 16+ is required (the schema uses pg_input_is_valid).
+  #
+  # Opt in (full walkthrough in docs/POSTGRES.md):
+  # 1. In .env set:
+  #      POSTGRES_PASSWORD=<openssl rand -hex 32>
+  #      DATABASE_URL=postgres://nightlio:<that password>@postgres:5432/nightlio?sslmode=disable
+  # 2. docker compose --profile postgres up -d
+  #    (No depends_on on purpose — a profile-gated dependency would break
+  #    the base `docker compose up`. On the first combined start the api may
+  #    exit once while postgres initializes; restart: unless-stopped
+  #    retries and it converges.)
+  # On first boot the api creates the schema itself (migration
+  # 0001_baseline); moving existing SQLite data into it is what the
+  # `nightlio-api migrate-to-postgres` flow in docs/POSTGRES.md is for.
+  postgres:
+    # Same gating pattern as pocket-id above: no profile, never starts.
+    profiles: ["postgres"]
+    image: postgres:16-alpine
+    container_name: nightlio-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-nightlio}
+      - POSTGRES_USER=${POSTGRES_USER:-nightlio}
+      # Required when this profile is active; generate with:
+      #   openssl rand -hex 32
+      # Deliberately NOT ${...:?}: compose evaluates required-variable
+      # interpolation at parse time for every service, profile-gated or not,
+      # so :? here would break the base `docker compose up` for everyone.
+      # Left empty, the postgres image itself refuses to start with a clear
+      # "superuser password is not specified" error.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+    volumes:
+      - nightlio_pg_data:/var/lib/postgresql/data
+    networks:
+      - nightlio-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nightlio} -d ${POSTGRES_DB:-nightlio}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   nightlio-network:
     driver: bridge
@@ -140,4 +198,6 @@ volumes:
   nightlio_data:
     driver: local
   pocket_id_data:
+    driver: local
+  nightlio_pg_data:
     driver: local
