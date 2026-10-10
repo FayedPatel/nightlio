@@ -147,6 +147,8 @@ export interface CreateMoodEntryRequest {
   time?: string | null;
   /** Group option ids to attach; null is treated as []. */
   selected_options?: number[] | null;
+  /** Per-editor-mount id (1..64 chars, else ignored) grouping autosaves into one activity row. */
+  edit_session?: string;
 }
 
 export type AchievementType =
@@ -176,6 +178,8 @@ export interface UpdateMoodEntryRequest {
   time?: string | null;
   /** REPLACES all selections; null clears them (treated as []). */
   selected_options?: number[] | null;
+  /** Same as CreateMoodEntryRequest.edit_session; alone it is not an update field (still 400). */
+  edit_session?: string;
 }
 
 /**
@@ -383,8 +387,16 @@ export interface ActivityEvent {
    * achievement_unlocked, goal_completed. Open set — treat as string.
    */
   event_type: string;
-  /** Parsed JSON blob; null when absent or malformed. Shape varies by event_type. */
+  /**
+   * Parsed JSON blob; null when absent or malformed. Shape varies by event_type.
+   * Entry events are one row per editing session:
+   * - entry_created: {entry_id, date, edit_session?, last_saved_at?}
+   * - entry_edited: {entry_id, edit_session?, last_saved_at?}
+   * For those, created_at is the session start and last_saved_at the session
+   * end (UTC "YYYY-MM-DD HH:MM:SS"; absent for a single-save session).
+   */
   metadata: Record<string, unknown> | null;
+  /** Session start for entry_created / entry_edited rows. */
   created_at: SqliteTimestamp;
 }
 

@@ -142,6 +142,15 @@ const EntryView = ({
   const createdByAutosaveRef = useRef(false);
   const skipAutosaveFlushRef = useRef(false);
   const selectedMoodRef = useRef(selectedMood);
+  // One id per editor mount groups its autosaves into one activity row.
+  // Not crypto.randomUUID: it is missing on plain-HTTP self-hosts.
+  const editSessionRef = useRef(Math.random().toString(36).slice(2));
+  // Entry id last hydrated (null = new entry, undefined = none yet). The
+  // hydration effect re-runs on burner toggles and on every navigate (React
+  // Router clones location.state, so a mood change hands over a new
+  // editingEntry object); hydrating again from that stale copy reverted
+  // unsaved text. Burner toggles reset to the last save in their own effect.
+  const hydratedEntryIdRef = useRef<number | null | undefined>(undefined);
 
   const { show } = useToast();
   const { isBurnerMode } = useBurner();
@@ -167,6 +176,10 @@ const EntryView = ({
   }, [selectedMood]);
 
   useEffect(() => {
+    const hydrateId = isEditing && editingEntry ? editingEntry.id : null;
+    if (hydratedEntryIdRef.current === hydrateId) return;
+    hydratedEntryIdRef.current = hydrateId;
+
     if (isEditing && editingEntry) {
       createdByAutosaveRef.current = false;
       skipAutosaveFlushRef.current = false;
@@ -243,6 +256,30 @@ const EntryView = ({
     }
   }, [isBurnerMode, saveState, clearAutosaveTimer]);
 
+  // A burner toggle drops unsaved text: the editor returns to its last saved
+  // state, so words typed with burner on are never autosaved once it is off.
+  const burnerModeRef = useRef(isBurnerMode);
+  useEffect(() => {
+    if (burnerModeRef.current === isBurnerMode) return;
+    burnerModeRef.current = isBurnerMode;
+
+    const saved = JSON.parse(lastSavedSnapshotRef.current || '{}') as {
+      content?: string;
+      selected_options?: number[];
+      date?: string | null;
+    };
+    const content = saved.content ?? '';
+    setMarkdownContent(content);
+    setSelectedOptions(saved.selected_options ?? []);
+    if (saved.date) setEntryDate(saved.date);
+
+    isHydratingEditorRef.current = true;
+    markdownRef.current?.getInstance?.()?.setMarkdown(content);
+    queueMicrotask(() => {
+      isHydratingEditorRef.current = false;
+    });
+  }, [isBurnerMode]);
+
   const executeAutosave = useCallback(
     async (payload: AutosavePayload, snapshot: string, silentError = false): Promise<boolean> => {
       if (isBurnerMode) return false;
@@ -262,7 +299,7 @@ const EntryView = ({
           // gate in the autosave effect, so mood is a real MoodValue here.
           const response = await apiService.updateMoodEntry(
             activeEntryIdRef.current,
-            payload as UpdateMoodEntryRequest,
+            { ...payload, edit_session: editSessionRef.current } as UpdateMoodEntryRequest,
           );
           const updatedEntry: EntryUpsert = response?.entry
             ? {
@@ -288,6 +325,7 @@ const EntryView = ({
             ...payload,
             date: payload.date || todayISO(),
             time: now.toISOString(),
+            edit_session: editSessionRef.current,
           };
 
           // Same invariant cast as above: mood is non-null whenever a save

@@ -25,7 +25,7 @@ openapi: 3.1.0
 
 info:
   title: Nightlio API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Wire contract for the Nightlio Rust API (api/src/routes/*.rs). The golden
     fixtures it is cross-checked against were recorded against live instances
@@ -495,7 +495,8 @@ paths:
       summary: Partially update an entry; returns the updated record WITH selections.
       description: >-
         All fields optional but at least one of mood/content/date/time/
-        selected_options must be present. selected_options, when present,
+        selected_options must be present (edit_session does not count).
+        selected_options, when present,
         REPLACES the entry's selections (null is treated as []). "time", when
         present and truthy, overwrites the row's created_at column verbatim
         (backdating mechanism).
@@ -1568,7 +1569,14 @@ paths:
         otherwise it is the last row's id
         when the page length equals the clamped limit, else null — a full
         FINAL page still yields a non-null cursor whose follow-up page is
-        {"activities": [], "next_cursor": null}.
+        {"activities": [], "next_cursor": null}. Entry activity is grouped at
+        write time, one row per editing session: a PUT /api/mood/{id} updates
+        the user's newest entry_created/entry_edited row (bumping
+        metadata.last_saved_at) instead of inserting a new entry_edited row
+        when that row has the same entry_id, the same edit_session (or both
+        absent) and its last activity (last_saved_at, else created_at) is
+        within the last 30 minutes. POST /api/mood always inserts a fresh
+        entry_created row.
       security:
         - bearerAuth: []
         - cookieAuth: []
@@ -2142,6 +2150,14 @@ components:
           items: { type: integer }
           default: []
           description: Group option ids to attach; null is treated as [].
+        edit_session:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            Optional opaque id, one per editor mount, used only to group
+            autosaves into a single activity row (see ActivityEvent). Empty,
+            longer-than-64 or non-string values are ignored, not rejected.
 
     CreateMoodResponse:
       type: object
@@ -2214,6 +2230,15 @@ components:
           type: [array, "null"]
           items: { type: integer }
           description: REPLACES all selections; null clears them (treated as []).
+        edit_session:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: >-
+            Same as CreateMoodRequest.edit_session; ignored (not rejected)
+            when empty, longer than 64 or not a string. NOT an update field:
+            a body carrying only edit_session still 400s "No update fields
+            provided".
 
     UpdateMoodResponse:
       type: object
@@ -2878,11 +2903,18 @@ components:
           description: >-
             Parsed JSON blob; null when absent or when the stored blob is
             malformed (server logs and nulls it). Shape varies by
-            event_type, e.g. {method} for login, {date, entry_id} for
-            entry_created, {achievement_type} for achievement_unlocked.
+            event_type, e.g. {method} for login, {achievement_type} for
+            achievement_unlocked. Entry events: entry_created carries
+            {entry_id, date, edit_session?, last_saved_at?}; entry_edited
+            carries {entry_id, edit_session?, last_saved_at?}. last_saved_at
+            is the editing session's last save as UTC "YYYY-MM-DD HH:MM:SS",
+            absent until a second save is folded into the row.
         created_at:
           type: string
-          description: SQLite DATETIME "YYYY-MM-DD HH:MM:SS" (UTC, no zone suffix).
+          description: >-
+            SQLite DATETIME "YYYY-MM-DD HH:MM:SS" (UTC, no zone suffix). For
+            entry_created / entry_edited rows this is the editing session's
+            start.
 
     MusicTrack:
       type: object

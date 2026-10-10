@@ -8,18 +8,29 @@ test('header button cycles through all four themes and persists', async ({ page 
   await expect(html).toHaveAttribute('data-theme', 'default');
 
   const toggle = page.getByLabel('Toggle theme');
+  // Each theme has its own toggle icon and a translated title.
+  const expectToggle = async (title: string, icon: string) => {
+    await expect(toggle).toHaveAttribute('title', `Theme: ${title}`);
+    await expect(toggle.locator(`svg.lucide-${icon}`)).toBeVisible();
+  };
+  await expectToggle('Default', 'moon');
   await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'light');
+  await expectToggle('Light', 'sun');
   await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'dark');
+  await expectToggle('Dark', 'moon-star');
   await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'synthwave');
+  await expectToggle('Synthwave', 'sparkles');
 
   await page.reload();
   await expect(html).toHaveAttribute('data-theme', 'synthwave');
+  await expectToggle('Synthwave', 'sparkles');
 
-  await page.getByLabel('Toggle theme').click();
+  await toggle.click();
   await expect(html).toHaveAttribute('data-theme', 'default');
+  await expectToggle('Default', 'moon');
 });
 
 test('settings theme picker saves the choice to the account', async ({ page, request, apiPort }) => {

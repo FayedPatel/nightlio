@@ -61,14 +61,17 @@ check):
    substitute placeholders; apply the same substitutions to the candidate's
    output:
    - JWTs -> `<JWT>`; HTTP dates in Set-Cookie -> `<TS>`
-   - `created_at` / `updated_at` / `earned_at` -> `<TS>`
-   - the `version` field in `/api/config` -> `<VERSION>` (substituted with the
+   - `created_at` / `updated_at` / `earned_at` / `exported_at`, and the
+     `time` / `timestamp` fields of `/api/time` / `/api/` -> `<TS>`
+   - the `version` field in `/api/config` and `app_version` in
+     `GET /api/export/data` -> `<VERSION>` (substituted with the
      live `CARGO_PKG_VERSION` by `config_matches_fixture` in
-     `api/tests/shell_router.rs` — future version bumps never touch the
-     fixture; see the 2026-08-22 `DECISIONS.md` entry)
+     `api/tests/shell_router.rs` and by `api/tests/data_routes.rs` — future
+     version bumps never touch the fixtures; see the 2026-08-22
+     `DECISIONS.md` entry)
    - streak seed dates -> `<TODAY>` / `<YESTERDAY>`
    - current-month digest fields -> `<CURRENT_YEAR>` / `<CURRENT_MONTH>`
-   - bare `YYYY-MM-DD` values in goals fixtures -> `<DATE>`
+   - bare `YYYY-MM-DD` values in goals and data fixtures -> `<DATE>`
    - **Autoincrement ids are kept verbatim in fixtures but must NOT be graded
      exactly.** The self-host login upsert burns rowids on every conflict,
      and a fresh DB is pre-seeded (3 default groups / 27 options; first

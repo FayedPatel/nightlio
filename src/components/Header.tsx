@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Flame, LogOut, Sun, Moon } from 'lucide-react';
+import { Flame, LogOut, Moon } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useConfig } from '../contexts/ConfigContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, THEMES } from '../contexts/ThemeContext';
 import { useBurner } from '../contexts/BurnerContext';
 import { useToast } from './ui/ToastProvider';
 import type { MoodEntry } from '../types/api';
@@ -85,6 +85,7 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
   const { user, logout } = useAuth();
   useConfig();
   const { theme, cycle } = useTheme();
+  const ThemeIcon = THEMES.find((option) => option.id === theme)?.icon ?? Moon;
   const { isBurnerMode, toggleBurnerMode } = useBurner();
   const { show } = useToast();
   const [showAvatar, setShowAvatar] = useState(true);
@@ -163,10 +164,10 @@ const Header = ({ currentStreak, pastEntries, onSearch, showSearch = true }: Hea
               type="button"
               onClick={cycle}
               className="header__button header__iconButton"
-              title={t('common.themeTitle', { theme })}
+              title={t('common.themeTitle', { theme: t(`settings.theme.${theme}`) })}
               aria-label={t('common.toggleThemeAria')}
             >
-              {theme === 'light' ? <Moon size={14} strokeWidth={2} /> : <Sun size={14} strokeWidth={2} />}
+              <ThemeIcon size={14} strokeWidth={2} />
             </button>
 
             <button

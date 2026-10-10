@@ -11,7 +11,10 @@ the Python bootstrap, which no longer exists in the tree — the Flask API was
 deleted in the Rust rewrite. Regenerating them would mean checking out a
 pre-rewrite commit and running the script there; `build_corpus.py` is kept in
 this directory for reference (it documents exactly how each snapshot was built
-and how the dumps are normalized), not as a runnable step.
+and how the dumps are normalized), not as a runnable step. The one later edit
+was the owner-approved 2026-08-16 re-pin (`contract/DECISIONS.md`): the
+expected outputs gained the `user_metrics.last_view_date` column of the v3
+schema, which the Python bootstrap never produced.
 
 (For the record of how they were produced: the script removed and rebuilt the
 generated `.db`/`.pragmas.txt`/`.counts.txt` files, leaving this README and
@@ -26,7 +29,7 @@ count dumps are.)
 | File | What it is |
 |------|------------|
 | `fresh.db` | `init_database` run on an empty path. Current schema, seeded self-host user (`users.id = 1`, `google_id = 'selfhost_default_user'`), 3 default groups with 27 options. |
-| `legacy-groups.db` | **Input, pre-migration.** Pre-Phase-2a schema built with raw SQL (mirrors `_build_old_populated_db` in `api/tests/test_schema_migrations.py`): `users` keyed only by `google_id` (no `auth_provider`/`external_id`/`password_hash`/`theme_preference`), `groups` with a global inline `UNIQUE(name)` and **no `user_id` column**, `goals` without `last_completed_date`, no `activity_log` table. Populated: 2 users, 4 groups (the 3 defaults plus "Workout"), 5 options, 3 mood entries, 4 selections, 1 goal, 1 completion, 1 achievement, 1 user_metrics row. Exercises the groups-rebuild (create-new/copy/drop/rename) and ownerless-backfill path. |
+| `legacy-groups.db` | **Input, pre-migration.** Pre-Phase-2a schema built with raw SQL (mirrors `_build_old_populated_db` in the since-deleted `api/tests/test_schema_migrations.py`): `users` keyed only by `google_id` (no `auth_provider`/`external_id`/`password_hash`/`theme_preference`), `groups` with a global inline `UNIQUE(name)` and **no `user_id` column**, `goals` without `last_completed_date`, no `activity_log` table. Populated: 2 users, 4 groups (the 3 defaults plus "Workout"), 5 options, 3 mood entries, 4 selections, 1 goal, 1 completion, 1 achievement, 1 user_metrics row. Exercises the groups-rebuild (create-new/copy/drop/rename) and ownerless-backfill path. |
 | `legacy-groups.migrated.db` | **Expected output.** A copy of `legacy-groups.db` after running the Python bootstrap once. |
 | `half-migrated.db` | **Input, partially migrated.** Current schema with two pieces missing: `users.theme_preference` dropped and the `idx_users_provider_external` unique index dropped. User 2 additionally has `auth_provider`/`external_id` NULL, so the identity backfill must run. Populated with mood entries, selections, a goal, a completion, an achievement, metrics, and 3 activity_log rows. Simulates a production DB migrated by an older build. |
 | `half-migrated.migrated.db` | **Expected output.** A copy of `half-migrated.db` after running the Python bootstrap once. |

@@ -174,7 +174,10 @@ test.beforeAll(async () => {
   await wipeEntries();
   await wipeGoals();
   for (const e of ENTRIES) {
-    await seedEntry({ date: isoDaysAgo(e.day), mood: e.mood, content: e.content });
+    // Explicit instants (a few hours before now, `day` days back) so the cards
+    // show sensible local times, like entries written in the editor.
+    const time = new Date(Date.now() - e.day * 86_400_000 - 3 * 3_600_000).toISOString();
+    await seedEntry({ date: isoDaysAgo(e.day), mood: e.mood, content: e.content, time });
   }
   const { ctx, headers } = await apiContext();
   for (const g of GOALS) {

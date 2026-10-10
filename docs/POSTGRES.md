@@ -158,6 +158,10 @@ Its guarantees:
 
 Recommended order: stop the api, run the import, set `DATABASE_URL`, start
 the api. Keep the SQLite file (or a copy) — it is your rollback path.
+If the SQLite file was last served by a release before v0.7.0, start the
+current release against it once before importing; otherwise its activity
+rows arrive unconsolidated (cosmetic only — see
+[docs/MIGRATIONS.md](MIGRATIONS.md#shipped-migrations)).
 
 ## Demo stack with fake data
 

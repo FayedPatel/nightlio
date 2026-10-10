@@ -56,17 +56,20 @@ export interface SeedEntryParams {
   date: string;
   mood?: MoodValue;
   content?: string;
+  // ISO instant stored as created_at; omitted, the server stamps UTC without a zone.
+  time?: string;
 }
 
 export const seedEntry = async ({
   date,
   mood = 3,
   content = 'Seeded entry.',
+  time,
 }: SeedEntryParams): Promise<CreateMoodEntryResponse> => {
   const { ctx, headers } = await apiContext();
   const resp = await ctx.post('/api/mood', {
     headers,
-    data: { mood, date, content, selected_options: [] },
+    data: { mood, date, content, time, selected_options: [] },
   });
   if (resp.status() !== 201) {
     throw new Error(`seed failed: ${resp.status()} ${await resp.text()}`);

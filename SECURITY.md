@@ -1,10 +1,10 @@
 # Security
 
-Nightlio is designed to be self-hosted: a single Rust (Axum) binary backed by one SQLite file,
-with a static frontend served by nginx, optionally exposed to the internet through a reverse
-proxy or tunnel with OIDC login. The threat model below is written with that deployment shape
-in mind — one operator running one instance for themselves or a small group, not a
-multi-tenant SaaS.
+Nightlio is designed to be self-hosted: a single Rust (Axum) binary backed by one SQLite file
+(or, opt-in, a PostgreSQL database), with a static frontend served by nginx, optionally
+exposed to the internet through a reverse proxy or tunnel with OIDC login. The threat model
+below is written with that deployment shape in mind — one operator running one instance for
+themselves or a small group, not a multi-tenant SaaS.
 
 Concretely, that means:
 
@@ -30,21 +30,23 @@ trusted.
 ### Secrets and startup
 
 * **Weak signing keys are rejected, not warned about.** `is_weak_secret()`
-  (`api/src/config.rs:82-98`) rejects a value that is missing, blank, one of 11 known
-  placeholder strings (`api/src/config.rs:61-73` — every placeholder that has ever shipped in
+  (`api/src/config.rs:108-124`) rejects a value that is missing, blank, one of 11 known
+  placeholder strings (`api/src/config.rs:87-99` — every placeholder that has ever shipped in
   an example env file or compose file, including the old hardcoded default), or shorter than
-  `MIN_SECRET_LENGTH` = 16 characters (`api/src/config.rs:78`).
+  `MIN_SECRET_LENGTH` = 16 characters (`api/src/config.rs:104`).
 * **Production refuses to start on a weak key.** `Config::validate_production_secrets()`
-  (`api/src/config.rs:318-331`) checks `SECRET_KEY` *and* `JWT_SECRET` and bails with
+  (`api/src/config.rs:406-419`) checks `SECRET_KEY` *and* `JWT_SECRET` and bails with
   "Refusing to start: …" plus an `openssl rand -hex 32` hint. It is called from
-  `api/src/main.rs:34` before the runtime is even built, so the process exits non-zero and the
+  `api/src/main.rs:89` before the runtime is even built, so the process exits non-zero and the
   container fails visibly instead of serving traffic with a forgeable key. The check is
   production-only (`APP_ENV=production`); see "Risk-accepted items".
 * **Compose refuses to start too.** `docker-compose.yml:16-17` uses
   `${SECRET_KEY:?…}` / `${JWT_SECRET:?…}`, so `docker compose up` fails before the container
   exists if `.env` doesn't set them. `APP_ENV=production` is hardcoded for the api service
   (`docker-compose.yml:12`), so the in-app check always applies to the compose path.
-  `POCKET_ID_ENCRYPTION_KEY` has the same `:?` guard (`docker-compose.yml:115`).
+  `POCKET_ID_ENCRYPTION_KEY` is not guarded that way, because compose checks `:?` even for
+  profile-gated services; left empty, Pocket ID itself refuses to start
+  (`docker-compose.yml:127-133`).
 * **The env templates ship blank, not placeholder, secrets.** `SECRET_KEY=` / `JWT_SECRET=`
   in `.env.example` and `.env.docker` — copying a template verbatim fails loudly at startup
   rather than silently signing tokens with a value that is public in this repository.
@@ -67,10 +69,10 @@ trusted.
   changed; the host mapping (`5173:8080`) is unaffected.
 * **The healthcheck needs no extra tooling.** The image ships no python and no curl; the
   binary answers its own check via `nightlio-api --health-check`
-  (`api/Dockerfile:119-120`, `docker-compose.yml:48`), so the attack surface isn't widened by
+  (`api/Dockerfile:119-120`, `docker-compose.yml:62`), so the attack surface isn't widened by
   a shell utility that exists only for the healthcheck.
 * **Pocket ID is opt-in and loopback-only.** The bundled OIDC provider sits behind
-  `profiles: ["oidc"]` (`docker-compose.yml:106`), so a plain `docker compose up` never starts
+  `profiles: ["oidc"]` (`docker-compose.yml:120`), so a plain `docker compose up` never starts
   it, and its port is published as `127.0.0.1:1411:1411` — not reachable from the network.
   Before this, the service had no gate at all: it started on every `up`, forced every fresh
   clone to set `POCKET_ID_ENCRYPTION_KEY` just to bring up the base stack, and exposed Pocket
@@ -81,7 +83,7 @@ root-run image, its files are still owned by uid 0 and the unprivileged user can
 them. Fix an existing volume once with:
 
 ```sh
-docker run --rm -v nightlio_data:/data alpine chown -R 1000:1000 /data
+docker compose run --rm --user root api chown -R 1000:1000 /app/data
 ```
 
 A fresh volume needs no action.
@@ -113,12 +115,12 @@ A fresh volume needs no action.
   (PHC format, RustCrypto defaults, 16-byte OS-random salt —
   `api/src/auth/password.rs:184-237`). Legacy Werkzeug `scrypt`/`pbkdf2` rows still verify
   (constant-time comparison) and are transparently re-stored as argon2id right after a
-  successful login (`api/src/routes/auth.rs:409-421`), on the blocking pool. A rehash or
+  successful login (`api/src/db/store/users.rs:72-132`), on the blocking pool. A rehash or
   persist failure logs a warning and **never** fails the login — the legacy hash simply stays
   until next time.
 * **SSO configured ⇒ local login disabled by default.** With `OIDC_ISSUER_URL` set and
   `DISABLE_LOCAL_LOGIN` unset, `/api/config` reports `enable_local_login: false` and local
-  login answers 403 (`api/src/config.rs:264-272`). An explicit `0`/`1` always wins. The
+  login answers 403 (`api/src/config.rs:315-323`). An explicit `0`/`1` always wins. The
   default fails toward the stricter posture: turning on SSO does not silently leave a password
   door open.
 * **Login/register rate limiting.** A sliding 60-second window, 30/min for
@@ -139,37 +141,37 @@ A fresh volume needs no action.
 ### Network and headers
 
 * **CORS defaults are localhost-only.** `http://localhost:5173,http://localhost:5000`
-  (`api/src/config.rs:46-51`). The inherited Flask default granted *credentialed* cross-origin
+  (`api/src/config.rs:59-64`). The inherited Flask default granted *credentialed* cross-origin
   access to a third-party domain (`https://nightlio.vercel.app`) on any deployment that never
   set `CORS_ORIGINS` — that grant is gone. Public deployments must set `CORS_ORIGINS`
   explicitly.
 * **Security headers are stamped on every response.** `X-Frame-Options: DENY`,
   `X-Content-Type-Options: nosniff`, `X-XSS-Protection: 1; mode=block`, and
-  `Referrer-Policy: strict-origin-when-cross-origin` (`api/src/routes/mod.rs:126-145`). They
-  are layered **outside** the CORS layer (`api/src/routes/mod.rs:108-112`), so they also cover
+  `Referrer-Policy: strict-origin-when-cross-origin` (`api/src/routes/mod.rs:156-174`). They
+  are layered **outside** the CORS layer (`api/src/routes/mod.rs:138-142`), so they also cover
   404s, 405s, redirects, and CORS preflights — the responses that header middleware most often
   misses.
 * **CSP in production.** A `default-src 'self'` policy with `frame-src 'none'`
-  (`api/src/routes/mod.rs:65-70`), applied only when `APP_ENV=production`
-  (`api/src/routes/mod.rs:147-153`). See "Risk-accepted items" for the `'unsafe-inline'`
+  (`api/src/routes/mod.rs:71-76`), applied only when `APP_ENV=production`
+  (`api/src/routes/mod.rs:177-182`). See "Risk-accepted items" for the `'unsafe-inline'`
   caveat.
 * **Proxy headers are opt-in.** The `X-Forwarded-*` handling middleware is only installed
-  when `TRUST_PROXY_HEADERS` is truthy (`api/src/routes/mod.rs:158-162`), and consumes one
+  when `TRUST_PROXY_HEADERS` is truthy (`api/src/routes/mod.rs:188-192`), and consumes one
   value from the *right* of each header — the value the trusted proxy appended, not one a
   client injected. Without a stripping proxy in front, these headers are client-controlled,
   so the default is to ignore them.
 * **Configured URLs are scheme-checked.** `OIDC_SIGNUP_URL` flows into an `<a href>` on the
-  login page, so `safe_http_url()` (`api/src/config.rs:116-131`) accepts only absolute
+  login page, so `safe_http_url()` (`api/src/config.rs:142-157`) accepts only absolute
   `http`/`https` URLs with a non-empty host; `javascript:`, `file:`, and friends are dropped
   with a warning.
 
 ### Data
 
-* One SQLite file, opened with `foreign_keys=ON` and a 5-second busy timeout
-  (`api/src/db/common.rs:170-171; WAL bounds at :174-213`). WAL is enabled but **bounded**:
-  `journal_size_limit=4194304` truncates the `-wal` file back to ≤4 MiB after checkpoints, and
-  `wal_checkpoint(TRUNCATE)` runs after bootstrap and on graceful shutdown — the log cannot
-  grow without limit and disappears on a clean stop.
+* One SQLite file (the default backend), opened with `foreign_keys=ON` and a 5-second busy
+  timeout (`api/src/db/common.rs:170-171; WAL bounds at :174-204`). WAL is enabled but
+  **bounded**: `journal_size_limit=4194304` truncates the `-wal` file back to ≤4 MiB after
+  checkpoints, and `wal_checkpoint(TRUNCATE)` runs after bootstrap and on graceful shutdown —
+  the log cannot grow without limit and disappears on a clean stop.
 * Every per-user read and write carries its ownership predicate **in the SQL**
   (`WHERE user_id = ?`), rather than filtering after the fetch, so a missing check is a query
   that returns nothing rather than a query that leaks another user's row.
@@ -211,7 +213,7 @@ for finding 1, repeated here for convenience — old volumes created by a root-r
 once:
 
 ```sh
-docker run --rm -v nightlio_data:/data alpine chown -R 1000:1000 /data
+docker compose run --rm --user root api chown -R 1000:1000 /app/data
 ```
 
 The audit's one risk-accepted follow-up — `/api/export/pdf` having no auth — was closed on
@@ -222,16 +224,16 @@ The audit's one risk-accepted follow-up — `/api/export/pdf` having no auth —
 Known, deliberate, and documented rather than fixed. Each is a trade-off, not an oversight.
 
 * **The dev secret fallback still exists in source, scoped to non-production.**
-  `DEV_SECRET_KEY` (`api/src/config.rs:55`) is the last resort of the signing-key chain
+  `DEV_SECRET_KEY` (`api/src/config.rs:68`) is the last resort of the signing-key chain
   (`JWT_SECRET` → `JWT_SECRET_KEY` legacy alias → `SECRET_KEY` → fallback,
-  `api/src/config.rs:249-255`) so local development and the test suite work with no `.env` at
+  `api/src/config.rs:300-306`) so local development and the test suite work with no `.env` at
   all. Production can never reach it: `validate_production_secrets()` classifies it as weak and
   refuses to boot. Accepted because the production path is the one exposed to the internet —
   but it does mean anyone running `APP_ENV=development` on a reachable network is signing
   tokens with a value published in this repository. Don't do that.
 
 * **The production CSP carries `'unsafe-inline'` in `script-src` and `style-src`**
-  (`api/src/routes/mod.rs:65-70`). The Vite/React build emits inline styles and an inline
+  (`api/src/routes/mod.rs:71-76`). The Vite/React build emits inline styles and an inline
   bootstrap script, so a strict policy would need nonce or hash plumbing through the nginx
   layer. This meaningfully weakens the CSP's XSS mitigation value; the rest of the policy
   (`default-src 'self'`, `connect-src 'self'`, `frame-src 'none'`) still holds, and the API
@@ -247,7 +249,7 @@ Known, deliberate, and documented rather than fixed. Each is a trade-off, not an
   own instance. Login still requires a correct password; the limiter only slows guessing.
 
 * **Compose publishes the API on all host interfaces** (`5000:5000`,
-  `docker-compose.yml:42`). The frontend proxies `/api/` internally over the compose network,
+  `docker-compose.yml:56`). The frontend proxies `/api/` internally over the compose network,
   so operators who only expose the frontend can narrow this to `127.0.0.1:5000:5000` and lose
   nothing. Left as-is because direct API access is genuinely useful (scripts, mobile clients,
   debugging) and the API enforces its own authentication either way. Documented, not changed —

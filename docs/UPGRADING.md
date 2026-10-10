@@ -5,6 +5,105 @@ what changes, why your data is safe, and the exact commands to run. Sections
 are newest-first; older sections are kept as history for anyone upgrading
 across several versions.
 
+## Upgrading v0.6.x → v0.7.0
+
+The upgrade itself is the standard `git pull` / `docker compose up -d --build`
+flow, but this release runs a **one-time, irreversible data migration**, so
+take a backup first. What to expect:
+
+- **Migration `0002_consolidate_entry_activity` runs automatically on first
+  start.** Older releases logged one activity row per autosave, so Settings →
+  Recent activity filled up with identical "Edited a journal entry" lines.
+  v0.7.0 logs one row per editing session, and on its first start the
+  migration runner folds your existing `entry_created`/`entry_edited` rows
+  into that shape: rows for the same entry no more than 30 minutes apart
+  become one row (the earliest is kept and records when the session ended;
+  the others are **deleted**). Rows that stand alone, and every other kind of
+  activity (logins, achievements, goals), are untouched. It runs once on both
+  SQLite and PostgreSQL, is recorded in the `schema_migrations` ledger, and
+  does nothing on later starts. On a copy of the production snapshot it took
+  `activity_log` from 80 rows to 23. Details:
+  [docs/MIGRATIONS.md](MIGRATIONS.md).
+- **It cannot be undone, and rollback means restoring a backup.** The deleted
+  rows are gone, and a v0.6 binary refuses to start against a database whose
+  ledger records a migration it doesn't ship ("Refusing to start: the
+  database records migration 0002_consolidate_entry_activity but this build
+  …"). Pulling the old image is therefore not a rollback path.
+- **Check your v0.6 logs before upgrading (SQLite only).** If the legacy
+  bootstrap never completed on your database (`PRAGMA user_version` below 3),
+  v0.6 serves anyway and logs a warning; v0.7.0 instead **refuses to start**,
+  because a real migration must never run on a half-migrated file. Look for
+  that warning first:
+
+  ```bash
+  docker compose logs api | grep "schema_migrations adoption skipped"
+  ```
+
+  If it appears, the startup log above it names the bootstrap step that
+  failed (look for "non-critical" warnings — commonly a leftover
+  `groups_migration_new` table or another process holding the file). Fix
+  that, restart v0.6 until the warning is gone, then upgrade. If you upgrade
+  anyway, v0.7.0 exits with "Refusing to start: this database has not
+  completed the legacy bootstrap …" and changes nothing.
+- **Open tabs keep working.** A tab still running the old frontend sends no
+  editing-session id, so its saves fall back to the 30-minute idle rule alone
+  until it reloads (the service worker picks up the new build on its own).
+- **API changes are additive.** `POST /api/mood` and `PUT /api/mood/{id}`
+  accept an optional `edit_session` string, and entry rows in
+  `GET /api/activity` can carry `metadata.edit_session` and
+  `metadata.last_saved_at`. A script that sends no `edit_session` gets the
+  same 30-minute idle rule as an old tab.
+
+Back up first. For SQLite (the default), stop the api so the write-ahead log
+is folded into the main file, then archive the whole data volume with the
+same volume-level command as in the v0.4.0 section below. The volume is
+usually `nightlio_nightlio_data`, but its prefix is your compose project
+name, so confirm it with `docker volume ls` first; a wrong name silently
+creates an empty volume and an empty backup.
+
+```bash
+docker compose stop api
+docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup alpine tar czf /backup/nightlio-pre-v0.7.0.tar.gz -C /data .
+```
+
+For PostgreSQL, dump the database before upgrading (this uses the bundled
+`postgres` compose profile's defaults — adjust `-U`/`-d` if you changed
+`POSTGRES_USER`/`POSTGRES_DB`, or run `pg_dump` against your own server's
+`DATABASE_URL`):
+
+```bash
+docker compose stop api
+docker exec -i nightlio-postgres pg_dump -U nightlio -d nightlio > nightlio-pre-v0.7.0.sql
+```
+
+Then upgrade as usual:
+
+```bash
+git pull
+docker compose up -d --build
+docker compose logs -f api    # the migration runs before the api serves traffic
+```
+
+To roll back to v0.6, stop the stack, restore the backup, and start v0.6
+against the restored data (`git checkout v0.6.0 && docker compose up -d
+--build`, or point `API_IMAGE`/`WEB_IMAGE` at the 0.6.0 images). Anything
+written after the backup is lost.
+
+```bash
+# SQLite: replace the volume's contents with the archive
+docker compose down
+docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup alpine sh -c "rm -rf /data/* && tar xzf /backup/nightlio-pre-v0.7.0.tar.gz -C /data"
+
+# PostgreSQL: recreate the database from the dump
+docker compose stop api
+docker exec -i nightlio-postgres psql -U nightlio -d postgres -c "DROP DATABASE nightlio" -c "CREATE DATABASE nightlio OWNER nightlio"
+docker exec -i nightlio-postgres psql -U nightlio -d nightlio < nightlio-pre-v0.7.0.sql
+```
+
+If you later import SQLite data into PostgreSQL with `migrate-to-postgres`,
+start v0.7.0 against the SQLite file once first; otherwise its activity rows
+arrive unconsolidated (cosmetic only).
+
 ## Upgrading v0.5.x → v0.6.0
 
 Nothing manual — the standard `git pull` / `docker compose up -d --build`
@@ -347,7 +446,9 @@ different values) before `docker compose up`.
 ## OIDC / Pocket ID (new, optional, off by default)
 
 `docker-compose.yml` gained a `pocket-id` service under the `oidc` profile.
-It is **not** started by plain `docker compose up -d` — you must opt in:
+It is **not** started by plain `docker compose up -d` — you must opt in,
+after setting `POCKET_ID_ENCRYPTION_KEY` in `.env` (`openssl rand -hex 32`;
+Pocket ID refuses to start without it):
 
 ```bash
 docker compose --profile oidc up -d
@@ -425,8 +526,8 @@ over.
 ## Rollback (compose files only)
 
 This section is about reverting the *compose/infra* changes described above,
-not about downgrading the api itself — for that, see the v0.4.0 rollback
-notes near the top of this document. If something goes wrong after the
+not about downgrading the api itself — for that, see the rollback notes in
+the v0.7.0 and v0.4.0 sections above. If something goes wrong after the
 compose rework:
 ```bash
 docker compose down
@@ -439,8 +540,8 @@ was removed and you were relying on it, also `git checkout
 restore those files alongside it.)
 Your `nightlio_data` volume is never touched by any of the above — rolling
 the compose files back does not roll back the database, and the database
-was never modified in a way that requires rolling back (migrations are
-additive/backward-compatible by the project's stated constraints).
+was never modified in a way that requires rolling back (the migrations of
+that era were additive/backward-compatible).
 
 ## Verifying an upgrade
 

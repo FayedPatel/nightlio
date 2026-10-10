@@ -2,7 +2,7 @@
 
 Ledger of every deliberate behavior decision made during and after the Flask→Rust / JS→TS rewrite. The golden fixtures in `contract/fixtures/` + `contract/openapi.yaml` are the sole contract oracle (Flask is removed); any behavior change must update fixtures, OpenAPI, `src/types/api.ts`, and this file together.
 
-**Status: fully closed — no open items.** All contract changes below ship together in the (unreleased) rewrite branch; the ledger uses dates, not contract versions.
+**Status: fully closed — no open items.** The rewrite shipped in v0.4.0; the ledger uses dates, not contract versions.
 
 ## Numbered-item index
 
@@ -50,6 +50,32 @@ How responses are encoded on the wire. No client parses these byte-level details
 - 405 `Allow` joins methods comma-only (recorded as-is in `time_post_405.json` since 2026-08-16 — contract, not drift; method order may differ from Werkzeug's).
 
 ---
+
+## contract changes (owner-approved, executed 2026-10-10)
+
+- **Grouped entry activity: one `activity_log` row per editing session (v0.7.0).** EntryView autosaves after every 1.2 s typing pause, and every `PUT /api/mood/{id}` used to insert its own `entry_edited {entry_id}` row. In the production snapshot, 57 of 80 activity rows were edits of just 3 entries, which flooded Settings → Recent activity with identical "Edited a journal entry" lines. Entry activity is now coalesced at write time. `POST /api/mood` and `PUT /api/mood/{id}` accept an optional `edit_session` string, and the frontend generates one per EntryView mount. The server honors only strings of 1–64 characters; empty, longer or non-string values are ignored, never rejected. `edit_session` is not an update field, so a PUT body that carries only `edit_session` still returns 400 "No update fields provided". After a successful PUT, the server reads the user's newest `entry_created`/`entry_edited` row. It rewrites that row's metadata instead of inserting a new `entry_edited` row when all three of these hold:
+  - the row has the same `entry_id`;
+  - it has the same `edit_session`, where both absent counts as equal;
+  - its last activity (`last_saved_at`, else `created_at`) is within the last 30 minutes.
+
+  The rewrite sets `last_saved_at` to now. It refreshes `date` from the entry only when the key already exists, which means only on `entry_created` rows, so backdating during a new-entry session keeps the label correct. `POST /api/mood` always inserts a fresh `entry_created` row, and a PUT that 404s or changes nothing writes no activity, as before. Metadata keys:
+  - `entry_created`: `{entry_id, date, edit_session?, last_saved_at?}`;
+  - `entry_edited`: `{entry_id, edit_session?, last_saved_at?}`, which, like every `entry_edited` row before it, carries no `date`.
+
+  For these rows the `created_at` column is the session start and `last_saved_at` is the session end. `last_saved_at` uses UTC `"YYYY-MM-DD HH:MM:SS"`, the same text as SQLite `CURRENT_TIMESTAMP` and PG `nightlio_now()`, so lexicographic comparison works. `edit_session` is omitted when the client sent none, and `last_saved_at` is omitted until a second save folds into the row. The per-mount id also separates new entries from edits. A session that begins with the POST stays a single `entry_created` row spanning the whole session ("created a new entry and journaled"). Reopening an existing entry, even a minute later, mounts a fresh editor with a fresh id, so its saves form a separate `entry_edited` row. Clients that send no `edit_session` (tabs still running pre-v0.7 JS) fall back to the 30-minute idle rule alone. Accepted cost: only the newest row is considered, so two tabs interleaving edits of different entries produce extra rows rather than ever merging A, B, A into one range.
+- **Migration `0002_consolidate_entry_activity`: a one-time, irreversible consolidation of existing rows.** The `schema_migrations` runner applies it once at startup on both backends, under `BEGIN IMMEDIATE` on SQLite and the advisory lock on PG. It considers `entry_created`/`entry_edited` rows with valid JSON metadata and a non-null `entry_id`, partitioned by `(user_id, entry_id)` and ordered by id. A row opens a new session if any of these is true:
+  - it is the first row of its partition;
+  - it is an `entry_created` row;
+  - its own or the previous row's `created_at` is unparsable (on PG, infinite timestamps count as unparsable);
+  - the gap to the previous row's `created_at` exceeds 30 minutes (1800 s).
+
+  In each session with more than one row, the keeper is the minimum id. It keeps its `created_at` as the session start and gains `metadata.last_saved_at` = the session's `MAX(created_at)`; the other rows are deleted. Singleton sessions stay byte-identical, and rows with malformed metadata or no `entry_id` are never touched. Running the migration again on its own output changes nothing, per the `docs/MIGRATIONS.md` house rule. The migration is irreversible: deleted rows are gone, and a v0.6 binary refuses a database whose ledger records version 2. Rolling back therefore means restoring the pre-upgrade backup (`docs/UPGRADING.md`). A read-only dry run of the grouping on the 2026-08-14 production snapshot folds all 57 edits into their 3 creation sessions, taking `activity_log` from 80 rows to 23.
+- **Unchanged.** The wire shape of `GET /api/activity` (`ActivityPage`/`ActivityEvent`; `metadata` was already an open, event-type-dependent object) stays the same, and so do all fixtures. Nothing was re-recorded: the activity fixtures seed rows without an `edit_session`, and unknown request-body keys were already ignored. Also unchanged:
+  - the schema: 0002 is data-only, with no DDL;
+  - the corpus `.pragmas.txt`/`.counts.txt` goldens, because the tracked corpus DBs hold only singleton entry rows;
+  - JSON export/import, which never touches `activity_log`.
+
+  Moved together: `src/types/api.ts` (`edit_session?` on `CreateMoodEntryRequest`/`UpdateMoodEntryRequest`; the `ActivityEvent.metadata` doc) and the merged `contract/openapi.yaml`. In the OpenAPI document, `edit_session` was added to `CreateMoodRequest`/`UpdateMoodRequest`, the entry metadata keys to `ActivityEvent`, and the grouping rule to the `GET /api/activity` description. `info.version` is left to the release bump, and `contract/openapi-parts/` stays as provenance, unedited. The implementation is `api/src/db/activity.rs` + `api/src/db/pg/activity.rs` (the shared 30-minute rule), `api/src/db/store/moods.rs`, `api/src/routes/mood.rs`, and `api/migrations/{sqlite,postgres}/0002_consolidate_entry_activity.sql` registered in `api/src/db/migrate.rs`.
 
 ## contract changes (owner-approved, executed 2026-08-24)
 

@@ -250,6 +250,15 @@ fn normalise_selected_options(raw: &Value, allow_none: bool) -> ApiResult<Option
         .map(Some)
 }
 
+/// Optional per-editor-mount id that groups autosaves into one activity
+/// row: a 1-64 char string, anything else ignored. Never an update field.
+fn edit_session(data: &Map<String, Value>) -> Option<String> {
+    data.get("edit_session")
+        .and_then(Value::as_str)
+        .filter(|session| (1..=64).contains(&session.chars().count()))
+        .map(str::to_owned)
+}
+
 /// Port of `_parse_int_param`: optional integer query param with range
 /// validation and the exact Flask error strings.
 fn parse_int_param(
@@ -328,6 +337,7 @@ async fn create_mood_entry(
         content_value,
         time_value,
         selected_options,
+        edit_session(&data),
     )
     .await?;
 
@@ -446,9 +456,10 @@ async fn update_mood_entry(
         selected_options,
     };
     let user_id = user.user_id;
-    let entry = store::moods::update_entry(&state.db, user_id, entry_id, update)
-        .await?
-        .ok_or_else(|| ApiError::NotFound("Entry not found or no changes made".to_string()))?;
+    let entry =
+        store::moods::update_entry(&state.db, user_id, entry_id, update, edit_session(&data))
+            .await?
+            .ok_or_else(|| ApiError::NotFound("Entry not found or no changes made".to_string()))?;
 
     Ok(Json(json!({
         "status": "success",

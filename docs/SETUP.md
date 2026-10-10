@@ -119,8 +119,8 @@ You can customize your Nightlio instance using environment variables in the `.en
 ```
 # Core
 APP_ENV=production          # was RAILWAY_ENVIRONMENT; still honored as a fallback
-SECRET_KEY=change-this-to-a-long-random-string
-JWT_SECRET=change-this-too
+SECRET_KEY=                 # required: openssl rand -hex 32
+JWT_SECRET=                 # required: a different random value
 DATABASE_PATH=/app/data/nightlio.db
 
 # Optional PostgreSQL backend (v0.6.0, EXPERIMENTAL; PostgreSQL 16+).
@@ -403,7 +403,10 @@ curl, or sqlite3 CLI.
 
 All persistent data lives in the `nightlio_data` named volume. Compose
 prefixes it with the project name, so it is usually
-`nightlio_nightlio_data` — confirm with `docker volume ls`.
+`nightlio_nightlio_data` — confirm with `docker volume ls`. On the
+experimental PostgreSQL backend the journal lives in Postgres instead (the
+bundled profile keeps it on the `nightlio_pg_data` volume); back it up with
+`pg_dump` as shown in [`UPGRADING.md`](UPGRADING.md#upgrading-v06x--v070).
 
 The database runs in SQLite WAL mode with a bounded journal
 (`journal_size_limit` 4 MiB) and checkpoint-truncates on clean shutdown. For
@@ -420,7 +423,7 @@ docker compose up -d
 # Restore
 docker compose down
 docker run --rm -v nightlio_nightlio_data:/data -v $(pwd):/backup \
-  alpine tar xzf /backup/nightlio-backup.tar.gz -C /data
+  alpine sh -c "rm -rf /data/* && tar xzf /backup/nightlio-backup.tar.gz -C /data"
 docker compose up -d
 
 # Inspect the volume
@@ -467,13 +470,15 @@ Add to `/etc/logrotate.d/docker-nightlio`:
 
 ```bash
 git pull
-docker compose pull        # if using published images
-docker compose up -d --build
+docker compose up -d --build   # building from source
+# with API_IMAGE/WEB_IMAGE set instead: docker compose pull && docker compose up -d
 ```
 
-Take a backup first. For version-specific notes — including the v0.4.0
-cutover that replaced the Python API with the Rust binary on the same data
-volume — see [`UPGRADING.md`](UPGRADING.md).
+Take a backup first: v0.7.0 runs an irreversible activity-history migration
+on first start, so rolling back means restoring that backup. For
+version-specific notes — including the v0.4.0 cutover that replaced the
+Python API with the Rust binary on the same data volume — see
+[`UPGRADING.md`](UPGRADING.md).
 
 ## Server requirements
 
@@ -583,7 +588,7 @@ command above.
 **Permission issues on the data volume**
 
 ```bash
-docker compose exec api chown -R 1000:1000 /app/data
+docker compose run --rm --user root api chown -R 1000:1000 /app/data
 ```
 
 **Still stuck?** Check `docker compose logs`, confirm your `.env` is
