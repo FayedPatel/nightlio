@@ -7,7 +7,7 @@ Technical reference for contributors: architecture, local setup, the API surface
 * **Frontend:** React 19 + Vite, written in strict TypeScript, served by Nginx.
 * **Backend:** Rust (Axum) JSON API in `api/`, shipped as a single compiled binary (dynamically linked, running on a `debian:bookworm-slim` runtime image). The wire contract is pinned by `contract/openapi.yaml` plus golden request/response fixtures in `contract/fixtures/`, and mirrored in `src/types/api.ts`.
 * **PDF export:** rendered in-process by the Rust API via the `markdown2pdf` crate (see `contract/DECISIONS.md` #15) — no extra service required.
-* **Database:** SQLite (WAL journal mode), with auto-migrations on startup (`api/src/db/`).
+* **Database:** SQLite (WAL journal mode) by default, or opt-in PostgreSQL 16+ via `DATABASE_URL` ([`POSTGRES.md`](POSTGRES.md)), with auto-migrations on startup (`api/src/db/`, [`MIGRATIONS.md`](MIGRATIONS.md)).
 * **Authentication:** JWT-based (Bearer header or httpOnly cookie). Supports credential-free single-user self-host mode, local username/password accounts (argon2id, with transparent rehash of legacy hashes), and optional generic OIDC single sign-on (Pocket ID recommended).
 
 ## Local Development Setup
@@ -31,7 +31,7 @@ renders it in-process (`markdown2pdf` crate), no extra service needed.
 
 ## API Reference
 
-All protected endpoints require an `Authorization: Bearer <jwt>` header (or the `nightlio_token` httpOnly cookie) unless otherwise noted. The full wire contract is `contract/openapi.yaml` — 41 paths / 54 operations, with 35 routing rules behind authentication. Every route also answers `OPTIONS` with an empty `204` plus an `Allow` header, before any token check.
+All protected endpoints require an `Authorization: Bearer <jwt>` header (or the `nightlio_token` httpOnly cookie) unless otherwise noted. The full wire contract is `contract/openapi.yaml` — 41 paths / 54 operations, with 35 routing rules behind authentication. Every route also answers `OPTIONS` with an empty `204` plus an `Allow` header, before any token check. The whole surface is additionally served byte-identically under `/api/v1`.
 
 **Auth**
 * `POST /api/auth/local/login { username, password }` → 200 { token, user } — credentialed login, works regardless of OIDC config
@@ -43,10 +43,10 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header (or the 
 * `GET /api/auth/callback/oidc` → OIDC callback (register this as the redirect URI with your provider); on success, redirects to the SPA with the token in the URL fragment (`#sso_token=...`) and sets the session cookie; on failure, redirects with `#sso_error=...`
 
 **Config & Misc**
-* `GET /api/config` → { enable_oidc, enable_mood_music, enable_local_login }
+* `GET /api/config` → { enable_oidc, enable_mood_music, enable_local_login, signup_url, version }
 * `GET /api/` → health payload
 * `GET /api/time` → { time }
-* `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200)
+* `GET /api/activity[?before=<id>&limit=50]` → { activities, next_cursor } — requires auth; per-user activity feed, keyset-paginated on `id` (pass the previous page's `next_cursor` as `before` to fetch older events; `limit` clamped 1–200). Entry activity is grouped at write time, one `entry_created`/`entry_edited` row per editing session (same entry and `edit_session`, saves no more than 30 minutes apart): `created_at` is the session start and `metadata.last_saved_at` (present once a second save folds in) its last save
 * `POST /api/export/pdf { content }` → PDF file download (`entry_export.pdf`) — **requires auth** (since 2026-08-17; see `contract/DECISIONS.md`); rendered in-process (see `contract/DECISIONS.md` #15), `content` capped at 1 MiB of UTF-8 bytes → 413
 * `GET /api/export/data` → the versioned v1 JSON export envelope (`{ schema_version: 1, exported_at, app_version, data: { entries, goals } }`) — **requires auth**; pure read, deterministic order; the frontend saves it as `nightlio-export-YYYY-MM-DD.json`. Full format spec: [`EXPORT-FORMAT.md`](EXPORT-FORMAT.md)
 * `POST /api/import/data <export envelope>` → { status, entries: { imported, skipped }, goals: { imported, skipped } } — **requires auth**; merges an exported envelope back in inside one all-or-nothing transaction, skipping duplicates (entries by date + content, goals by title); unsupported/missing `schema_version` or any invalid row → 400 (nothing imported), body capped at 8 MiB → 413
@@ -56,10 +56,10 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header (or the 
 * `PUT /api/preferences { theme }` → { status, theme } — requires auth; `theme` must be one of `default`, `light`, `dark`, `synthwave`, otherwise 400
 
 **Moods & Statistics**
-* `POST /api/mood { date, mood(1-5), content, time?, selected_options?: number[] }` → 201 { entry_id, new_achievements[] }
+* `POST /api/mood { date, mood(1-5), content, time?, selected_options?: number[], edit_session? }` → 201 { entry_id, new_achievements[] } — `edit_session` is an optional 1–64-char id (one per editor mount) that groups autosaves into one activity row; other values are ignored, never rejected
 * `GET /api/moods[?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD]` → list of entries
 * `GET /api/mood/:id` → entry
-* `PUT /api/mood/:id { mood?, content? }` → success
+* `PUT /api/mood/:id { mood?, content?, date?, time?, selected_options?, edit_session? }` → success — 400 unless at least one of the listed fields besides `edit_session` is present
 * `DELETE /api/mood/:id` → success
 * `GET /api/mood/:id/selections` → options linked to the entry
 * `GET /api/statistics` → { statistics, mood_distribution, current_streak } — pure read
@@ -97,14 +97,15 @@ All protected endpoints require an `Authorization: Bearer <jwt>` header (or the 
 **Tables (SQLite):**
 * `users`: id, auth_provider ('local' or 'oidc'), external_id (provider-scoped subject, unique per (auth_provider, external_id)), email, name, avatar_url, password_hash (local accounts only, nullable), theme_preference (nullable, no default — backs `/api/preferences`), created_at, last_login — a legacy unique-identifier column from the pre-OIDC schema remains for backward compatibility with rows created before this change but is no longer written by application logic
 * `mood_entries`: id, user_id(FK), date, mood, content, ...
-* `groups`: id, name
+* `groups`: id, user_id(FK), name
 * `group_options`: id, group_id(FK), name
 * `entry_selections`: entry_id(FK), option_id(FK)
 * `goals`: id, user_id(FK), title, description, frequency_per_week, completed, streak, period_start, last_completed_date, created_at, updated_at
-* `goal_completions`: id, goal_id(FK), date — UNIQUE per (goal, day), which is what makes progress logging idempotent; cascades on goal delete
+* `goal_completions`: id, user_id(FK), goal_id(FK), date — UNIQUE per (goal, day), which is what makes progress logging idempotent; cascades on goal delete
 * `achievements`: id, user_id(FK), achievement_type, earned_at, ...
 * `activity_log`: id, user_id(FK), event_type, metadata, created_at — backs `GET /api/activity`
 * `user_metrics`: user_id(PK/FK), stats_views, last_view_date — per-day statistics-view tracking
+* `schema_migrations`: version(PK), name, checksum, applied_at — the migration ledger (see [`MIGRATIONS.md`](MIGRATIONS.md))
 
 ## Regenerating the README media
 
@@ -126,9 +127,10 @@ Pull requests are welcome! For major changes, please open an issue first to disc
 Please ensure you run the tests before opening a PR:
 
 ```bash
-cd api && cargo test && cargo clippy -- -D warnings && cd ..
+cd api && cargo fmt --check && cargo test && cargo clippy --all-targets -- -D warnings && cd ..
                  # backend (includes contract snapshot tests
                  # against contract/fixtures/)
+yarn lint        # frontend lint (ESLint)
 yarn typecheck   # frontend type check (tsc)
 yarn test:unit   # frontend unit tests (Vitest)
 yarn test:e2e    # browser tests (Playwright; runs its own servers —

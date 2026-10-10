@@ -2,7 +2,7 @@
 
 Ledger of every deliberate behavior decision made during and after the Flask→Rust / JS→TS rewrite. The golden fixtures in `contract/fixtures/` + `contract/openapi.yaml` are the sole contract oracle (Flask is removed); any behavior change must update fixtures, OpenAPI, `src/types/api.ts`, and this file together.
 
-**Status: fully closed — no open items.** All contract changes below ship together in the (unreleased) rewrite branch; the ledger uses dates, not contract versions.
+**Status: fully closed — no open items.** The rewrite shipped in v0.4.0; the ledger uses dates, not contract versions.
 
 ## Numbered-item index
 
@@ -66,7 +66,7 @@ How responses are encoded on the wire. No client parses these byte-level details
 - **Migration `0002_consolidate_entry_activity`: a one-time, irreversible consolidation of existing rows.** The `schema_migrations` runner applies it once at startup on both backends, under `BEGIN IMMEDIATE` on SQLite and the advisory lock on PG. It considers `entry_created`/`entry_edited` rows with valid JSON metadata and a non-null `entry_id`, partitioned by `(user_id, entry_id)` and ordered by id. A row opens a new session if any of these is true:
   - it is the first row of its partition;
   - it is an `entry_created` row;
-  - its own or the previous row's `created_at` is unparsable;
+  - its own or the previous row's `created_at` is unparsable (on PG, infinite timestamps count as unparsable);
   - the gap to the previous row's `created_at` exceeds 30 minutes (1800 s).
 
   In each session with more than one row, the keeper is the minimum id. It keeps its `created_at` as the session start and gains `metadata.last_saved_at` = the session's `MAX(created_at)`; the other rows are deleted. Singleton sessions stay byte-identical, and rows with malformed metadata or no `entry_id` are never touched. Running the migration again on its own output changes nothing, per the `docs/MIGRATIONS.md` house rule. The migration is irreversible: deleted rows are gone, and a v0.6 binary refuses a database whose ledger records version 2. Rolling back therefore means restoring the pre-upgrade backup (`docs/UPGRADING.md`). A read-only dry run of the grouping on the 2026-08-14 production snapshot folds all 57 edits into their 3 creation sessions, taking `activity_log` from 80 rows to 23.

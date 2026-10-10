@@ -88,7 +88,7 @@ stay in English for that language until someone fills them in.
      gets re-nested.)
 
 3. **Interpolation placeholders.** Some English values contain `{name}`
-   -style placeholders, e.g. `"common.dateAtTime": "{date} at {time}"`. Keep
+   -style placeholders, e.g. `common.dateAtTime` is `"{date} at {time}"`. Keep
    the placeholder tokens **verbatim** (same names, same `{curly braces}`)
    in your translation — you may reorder them for grammar, but do not
    rename or drop them:
@@ -105,8 +105,12 @@ stay in English for that language until someone fills them in.
    in `en.json`, e.g.:
 
    ```json
-   "goals.frequencyPerWeek.one": "{count} day a week",
-   "goals.frequencyPerWeek.other": "{count} days a week"
+   "goals": {
+     "frequencyPerWeek": {
+       "one": "{count} day a week",
+       "other": "{count} days a week"
+     }
+   }
    ```
 
    The app selects a suffix using the browser's [`Intl.PluralRules`] for the
@@ -161,7 +165,7 @@ Pushing a tag matching `lang-*-v*` triggers
    carrying the `<code>.json` asset.
 
 `--prerelease` is load-bearing, not cosmetic: GitHub's `releases/latest` —
-which is what `nightlio-api` / self-hoster upgrade tooling resolves to know
+which is what self-hoster upgrade tooling resolves to know
 "what's the current app version" — always skips prereleases. Marking every
 language-pack release as a prerelease guarantees `releases/latest` can never
 accidentally resolve to a language pack instead of an actual application
@@ -201,10 +205,11 @@ on GitHub at runtime) have two environment variables:
 
 - **`I18N_OFFLINE`** — set this (e.g. `I18N_OFFLINE=1`) to disable GitHub
   discovery outright without necessarily supplying local packs. Combined
-  with an empty/absent `I18N_LOCAL_DIR`, the server simply serves no
-  language packs (`GET /api/i18n/languages` returns `{"languages": []}`,
-  every `GET /api/i18n/{code}` 404s) — every client runs on bundled
-  English, which always works. Combine with `I18N_LOCAL_DIR` to serve a
+  with an empty/absent `I18N_LOCAL_DIR`, the server serves only what its
+  disk cache already holds; on a cold cache that is no language packs
+  (`GET /api/i18n/languages` returns `{"languages": []}`, every
+  `GET /api/i18n/{code}` 404s) — every client runs on bundled English,
+  which always works. Combine with `I18N_LOCAL_DIR` to serve a
   fixed, curated set of packs with zero network dependency.
 
 In every case — GitHub unreachable, `I18N_OFFLINE` set, a cold cache on a

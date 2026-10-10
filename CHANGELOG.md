@@ -20,6 +20,8 @@ A focused release: the activity feed finally says something useful, existing act
 ### Fixed
 
 - **Changing the mood while editing no longer reverts the editor.** Browsers structured-clone history state, so React Router handed the editor a fresh copy of the entry on every navigation, and changing the mood (or any other navigation) while editing an existing entry re-ran the editor's hydration with the text the entry was opened with — silently reverting unsaved typing, after which the next autosave could write that stale text over newer saved content. The editor now hydrates once per entry id; a regression test (`src/App.editRevert.test.tsx`) failed before the fix.
+- **A plain `docker compose up` no longer demands `POCKET_ID_ENCRYPTION_KEY`.** Compose checks `${VAR:?}` guards even for services behind a profile that is not enabled, so the base stack refused to start until the Pocket ID key was set, contradicting the docs that call Pocket ID opt-in. The guard is gone; with the `oidc` profile and no key, Pocket ID itself refuses to start ("ENCRYPTION_KEY must be at least 16 bytes long").
+- **Docs brought up to date for v0.7.0**, and the README GIFs re-captured. The capture script now seeds entries with an explicit timestamp, so the demo cards no longer show the server's zone-less UTC time as local time.
 
 [0.7.0]: https://github.com/FayedPatel/nightlio/releases/tag/v0.7.0
 

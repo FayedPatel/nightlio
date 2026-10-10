@@ -48,6 +48,11 @@ take a backup first. What to expect:
 - **Open tabs keep working.** A tab still running the old frontend sends no
   editing-session id, so its saves fall back to the 30-minute idle rule alone
   until it reloads (the service worker picks up the new build on its own).
+- **API changes are additive.** `POST /api/mood` and `PUT /api/mood/{id}`
+  accept an optional `edit_session` string, and entry rows in
+  `GET /api/activity` can carry `metadata.edit_session` and
+  `metadata.last_saved_at`. A script that sends no `edit_session` gets the
+  same 30-minute idle rule as an old tab.
 
 Back up first. For SQLite (the default), stop the api so the write-ahead log
 is folded into the main file, then archive the whole data volume with the
@@ -441,7 +446,9 @@ different values) before `docker compose up`.
 ## OIDC / Pocket ID (new, optional, off by default)
 
 `docker-compose.yml` gained a `pocket-id` service under the `oidc` profile.
-It is **not** started by plain `docker compose up -d` — you must opt in:
+It is **not** started by plain `docker compose up -d` — you must opt in,
+after setting `POCKET_ID_ENCRYPTION_KEY` in `.env` (`openssl rand -hex 32`;
+Pocket ID refuses to start without it):
 
 ```bash
 docker compose --profile oidc up -d
@@ -519,8 +526,8 @@ over.
 ## Rollback (compose files only)
 
 This section is about reverting the *compose/infra* changes described above,
-not about downgrading the api itself — for that, see the v0.4.0 rollback
-notes near the top of this document. If something goes wrong after the
+not about downgrading the api itself — for that, see the rollback notes in
+the v0.7.0 and v0.4.0 sections above. If something goes wrong after the
 compose rework:
 ```bash
 docker compose down
@@ -533,8 +540,8 @@ was removed and you were relying on it, also `git checkout
 restore those files alongside it.)
 Your `nightlio_data` volume is never touched by any of the above — rolling
 the compose files back does not roll back the database, and the database
-was never modified in a way that requires rolling back (migrations are
-additive/backward-compatible by the project's stated constraints).
+was never modified in a way that requires rolling back (the migrations of
+that era were additive/backward-compatible).
 
 ## Verifying an upgrade
 

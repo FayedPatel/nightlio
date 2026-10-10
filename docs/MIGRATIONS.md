@@ -62,8 +62,8 @@ file in the wild, and its output is graded byte-for-byte against
 - A database still below `user_version 3` after bootstrap (a swallowed
   "non-critical" migration error — the historical lenient behavior) keeps
   serving **only while nothing beyond the baseline is pending**. As soon as a
-  real 0002+ migration exists, such a database fails closed with a message
-  pointing at the failed bootstrap step.
+  real 0002+ migration exists (v0.7.0 ships `0002`), such a database fails
+  closed with a message pointing at the failed bootstrap step.
 - `user_version` is **frozen at 3 forever**. All future schema changes go
   through this framework and its ledger, never through new pragma stamps.
 

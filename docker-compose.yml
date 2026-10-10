@@ -126,7 +126,11 @@ services:
       - TRUST_PROXY=${POCKET_ID_TRUST_PROXY:-false}
       # Pocket ID encrypts its stored keys with this; required, >= 16 bytes.
       # Generate one: openssl rand -hex 32
-      - ENCRYPTION_KEY=${POCKET_ID_ENCRYPTION_KEY:?set POCKET_ID_ENCRYPTION_KEY in .env (openssl rand -hex 32)}
+      # Not ${...:?} for the same reason as POSTGRES_PASSWORD below: :? is
+      # checked even for profile-gated services and broke the base `up`.
+      # Left empty, Pocket ID refuses to start ("ENCRYPTION_KEY must be at
+      # least 16 bytes long").
+      - ENCRYPTION_KEY=${POCKET_ID_ENCRYPTION_KEY:-}
     volumes:
       - pocket_id_data:/app/data
     networks:
