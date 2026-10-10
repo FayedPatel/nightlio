@@ -391,7 +391,7 @@ export interface ActivityEvent {
    * Parsed JSON blob; null when absent or malformed. Shape varies by event_type.
    * Entry events are one row per editing session:
    * - entry_created: {entry_id, date, edit_session?, last_saved_at?}
-   * - entry_edited: {entry_id, edit_session?, last_saved_at?} (legacy rows may also carry date)
+   * - entry_edited: {entry_id, edit_session?, last_saved_at?}
    * For those, created_at is the session start and last_saved_at the session
    * end (UTC "YYYY-MM-DD HH:MM:SS"; absent for a single-save session).
    */

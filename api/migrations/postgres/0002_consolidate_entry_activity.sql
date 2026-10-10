@@ -26,7 +26,10 @@
 WITH entry_events AS (
     SELECT id, user_id, event_type, created_at,
            CASE WHEN pg_input_is_valid(metadata, 'jsonb') THEN metadata::jsonb ->> 'entry_id' END AS entry_id,
-           CASE WHEN pg_input_is_valid(created_at, 'timestamp') THEN created_at::timestamp END AS ts
+           -- 'infinity' passes pg_input_is_valid but cannot be subtracted.
+           CASE WHEN pg_input_is_valid(created_at, 'timestamp')
+                THEN CASE WHEN isfinite(created_at::timestamp) THEN created_at::timestamp END
+           END AS ts
       FROM activity_log
      WHERE event_type IN ('entry_created', 'entry_edited')
 ),

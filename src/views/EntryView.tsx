@@ -149,7 +149,7 @@ const EntryView = ({
   // hydration effect re-runs on burner toggles and on every navigate (React
   // Router clones location.state, so a mood change hands over a new
   // editingEntry object); hydrating again from that stale copy reverted
-  // unsaved text.
+  // unsaved text. Burner toggles reset to the last save in their own effect.
   const hydratedEntryIdRef = useRef<number | null | undefined>(undefined);
 
   const { show } = useToast();
@@ -255,6 +255,30 @@ const EntryView = ({
       setSaveState('idle');
     }
   }, [isBurnerMode, saveState, clearAutosaveTimer]);
+
+  // A burner toggle drops unsaved text: the editor returns to its last saved
+  // state, so words typed with burner on are never autosaved once it is off.
+  const burnerModeRef = useRef(isBurnerMode);
+  useEffect(() => {
+    if (burnerModeRef.current === isBurnerMode) return;
+    burnerModeRef.current = isBurnerMode;
+
+    const saved = JSON.parse(lastSavedSnapshotRef.current || '{}') as {
+      content?: string;
+      selected_options?: number[];
+      date?: string | null;
+    };
+    const content = saved.content ?? '';
+    setMarkdownContent(content);
+    setSelectedOptions(saved.selected_options ?? []);
+    if (saved.date) setEntryDate(saved.date);
+
+    isHydratingEditorRef.current = true;
+    markdownRef.current?.getInstance?.()?.setMarkdown(content);
+    queueMicrotask(() => {
+      isHydratingEditorRef.current = false;
+    });
+  }, [isBurnerMode]);
 
   const executeAutosave = useCallback(
     async (payload: AutosavePayload, snapshot: string, silentError = false): Promise<boolean> => {

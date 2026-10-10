@@ -4,6 +4,7 @@
 // hydration effect, keyed on that object's identity, re-ran and reset the
 // editor to the content the entry was opened with; burner toggles re-ran it
 // too. The next autosave then wrote that stale text back to the server.
+// Burner toggles still drop unsaved text, but back to the last save.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
@@ -109,11 +110,27 @@ describe('editing an existing entry', () => {
     );
   });
 
-  it('keeps the editor text when burner mode is toggled', async () => {
+  it('drops burner-typed text on toggle instead of autosaving it', async () => {
     const editor = await openEditorAndType();
+    await waitFor(
+      () => expect(apiService.updateMoodEntry).toHaveBeenLastCalledWith(
+        7,
+        expect.objectContaining({ content: typed }),
+      ),
+      { timeout: 3000 },
+    );
 
     fireEvent.click(screen.getByLabelText('Toggle burner mode'));
-
     expect(editor).toHaveValue(typed);
+    fireEvent.change(editor, { target: { value: 'burn this' } });
+    fireEvent.click(screen.getByLabelText('Toggle burner mode'));
+
+    // Back to the last save, not the stale text the entry was opened with.
+    expect(editor).toHaveValue(typed);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 1500)));
+    expect(apiService.updateMoodEntry).not.toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ content: 'burn this' }),
+    );
   });
 });

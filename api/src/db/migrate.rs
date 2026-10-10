@@ -1028,6 +1028,15 @@ mod tests {
             r#"{"entry_id": 5, "date": "2026-08-11"}"#,
             Some("2026-08-10 11:41:00"),
         ),
+        // An infinite timestamp is a singleton on both dialects (PG cannot
+        // subtract it).
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 6}"#,
+            Some("2026-08-10 12:00:00"),
+        ),
+        (1, "entry_edited", r#"{"entry_id": 6}"#, Some("infinity")),
     ];
 
     /// `(id, user_id, event_type, metadata, created_at)`.
@@ -1038,7 +1047,7 @@ mod tests {
     /// parsed), every other survivor is byte-identical to its seed.
     fn assert_consolidated(rows: &[LogRow]) {
         let ids: Vec<i64> = rows.iter().map(|row| row.0).collect();
-        assert_eq!(ids, vec![1, 2, 4, 5, 7, 10, 11, 13, 14, 15, 16, 17]);
+        assert_eq!(ids, vec![1, 2, 4, 5, 7, 10, 11, 13, 14, 15, 16, 17, 18, 19]);
         let keepers = [
             (
                 2,

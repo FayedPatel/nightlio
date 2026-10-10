@@ -38,7 +38,10 @@ const HistoryPageView = ({ entries, loading, error, onDelete, onEdit, searchResu
   // An active search that filters the entry out leaves nothing to find.
   useEffect(() => {
     if (highlightId == null || loading) return;
-    document.querySelector(`[data-entry-id="${highlightId}"]`)?.scrollIntoView?.({ block: 'center' });
+    const row = document.querySelector<HTMLElement>(`[data-entry-id="${highlightId}"]`);
+    row?.scrollIntoView?.({ block: 'center' });
+    // Focus follows so keyboard and screen-reader users land on the entry too.
+    row?.querySelector<HTMLElement>('.entry-card')?.focus({ preventScroll: true });
     const timer = setTimeout(() => setHighlightId(null), HIGHLIGHT_MS);
     return () => clearTimeout(timer);
   }, [highlightId, loading]);

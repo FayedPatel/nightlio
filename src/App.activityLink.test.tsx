@@ -1,7 +1,7 @@
 // Settings' Recent activity: an entry session row shows its start – end
 // range and links the entry's title to History, which pulses that card.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 import type apiService from './services/api';
@@ -72,5 +72,6 @@ describe('recent activity entry links', () => {
     const display = new Date(2026, 7, 10).toLocaleDateString();
     const card = await screen.findByLabelText(`Open entry from ${display}`);
     expect(card.closest('[data-entry-id="7"]')).toHaveClass('entry-card-row--highlight');
+    await waitFor(() => expect(card).toHaveFocus());
   });
 });

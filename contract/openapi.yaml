@@ -2906,10 +2906,9 @@ components:
             event_type, e.g. {method} for login, {achievement_type} for
             achievement_unlocked. Entry events: entry_created carries
             {entry_id, date, edit_session?, last_saved_at?}; entry_edited
-            carries {entry_id, edit_session?, last_saved_at?} (legacy rows
-            may also carry date). last_saved_at is the editing session's
-            last save as UTC "YYYY-MM-DD HH:MM:SS", absent until a second
-            save is folded into the row.
+            carries {entry_id, edit_session?, last_saved_at?}. last_saved_at
+            is the editing session's last save as UTC "YYYY-MM-DD HH:MM:SS",
+            absent until a second save is folded into the row.
         created_at:
           type: string
           description: >-
