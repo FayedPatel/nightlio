@@ -65,12 +65,20 @@ impl Migration {
 /// The embedded manifest. Append-only: new migrations are added at the end
 /// with the next version number and a fresh pair of dialect files; existing
 /// entries (and their files) are frozen forever.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "baseline",
-    sqlite_sql: include_str!("../../migrations/sqlite/0001_baseline.sql"),
-    postgres_sql: include_str!("../../migrations/postgres/0001_baseline.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "baseline",
+        sqlite_sql: include_str!("../../migrations/sqlite/0001_baseline.sql"),
+        postgres_sql: include_str!("../../migrations/postgres/0001_baseline.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "consolidate_entry_activity",
+        sqlite_sql: include_str!("../../migrations/sqlite/0002_consolidate_entry_activity.sql"),
+        postgres_sql: include_str!("../../migrations/postgres/0002_consolidate_entry_activity.sql"),
+    },
+];
 
 /// The SQLite `user_version` the legacy bootstrap stamps on completion.
 /// Frozen at 3 forever — every later schema change goes through this runner
@@ -522,8 +530,11 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::{Path, PathBuf};
 
+    use serde_json::{Value, json};
+
     use super::*;
     use crate::db::bootstrap::{SelfHostSeed, bootstrap};
+    use crate::db::pg::util::test_support::{connect_scratch, seed_default_user};
 
     fn migrations_dir(dialect: &str) -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -644,10 +655,18 @@ mod tests {
 
         run_sqlite(path_str).unwrap();
         let rows = ledger(&path);
-        assert_eq!(rows.len(), 1);
+        assert_eq!(rows.len(), MIGRATIONS.len());
         assert_eq!(rows[0].0, 1);
         assert_eq!(rows[0].1, "baseline");
         assert_eq!(rows[0].2, checksum(MIGRATIONS[0].sqlite_sql));
+        assert_eq!(
+            rows[1],
+            (
+                2,
+                "consolidate_entry_activity".to_string(),
+                checksum(MIGRATIONS[1].sqlite_sql)
+            )
+        );
         assert_eq!(user_version(&path), 3, "user_version stays frozen at 3");
 
         // Second run: verification passes, nothing re-applies, ledger
@@ -678,7 +697,8 @@ mod tests {
 
     /// Corpus databases (real historical production shapes): startup order
     /// bootstrap() -> run_sqlite() adopts every one of them without touching
-    /// a single data row.
+    /// a single data row (their entry activity rows are all single-row
+    /// sessions, so 0002 leaves them alone).
     #[test]
     fn corpus_databases_are_adopted_without_data_changes() {
         for input in [
@@ -701,7 +721,7 @@ mod tests {
             run_sqlite(path_str).unwrap();
 
             let rows = ledger(&path);
-            assert_eq!(rows.len(), 1, "{input}: exactly the adopted baseline");
+            assert_eq!(rows.len(), MIGRATIONS.len(), "{input}: baseline + 0002+");
             assert_eq!(rows[0].0, 1, "{input}");
             assert_eq!(rows[0].1, "baseline", "{input}");
             assert_eq!(
@@ -837,7 +857,7 @@ mod tests {
         let path = dir.path().join("ledger-gap.db");
         let path_str = path.to_str().unwrap();
         bootstrap(path_str, &SelfHostSeed::default()).unwrap();
-        run_sqlite(path_str).unwrap();
+        run_sqlite_with(path_str, &MIGRATIONS[..1]).unwrap();
 
         // Simulate a partial restore: a recorded version with a hole below it.
         Connection::open(&path)
@@ -875,7 +895,7 @@ mod tests {
             .unwrap();
 
         // Today's lenient behavior survives: Ok, and no ledger is created.
-        run_sqlite(path_str).unwrap();
+        run_sqlite_with(path_str, &MIGRATIONS[..1]).unwrap();
         let conn = Connection::open(&path).unwrap();
         assert!(
             !schema_migrations_exists(&conn).unwrap(),
@@ -902,5 +922,265 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("user_version = 0"), "{text}");
+    }
+
+    // -- 0002_consolidate_entry_activity ---------------------------------------
+
+    /// Synthetic activity rows inserted in order as ids 1..=17:
+    /// `(user_id, event_type, metadata, created_at)`. User 1 is the default
+    /// user; user 2 is inserted by each test.
+    const CONSOLIDATION_SEED: &[(i64, &str, &str, Option<&str>)] = &[
+        (
+            1,
+            "login",
+            r#"{"method": "selfhost"}"#,
+            Some("2026-08-10 10:00:00"),
+        ),
+        // Session A (entry 1): created, then edits up to exactly 1800 s apart.
+        (
+            1,
+            "entry_created",
+            r#"{"entry_id": 1, "date": "2026-08-10"}"#,
+            Some("2026-08-10 10:00:00"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 10:05:00"),
+        ),
+        // Session B (entry 2), interleaved with A.
+        (
+            1,
+            "entry_created",
+            r#"{"entry_id": 2, "date": "2026-08-10"}"#,
+            Some("2026-08-10 10:06:00"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": null}"#,
+            Some("2026-08-10 10:07:00"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 10:20:00"),
+        ),
+        (
+            1,
+            "achievement_unlocked",
+            r#"{"achievement_type": "first_entry"}"#,
+            Some("2026-08-10 10:21:00"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 2}"#,
+            Some("2026-08-10 10:25:00"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 10:50:00"),
+        ),
+        // Another user's row for the same entry id is its own session.
+        (
+            2,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 10:51:00"),
+        ),
+        // Session C (entry 1): 1801 s after A's last row.
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 11:20:01"),
+        ),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 11:25:00"),
+        ),
+        (1, "entry_edited", "{not-json", Some("2026-08-10 11:26:00")),
+        // A NULL timestamp is a singleton, and so is the row after it.
+        (1, "entry_edited", r#"{"entry_id": 1}"#, None),
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 1}"#,
+            Some("2026-08-10 11:30:00"),
+        ),
+        // entry_created always opens a session, even 60 s after an edit.
+        (
+            1,
+            "entry_edited",
+            r#"{"entry_id": 5}"#,
+            Some("2026-08-10 11:40:00"),
+        ),
+        (
+            1,
+            "entry_created",
+            r#"{"entry_id": 5, "date": "2026-08-11"}"#,
+            Some("2026-08-10 11:41:00"),
+        ),
+    ];
+
+    /// `(id, user_id, event_type, metadata, created_at)`.
+    type LogRow = (i64, i64, String, String, Option<String>);
+
+    /// The post-0002 state of [`CONSOLIDATION_SEED`], shared by both
+    /// dialects: keepers carry `last_saved_at` (re-serialized, so compared
+    /// parsed), every other survivor is byte-identical to its seed.
+    fn assert_consolidated(rows: &[LogRow]) {
+        let ids: Vec<i64> = rows.iter().map(|row| row.0).collect();
+        assert_eq!(ids, vec![1, 2, 4, 5, 7, 10, 11, 13, 14, 15, 16, 17]);
+        let keepers = [
+            (
+                2,
+                json!({"entry_id": 1, "date": "2026-08-10", "last_saved_at": "2026-08-10 10:50:00"}),
+            ),
+            (
+                4,
+                json!({"entry_id": 2, "date": "2026-08-10", "last_saved_at": "2026-08-10 10:25:00"}),
+            ),
+            (
+                11,
+                json!({"entry_id": 1, "last_saved_at": "2026-08-10 11:25:00"}),
+            ),
+        ];
+        for (id, user_id, event_type, metadata, created_at) in rows {
+            let seed = CONSOLIDATION_SEED[(*id - 1) as usize];
+            assert_eq!(
+                (*user_id, event_type.as_str(), created_at.as_deref()),
+                (seed.0, seed.1, seed.3),
+                "row {id}"
+            );
+            match keepers.iter().find(|keeper| keeper.0 == *id) {
+                Some((_, want)) => assert_eq!(
+                    serde_json::from_str::<Value>(metadata).unwrap(),
+                    *want,
+                    "keeper {id}"
+                ),
+                None => assert_eq!(metadata, seed.2, "row {id} must stay byte-identical"),
+            }
+        }
+    }
+
+    fn sqlite_activity_rows(conn: &Connection) -> Vec<LogRow> {
+        conn.prepare(
+            "SELECT id, user_id, event_type, metadata, created_at FROM activity_log ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+            ))
+        })
+        .unwrap()
+        .collect::<rusqlite::Result<_>>()
+        .unwrap()
+    }
+
+    #[test]
+    fn consolidate_entry_activity_folds_sessions_and_is_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("consolidate.db");
+        let path_str = path.to_str().unwrap();
+        bootstrap(path_str, &SelfHostSeed::default()).unwrap();
+        run_sqlite_with(path_str, &MIGRATIONS[..1]).unwrap();
+
+        let conn = Connection::open(&path).unwrap();
+        conn.execute(
+            "INSERT INTO users (google_id, email, name) \
+             VALUES ('other_user', 'other@example.com', 'Other')",
+            [],
+        )
+        .unwrap();
+        for (user_id, event_type, metadata, created_at) in CONSOLIDATION_SEED {
+            conn.execute(
+                "INSERT INTO activity_log (user_id, event_type, metadata, created_at) \
+                 VALUES (?, ?, ?, ?)",
+                rusqlite::params![user_id, event_type, metadata, created_at],
+            )
+            .unwrap();
+        }
+
+        // Through the real runner: 0002 is the only pending migration.
+        run_sqlite(path_str).unwrap();
+        assert_eq!(ledger(&path).len(), 2);
+        let after = sqlite_activity_rows(&conn);
+        assert_consolidated(&after);
+
+        conn.execute_batch(MIGRATIONS[1].sqlite_sql).unwrap();
+        assert_eq!(
+            sqlite_activity_rows(&conn),
+            after,
+            "0002 rerun on its own output must change nothing"
+        );
+    }
+
+    #[tokio::test]
+    async fn consolidate_entry_activity_postgres_matches_sqlite() {
+        let Some(client) = connect_scratch("w1b_m0002_consolidate").await else {
+            return;
+        };
+        seed_default_user(&client).await;
+        client
+            .execute(
+                "INSERT INTO users (google_id, email, name) \
+                 VALUES ('other_user', 'other@example.com', 'Other')",
+                &[],
+            )
+            .await
+            .unwrap();
+        for (user_id, event_type, metadata, created_at) in CONSOLIDATION_SEED {
+            client
+                .execute(
+                    "INSERT INTO activity_log (user_id, event_type, metadata, created_at) \
+                     VALUES ($1, $2, $3, $4)",
+                    &[user_id, event_type, metadata, created_at],
+                )
+                .await
+                .unwrap();
+        }
+        let read = async || -> Vec<LogRow> {
+            client
+                .query(
+                    "SELECT id, user_id, event_type, metadata, created_at \
+                     FROM activity_log ORDER BY id",
+                    &[],
+                )
+                .await
+                .unwrap()
+                .iter()
+                .map(|row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4)))
+                .collect()
+        };
+
+        client
+            .batch_execute(MIGRATIONS[1].postgres_sql)
+            .await
+            .unwrap();
+        let after = read().await;
+        assert_consolidated(&after);
+
+        client
+            .batch_execute(MIGRATIONS[1].postgres_sql)
+            .await
+            .unwrap();
+        assert_eq!(
+            read().await,
+            after,
+            "0002 rerun on its own output must change nothing"
+        );
     }
 }
