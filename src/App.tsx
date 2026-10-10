@@ -238,7 +238,7 @@ const AppContent = () => {
                 } />
                 <Route path="achievements" element={<AchievementsView />} />
                 <Route path="goals" element={<GoalsView />} />
-                <Route path="settings" element={<SettingsView />} />
+                <Route path="settings" element={<SettingsView entries={pastEntries} />} />
                 {/* Unmatched /dashboard/... paths bounce home instead of
                     rendering an empty main area. */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

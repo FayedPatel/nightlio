@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useConfig } from '../contexts/ConfigContext';
 import type { PublicConfig } from '../contexts/ConfigContext';
 import { useTheme, THEMES } from '../contexts/ThemeContext';
 import apiService from '../services/api';
-import type { ActivityEvent, DataExport, DataImportResult, LanguageInfo } from '../types/api';
+import type { ActivityEvent, DataExport, DataImportResult, LanguageInfo, MoodEntry } from '../types/api';
+import type { HistoryLocationState } from '../types/router';
 import { exportJSONToFile } from '../utils/exportUtils';
+import { entryTitle } from '../utils/entryText';
+import { formatEntryDate } from '../utils/dateUtils';
 import { useI18n } from '../i18n';
 import type { TranslateFn } from '../i18n';
 
@@ -58,17 +62,38 @@ const describeActivity = (activity: ActivityEvent, t: TranslateFn): string => {
   }
 };
 
-const formatTimestamp = (value: string): string => {
-  if (!value) return '';
-  // SQLite stores UTC "YYYY-MM-DD HH:MM:SS"; normalize to ISO so the
-  // browser renders it in local time.
+// SQLite stores UTC "YYYY-MM-DD HH:MM:SS"; normalize to ISO so the
+// browser renders it in local time.
+const parseTimestamp = (value: string): Date | null => {
   const iso = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const SettingsView = () => {
+const formatTimestamp = (value: string): string => {
+  if (!value) return '';
+  return parseTimestamp(value)?.toLocaleString() ?? value;
+};
+
+// Entry rows cover an editing session: created_at is its start and
+// metadata.last_saved_at its end, shown time-only on the same local day.
+const formatActivityTime = (activity: ActivityEvent): string => {
+  const start = formatTimestamp(activity.created_at);
+  const endValue = activity.metadata?.last_saved_at;
+  if (typeof endValue !== 'string' || endValue === activity.created_at) return start;
+  const from = parseTimestamp(activity.created_at);
+  const to = parseTimestamp(endValue);
+  if (!from || !to) return start;
+  const end = from.toDateString() === to.toDateString() ? to.toLocaleTimeString() : to.toLocaleString();
+  return `${start} – ${end}`;
+};
+
+interface SettingsViewProps {
+  /** Loaded entries, to title and link entry activity rows. */
+  entries: MoodEntry[];
+}
+
+const SettingsView = ({ entries }: SettingsViewProps) => {
   const { t, lang, setLang } = useI18n();
   const { config, loading } = useConfig();
   const { theme, setTheme } = useTheme();
@@ -424,26 +449,43 @@ const SettingsView = () => {
         ) : (
           <>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {activities.map((activity) => (
-                <li
-                  key={activity.id}
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    justifyContent: 'space-between',
-                    gap: '0.25rem 0.75rem',
-                    padding: '0.5rem 0',
-                    borderTop: '1px solid var(--border)',
-                  }}
-                >
-                  <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>
-                    {describeActivity(activity, t)}
-                  </span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
-                    {formatTimestamp(activity.created_at)}
-                  </span>
-                </li>
-              ))}
+              {activities.map((activity) => {
+                // Only entry events carry entry_id; deleted (or not yet
+                // loaded) entries get no link.
+                const entry = entries.find((item) => item.id === activity.metadata?.entry_id);
+                return (
+                  <li
+                    key={activity.id}
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      justifyContent: 'space-between',
+                      gap: '0.25rem 0.75rem',
+                      padding: '0.5rem 0',
+                      borderTop: '1px solid var(--border)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text)', fontSize: '0.9rem' }}>
+                      {describeActivity(activity, t)}
+                      {entry && (
+                        <>
+                          {' · '}
+                          <Link
+                            to="/dashboard/history"
+                            state={{ highlightEntryId: entry.id } satisfies HistoryLocationState}
+                            style={{ color: 'var(--accent-600)' }}
+                          >
+                            {entryTitle(entry.content) || formatEntryDate(entry.date)}
+                          </Link>
+                        </>
+                      )}
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap' }}>
+                      {formatActivityTime(activity)}
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
             {nextCursor != null && (
               <button

@@ -103,3 +103,28 @@
     box-shadow: var(--shadow-sm);
   }
 }
+
+/* Settings' activity links land on History with one card pulsed briefly.
+   On the row, not the card: the card's inline border/shadow beat a class. */
+.entry-card-row--highlight {
+  border-radius: var(--radius);
+  animation: entry-card-highlight 1s ease-in-out 3;
+}
+
+/* Matches the mobile .entry-card radius in App.css. */
+@media (max-width: 640px) {
+  .entry-card-row--highlight { border-radius: 16px; }
+}
+
+@keyframes entry-card-highlight {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent-600), transparent 40%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry-card-row--highlight {
+    animation: none;
+    outline: 3px solid var(--accent-600);
+    outline-offset: 2px;
+  }
+}
