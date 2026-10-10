@@ -25,7 +25,7 @@ openapi: 3.1.0
 
 info:
   title: Nightlio API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Wire contract for the Nightlio Rust API (api/src/routes/*.rs). The golden
     fixtures it is cross-checked against were recorded against live instances

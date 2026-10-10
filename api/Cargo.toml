@@ -1,6 +1,6 @@
 [package]
 name = "nightlio-api"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 # Rust 1.90 is what CI / dev machines have installed.
 rust-version = "1.90"
