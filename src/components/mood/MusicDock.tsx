@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from 'react';
-import { Play, Pause, Square, Disc, Sun, Moon } from 'lucide-react';
-import { useTheme } from '../../contexts/ThemeContext'; // Consuming your app's global Theme context
+import { Play, Pause, Square, Disc, Moon } from 'lucide-react';
+import { useTheme, THEMES } from '../../contexts/ThemeContext'; // Consuming your app's global Theme context
 import useMediaQuery from '../../hooks/useMediaQuery';
 import { useI18n } from '../../i18n';
 import type { MusicTrack } from '../../types/api';
@@ -32,6 +32,7 @@ const MusicDock = () => {
   const { theme, cycle: toggleTheme } = useTheme();
   const { t } = useI18n();
   const isDarkMode = theme === 'dark';
+  const ThemeIcon = THEMES.find((option) => option.id === theme)?.icon ?? Moon;
   // Shares the 640px mobile breakpoint convention (src/index.css) instead of
   // an ad-hoc window.innerWidth check, so JS and CSS agree.
   const isMobile = useMediaQuery('(max-width: 640px)');
@@ -250,7 +251,7 @@ const MusicDock = () => {
             className="music-dock__btn music-dock__btn--theme"
             aria-label={t('common.toggleLayoutThemeAria')}
           >
-            {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+            <ThemeIcon size={18} />
           </button>
         )}
       </div>

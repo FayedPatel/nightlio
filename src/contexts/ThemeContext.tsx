@@ -1,21 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Moon, MoonStar, Sparkles, Sun } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import apiService from '../services/api';
 import type { ThemeName } from '../types/api';
 
 // The four configurable themes. "default" is the app's signature
 // Dracula-purple dark look (what data-theme="dark" used to be); "dark" is
-// the neutral near-black variant. Palettes live in src/index.css.
+// the neutral near-black variant. Palettes live in src/index.css. `icon` is
+// what the header and music-dock toggles show while that theme is active.
 export interface ThemeOption {
   id: ThemeName;
   label: string;
+  icon: LucideIcon;
 }
 
 export const THEMES: ThemeOption[] = [
-  { id: 'default', label: 'Default' },
-  { id: 'light', label: 'Light' },
-  { id: 'dark', label: 'Dark' },
-  { id: 'synthwave', label: 'Synthwave' },
+  { id: 'default', label: 'Default', icon: Moon },
+  { id: 'light', label: 'Light', icon: Sun },
+  { id: 'dark', label: 'Dark', icon: MoonStar },
+  { id: 'synthwave', label: 'Synthwave', icon: Sparkles },
 ];
 const THEME_IDS = THEMES.map((t) => t.id);
 
