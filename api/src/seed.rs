@@ -357,6 +357,7 @@ pub async fn run(cfg: &Config, force: bool) -> anyhow::Result<SeedOutcome> {
             entry.content.to_string(),
             None,
             selected,
+            None,
         )
         .await
         .map_err(|exc| {

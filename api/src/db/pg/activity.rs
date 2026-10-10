@@ -11,10 +11,13 @@
 //! - `metadata` is a TEXT passthrough; the defensive JSON parse (malformed
 //!   blob → `null`, never an error) is shared Rust code, unchanged.
 
+use serde_json::json;
 use tokio_postgres::GenericClient;
 
 use crate::db::DatabaseError;
-use crate::db::activity::{ActivityPage, ActivityRow, MAX_ACTIVITY_PAGE_SIZE};
+use crate::db::activity::{
+    ActivityPage, ActivityRow, MAX_ACTIVITY_PAGE_SIZE, coalesced_metadata, with_edit_session,
+};
 use crate::db::pg::util;
 
 // --- SQL (dialect-translated from the `db/activity.rs` constants) ------------
@@ -35,6 +38,12 @@ const SELECT_ACTIVITY_FIRST_PAGE_SQL: &str = "SELECT id, user_id, event_type, me
       LIMIT $2";
 
 const PRUNE_ACTIVITY_SQL: &str = "DELETE FROM activity_log WHERE created_at < $1";
+
+const SELECT_LATEST_ENTRY_EVENT_SQL: &str = "SELECT id, metadata, created_at FROM activity_log \
+      WHERE user_id = $1 AND event_type IN ('entry_created', 'entry_edited') \
+      ORDER BY id DESC LIMIT 1";
+
+const UPDATE_ACTIVITY_METADATA_SQL: &str = "UPDATE activity_log SET metadata = $1 WHERE id = $2";
 
 /// Twin of `activity::add_activity`: record an event, return the new row
 /// id. `metadata` is JSON-encoded exactly like the SQLite twin.
@@ -151,6 +160,46 @@ pub async fn prune_activity(client: &impl GenericClient, days: i64) -> Result<u6
         tracing::info!("Pruned {deleted} activity rows older than {days} days");
     }
     Ok(deleted)
+}
+
+/// Twin of `activity::log_entry_edit`: extend the user's newest entry row
+/// or insert `entry_edited`; the grouping rule is the shared Rust code.
+pub async fn log_entry_edit(
+    client: &impl GenericClient,
+    user_id: i64,
+    entry_id: i64,
+    date: &str,
+    edit_session: Option<&str>,
+) -> Result<(), DatabaseError> {
+    let latest = client
+        .query_opt(SELECT_LATEST_ENTRY_EVENT_SQL, &[&user_id])
+        .await
+        .map_err(util::db_error)?;
+    let rewrite = latest.and_then(|row| {
+        let blob: Option<String> = row.get(1);
+        let created_at: Option<String> = row.get(2);
+        coalesced_metadata(
+            blob.as_deref(),
+            created_at.as_deref(),
+            entry_id,
+            date,
+            edit_session,
+        )
+        .map(|metadata| (row.get::<_, i64>(0), metadata))
+    });
+    match rewrite {
+        Some((id, metadata)) => {
+            client
+                .execute(UPDATE_ACTIVITY_METADATA_SQL, &[&metadata, &id])
+                .await
+                .map_err(util::db_error)?;
+        }
+        None => {
+            let metadata = with_edit_session(json!({ "entry_id": entry_id }), edit_session);
+            add_activity(client, user_id, "entry_edited", Some(&metadata)).await?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

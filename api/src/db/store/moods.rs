@@ -17,6 +17,7 @@ use crate::error::{ApiError, ApiResult};
 
 /// `POST /mood` — create an entry, log activity, check achievements.
 /// Returns the new entry id plus the newly-awarded achievement types.
+#[allow(clippy::too_many_arguments)] // edit_session rides along with the POST field bag
 pub async fn create_entry(
     db: &DbHandle,
     user_id: i64,
@@ -25,6 +26,7 @@ pub async fn create_entry(
     content_value: String,
     time_value: Option<String>,
     selected_options: Vec<i64>,
+    edit_session: Option<String>,
 ) -> ApiResult<(i64, Vec<String>)> {
     match db {
         DbHandle::Sqlite(pool) => {
@@ -44,7 +46,10 @@ pub async fn create_entry(
                     conn,
                     user_id,
                     "entry_created",
-                    Some(&json!({ "entry_id": entry_id, "date": date_value })),
+                    Some(&activity::with_edit_session(
+                        json!({ "entry_id": entry_id, "date": date_value }),
+                        edit_session.as_deref(),
+                    )),
                 );
                 let new_achievements =
                     achievements::check_achievements(conn, user_id).map_err(db_err)?;
@@ -78,7 +83,10 @@ pub async fn create_entry(
                 &**client,
                 user_id,
                 "entry_created",
-                Some(&json!({ "entry_id": entry_id, "date": date_value })),
+                Some(&activity::with_edit_session(
+                    json!({ "entry_id": entry_id, "date": date_value }),
+                    edit_session.as_deref(),
+                )),
             )
             .await;
             let new_achievements = pg::achievements::check_achievements(&**client, user_id)
@@ -162,11 +170,14 @@ pub async fn get_entry(
 
 /// `PUT /mood/{id}` — apply the partial update, then re-read the entry WITH
 /// its selections; `None` when the entry is missing or nothing changed.
+/// The activity write groups autosaves per editing session
+/// ([`activity::log_entry_edit`]).
 pub async fn update_entry(
     db: &DbHandle,
     user_id: i64,
     entry_id: i64,
     update: MoodEntryUpdate,
+    edit_session: Option<String>,
 ) -> ApiResult<Option<MoodEntryWithSelections>> {
     match db {
         DbHandle::Sqlite(pool) => {
@@ -179,11 +190,12 @@ pub async fn update_entry(
                 else {
                     return Ok(None);
                 };
-                let _ = activity::add_activity(
+                let _ = activity::log_entry_edit(
                     conn,
                     user_id,
-                    "entry_edited",
-                    Some(&json!({ "entry_id": entry_id })),
+                    entry_id,
+                    &entry.entry.date,
+                    edit_session.as_deref(),
                 );
                 Ok(Some(entry))
             })
@@ -204,11 +216,12 @@ pub async fn update_entry(
             else {
                 return Ok(None);
             };
-            let _ = pg::activity::add_activity(
+            let _ = pg::activity::log_entry_edit(
                 &**client,
                 user_id,
-                "entry_edited",
-                Some(&json!({ "entry_id": entry_id })),
+                entry_id,
+                &entry.entry.date,
+                edit_session.as_deref(),
             )
             .await;
             Ok(Some(entry))

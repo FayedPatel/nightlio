@@ -837,3 +837,184 @@ async fn non_ascii_content_is_raw_utf8_not_escaped() {
         assert!(!raw.contains("\\u00e9"), "\\uXXXX escaping found in {raw}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// v0.7.0: entry activity is grouped into one row per editing session
+// ---------------------------------------------------------------------------
+
+/// The user's `entry_created`/`entry_edited` activity rows, newest first.
+async fn entry_events(app: &Router, token: &str) -> Vec<Value> {
+    let (status, page) = get_authed(app, token, "/api/activity?limit=200").await;
+    assert_eq!(status, StatusCode::OK);
+    page["activities"]
+        .as_array()
+        .expect("activities")
+        .iter()
+        .filter(|row| {
+            matches!(
+                row["event_type"].as_str(),
+                Some("entry_created" | "entry_edited")
+            )
+        })
+        .cloned()
+        .collect()
+}
+
+async fn put_entry(app: &Router, token: &str, entry_id: i64, body: Value) {
+    let (status, body) = send_json(app, token, "PUT", &format!("/api/mood/{entry_id}"), body).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+/// Rewrite an activity row as if its session had gone idle long ago.
+async fn backdate_activity(db: &support::TestDb, id: i64, metadata: &Value) {
+    let (at, blob) = ("2000-01-01 00:00:00", metadata.to_string());
+    match db {
+        support::TestDb::Sqlite { path, .. } => {
+            db::connect(path)
+                .expect("connect")
+                .execute(
+                    "UPDATE activity_log SET created_at = ?, metadata = ? WHERE id = ?",
+                    rusqlite::params![at, blob, id],
+                )
+                .expect("backdate");
+        }
+        support::TestDb::Pg { .. } => {
+            db.pg_client()
+                .await
+                .execute(
+                    "UPDATE activity_log SET created_at = $1, metadata = $2 WHERE id = $3",
+                    &[&at, &blob, &id],
+                )
+                .await
+                .expect("backdate");
+        }
+    }
+}
+
+#[tokio::test]
+async fn entry_edits_group_into_one_activity_row_per_editing_session() {
+    for test in make_apps().await {
+        let (app, token, label) = (&test.app, test.token.as_str(), test.db.label());
+
+        // New-entry session S: the POST and its autosaves stay one
+        // entry_created row spanning the session; a backdate inside the
+        // session refreshes its date.
+        let (status, body) = send_json(
+            app,
+            token,
+            "POST",
+            "/api/mood",
+            json!({ "mood": 3, "date": "2026-08-10", "content": "Draft", "edit_session": "S" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{label}");
+        let a = body["entry_id"].as_i64().expect("entry id");
+        put_entry(
+            app,
+            token,
+            a,
+            json!({ "content": "Draft 2", "edit_session": "S" }),
+        )
+        .await;
+        put_entry(
+            app,
+            token,
+            a,
+            json!({ "content": "Draft 3", "date": "2026-08-09", "edit_session": "S" }),
+        )
+        .await;
+        let rows = entry_events(app, token).await;
+        assert_eq!(rows.len(), 1, "{label}: {rows:?}");
+        assert_eq!(rows[0]["event_type"], json!("entry_created"), "{label}");
+        let meta = &rows[0]["metadata"];
+        assert_eq!(meta["entry_id"], json!(a), "{label}");
+        assert_eq!(meta["date"], json!("2026-08-09"), "{label}");
+        assert_eq!(meta["edit_session"], json!("S"), "{label}");
+        let start = rows[0]["created_at"].as_str().expect("created_at");
+        let end = meta["last_saved_at"].as_str().expect("last_saved_at");
+        assert!(end >= start, "{label}: {start} .. {end}");
+
+        // edit_session is not an update field.
+        let (status, body) = send_json(
+            app,
+            token,
+            "PUT",
+            &format!("/api/mood/{a}"),
+            json!({ "edit_session": "S" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{label}");
+        assert_eq!(body, json!({ "error": "No update fields provided" }));
+
+        // Reopening the entry (new editor mount, session T) starts an
+        // entry_edited row; its next save folds into it.
+        put_entry(
+            app,
+            token,
+            a,
+            json!({ "content": "Reopened", "edit_session": "T" }),
+        )
+        .await;
+        put_entry(
+            app,
+            token,
+            a,
+            json!({ "content": "Reopened 2", "edit_session": "T" }),
+        )
+        .await;
+        let rows = entry_events(app, token).await;
+        assert_eq!(rows.len(), 2, "{label}: {rows:?}");
+        assert_eq!(rows[0]["event_type"], json!("entry_edited"), "{label}");
+        let mut meta = rows[0]["metadata"].clone();
+        assert!(meta["last_saved_at"].take().is_string(), "{label}");
+        assert_eq!(
+            meta,
+            json!({ "entry_id": a, "edit_session": "T", "last_saved_at": null }),
+            "{label}"
+        );
+
+        // Clients without a session (an over-long one is ignored the same
+        // way) fall back to the idle rule alone and still coalesce.
+        let (status, body) = send_json(
+            app,
+            token,
+            "POST",
+            "/api/mood",
+            json!({ "mood": 4, "date": "2026-08-11", "content": "Old tab" }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{label}");
+        let b = body["entry_id"].as_i64().expect("entry id");
+        put_entry(
+            app,
+            token,
+            b,
+            json!({ "content": "Old tab 2", "edit_session": "x".repeat(65) }),
+        )
+        .await;
+        let rows = entry_events(app, token).await;
+        assert_eq!(rows.len(), 3, "{label}: {rows:?}");
+        let mut meta = rows[0]["metadata"].clone();
+        assert!(meta["last_saved_at"].take().is_string(), "{label}");
+        assert_eq!(
+            meta,
+            json!({ "entry_id": b, "date": "2026-08-11", "last_saved_at": null }),
+            "{label}"
+        );
+
+        // An idle gap past the window starts a new row.
+        let mut stale = rows[0]["metadata"].clone();
+        stale["last_saved_at"] = json!("2000-01-01 00:00:00");
+        backdate_activity(&test.db, rows[0]["id"].as_i64().expect("id"), &stale).await;
+        put_entry(app, token, b, json!({ "content": "After lunch" })).await;
+        let rows = entry_events(app, token).await;
+        assert_eq!(rows.len(), 4, "{label}: {rows:?}");
+        assert_eq!(rows[0]["event_type"], json!("entry_edited"), "{label}");
+        assert_eq!(rows[0]["metadata"], json!({ "entry_id": b }), "{label}");
+        assert_eq!(
+            rows[1]["metadata"]["last_saved_at"],
+            json!("2000-01-01 00:00:00"),
+            "{label}"
+        );
+    }
+}

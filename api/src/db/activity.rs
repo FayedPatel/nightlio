@@ -1,8 +1,10 @@
 //! Port of `api/database_activity.py`. Owned by the activity data-mixin agent —
 //! no other agent edits this file.
 //!
-//! Stores an append-only per-user event feed (logins, entry mutations,
-//! achievements, goal completions). Reads are keyset-paginated on the row
+//! Stores a per-user event feed (logins, entry mutations, achievements,
+//! goal completions). Rows are only ever inserted, except that entry edits
+//! are grouped at write time into one row per editing session
+//! ([`log_entry_edit`]). Reads are keyset-paginated on the row
 //! id — never OFFSET, which degrades as the table grows — and old rows can
 //! be pruned so a self-hosted database file stays small and portable.
 //!
@@ -12,14 +14,19 @@
 //! Every function takes a `&Connection`; callers run them under
 //! `tokio::task::spawn_blocking`.
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
+use serde_json::{Value, json};
 
 use super::common::DatabaseError;
 
 /// Hard ceiling for a single page of activity rows
 /// (`MAX_ACTIVITY_PAGE_SIZE` in `api/database_activity.py`).
 pub const MAX_ACTIVITY_PAGE_SIZE: i64 = 200;
+
+/// Idle gap after which a further save starts a new editing-session row
+/// instead of extending the newest one.
+pub const EDIT_SESSION_IDLE_MINUTES: i64 = 30;
 
 // --- SQL (byte-identical to the Python string literals) ----------------------
 //
@@ -53,6 +60,13 @@ const SELECT_ACTIVITY_FIRST_PAGE_SQL: &str = "
 
 /// `ActivityLogMixin.prune_activity` DELETE.
 const PRUNE_ACTIVITY_SQL: &str = "DELETE FROM activity_log WHERE created_at < datetime('now', ?)";
+
+/// The user's newest entry row, the only candidate an edit can fold into.
+const SELECT_LATEST_ENTRY_EVENT_SQL: &str = "SELECT id, metadata, created_at FROM activity_log \
+      WHERE user_id = ? AND event_type IN ('entry_created', 'entry_edited') \
+      ORDER BY id DESC LIMIT 1";
+
+const UPDATE_ACTIVITY_METADATA_SQL: &str = "UPDATE activity_log SET metadata = ? WHERE id = ?";
 
 // --- Row / page shapes -------------------------------------------------------
 
@@ -239,6 +253,113 @@ pub fn prune_activity(conn: &Connection, days: i64) -> Result<usize, DatabaseErr
         tracing::info!("Pruned {deleted} activity rows older than {days} days");
     }
     Ok(deleted)
+}
+
+// --- Write-time grouping of entry edits (shared by both backends) ------------
+
+/// `(now, cutoff)` as UTC `YYYY-MM-DD HH:MM:SS`, the same text as SQLite
+/// `CURRENT_TIMESTAMP` / PG `nightlio_now()`, so `>=` compares lexically.
+pub fn edit_session_clock() -> (String, String) {
+    let now = chrono::Utc::now();
+    let fmt = |at: chrono::DateTime<chrono::Utc>| at.format("%Y-%m-%d %H:%M:%S").to_string();
+    (
+        fmt(now),
+        fmt(now - chrono::Duration::minutes(EDIT_SESSION_IDLE_MINUTES)),
+    )
+}
+
+/// Whether a save of `entry_id` folds into the newest entry row: same entry,
+/// same `edit_session` (both absent counts as equal), and the row's last
+/// activity (`last_saved_at`, else `created_at`) at or after `cutoff`.
+pub fn should_coalesce(
+    metadata: Option<&Value>,
+    created_at: Option<&str>,
+    entry_id: i64,
+    edit_session: Option<&str>,
+    cutoff: &str,
+) -> bool {
+    let Some(meta) = metadata else { return false };
+    let last = meta
+        .get("last_saved_at")
+        .and_then(Value::as_str)
+        .or(created_at);
+    meta.get("entry_id").and_then(Value::as_i64) == Some(entry_id)
+        && meta.get("edit_session").and_then(Value::as_str) == edit_session
+        && last.is_some_and(|at| at >= cutoff)
+}
+
+/// Entry-event metadata with `edit_session` added only when present.
+pub fn with_edit_session(mut metadata: Value, edit_session: Option<&str>) -> Value {
+    if let Some(session) = edit_session {
+        metadata["edit_session"] = json!(session);
+    }
+    metadata
+}
+
+/// The rewritten metadata blob when the newest entry row (`blob`,
+/// `created_at`) absorbs this save, else `None` (insert a fresh row).
+/// `date` is refreshed only where the key exists (`entry_created`), so a
+/// backdate during a new-entry session keeps the label right.
+pub fn coalesced_metadata(
+    blob: Option<&str>,
+    created_at: Option<&str>,
+    entry_id: i64,
+    date: &str,
+    edit_session: Option<&str>,
+) -> Option<String> {
+    let meta = blob.and_then(|blob| serde_json::from_str::<Value>(blob).ok());
+    let (now, cutoff) = edit_session_clock();
+    if !should_coalesce(meta.as_ref(), created_at, entry_id, edit_session, &cutoff) {
+        return None;
+    }
+    // Indexing is panic-free: should_coalesce only accepts JSON objects.
+    let mut meta = meta?;
+    meta["last_saved_at"] = json!(now);
+    if meta.get("date").is_some() {
+        meta["date"] = json!(date);
+    }
+    Some(meta.to_string())
+}
+
+/// Record a successful entry edit: extend the user's newest entry row when
+/// [`should_coalesce`] allows, else insert `entry_edited {entry_id,
+/// edit_session?}`. Callers treat errors as best-effort and ignore them.
+pub fn log_entry_edit(
+    conn: &Connection,
+    user_id: i64,
+    entry_id: i64,
+    date: &str,
+    edit_session: Option<&str>,
+) -> Result<(), DatabaseError> {
+    let latest = conn
+        .query_row(SELECT_LATEST_ENTRY_EVENT_SQL, params![user_id], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })
+        .optional()?;
+    let rewrite = latest.and_then(|(id, blob, created_at)| {
+        coalesced_metadata(
+            blob.as_deref(),
+            created_at.as_deref(),
+            entry_id,
+            date,
+            edit_session,
+        )
+        .map(|metadata| (id, metadata))
+    });
+    match rewrite {
+        Some((id, metadata)) => {
+            conn.execute(UPDATE_ACTIVITY_METADATA_SQL, params![metadata, id])?;
+        }
+        None => {
+            let metadata = with_edit_session(json!({ "entry_id": entry_id }), edit_session);
+            add_activity(conn, user_id, "entry_edited", Some(&metadata))?;
+        }
+    }
+    Ok(())
 }
 
 // --- Tests -------------------------------------------------------------------
@@ -638,5 +759,98 @@ mod tests {
 
         // Idempotent: nothing else is old enough.
         assert_eq!(prune_activity(&conn, 90).unwrap(), 0);
+    }
+
+    #[test]
+    fn should_coalesce_needs_same_entry_same_session_and_recent_activity() {
+        let cutoff = "2026-10-10 12:00:00";
+        let at = Some("2026-10-10 12:00:00");
+        let meta = json!({"entry_id": 7, "date": "2026-10-10", "edit_session": "s"});
+        assert!(should_coalesce(Some(&meta), at, 7, Some("s"), cutoff));
+        assert!(!should_coalesce(Some(&meta), at, 8, Some("s"), cutoff));
+        assert!(!should_coalesce(Some(&meta), at, 7, Some("t"), cutoff));
+        assert!(!should_coalesce(Some(&meta), at, 7, None, cutoff));
+        // Stale or missing timestamps never coalesce.
+        assert!(!should_coalesce(
+            Some(&meta),
+            Some("2026-10-10 11:59:59"),
+            7,
+            Some("s"),
+            cutoff
+        ));
+        assert!(!should_coalesce(Some(&meta), None, 7, Some("s"), cutoff));
+        // last_saved_at, when present, wins over created_at either way.
+        let extended =
+            json!({"entry_id": 7, "edit_session": "s", "last_saved_at": "2026-10-10 12:30:00"});
+        assert!(should_coalesce(
+            Some(&extended),
+            Some("2026-10-10 09:00:00"),
+            7,
+            Some("s"),
+            cutoff
+        ));
+        let stale =
+            json!({"entry_id": 7, "edit_session": "s", "last_saved_at": "2026-10-10 09:00:00"});
+        assert!(!should_coalesce(Some(&stale), at, 7, Some("s"), cutoff));
+        // No session on either side (pre-v0.7 clients) counts as equal.
+        assert!(should_coalesce(
+            Some(&json!({"entry_id": 7})),
+            at,
+            7,
+            None,
+            cutoff
+        ));
+        assert!(!should_coalesce(
+            Some(&json!({"entry_id": 7})),
+            at,
+            7,
+            Some("s"),
+            cutoff
+        ));
+        // Unparsable, non-object or id-less metadata never coalesces.
+        assert!(!should_coalesce(None, at, 7, None, cutoff));
+        assert!(!should_coalesce(Some(&json!([7])), at, 7, None, cutoff));
+        assert!(!should_coalesce(
+            Some(&json!({"entry_id": "7"})),
+            at,
+            7,
+            None,
+            cutoff
+        ));
+    }
+
+    #[test]
+    fn coalesced_metadata_bumps_last_saved_at_and_only_existing_dates() {
+        let (now, _) = edit_session_clock();
+        let created = coalesced_metadata(
+            Some(r#"{"entry_id": 7, "date": "2026-10-01"}"#),
+            Some(&now),
+            7,
+            "2026-09-30",
+            None,
+        )
+        .unwrap();
+        let mut created: Value = serde_json::from_str(&created).unwrap();
+        let saved = created["last_saved_at"].take();
+        assert!(saved.as_str().unwrap() >= now.as_str(), "{saved}");
+        assert_eq!(
+            created,
+            json!({"entry_id": 7, "date": "2026-09-30", "last_saved_at": null})
+        );
+        let edited = coalesced_metadata(
+            Some(r#"{"entry_id": 7, "edit_session": "s"}"#),
+            Some(&now),
+            7,
+            "2026-09-30",
+            Some("s"),
+        )
+        .unwrap();
+        let edited: Value = serde_json::from_str(&edited).unwrap();
+        assert_eq!(edited.get("date"), None, "entry_edited rows gain no date");
+        assert_eq!(edited["edit_session"], json!("s"));
+        assert_eq!(
+            coalesced_metadata(Some("{not-json"), Some(&now), 7, "x", None),
+            None
+        );
     }
 }
