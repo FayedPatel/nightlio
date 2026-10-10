@@ -9,9 +9,10 @@ interface HistoryListProps {
   error: string | null;
   onDelete: (entryId: number) => void;
   onEdit?: (entry: MoodEntryWithSelections) => void;
+  highlightId?: number | null;
 }
 
-const HistoryList = ({ entries, loading, error, onDelete, onEdit }: HistoryListProps) => {
+const HistoryList = ({ entries, loading, error, onDelete, onEdit, highlightId = null }: HistoryListProps) => {
   if (loading) {
     return (
       <div style={{ textAlign: 'left', padding: '1rem 0' }}>
@@ -55,6 +56,7 @@ const HistoryList = ({ entries, loading, error, onDelete, onEdit }: HistoryListP
             entry={entry}
             onDelete={onDelete}
             onEdit={onEdit}
+            highlighted={entry.id === highlightId}
           />
         ))}
       </div>

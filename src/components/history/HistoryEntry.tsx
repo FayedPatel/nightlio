@@ -3,6 +3,7 @@ import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent
 import { Pencil, Trash2 } from 'lucide-react';
 import { getMoodIcon } from '../../utils/moodUtils';
 import { formatEntryDate } from '../../utils/dateUtils';
+import { entryTitle, splitTitleBody, stripMd } from '../../utils/entryText';
 import apiService from '../../services/api';
 import { useToast } from '../ui/ToastProvider';
 import type { MoodEntryWithSelections } from '../../hooks/useMoodData';
@@ -29,6 +30,8 @@ interface HistoryEntryProps {
   onDelete: (entryId: number) => void;
   onEdit?: ((entry: MoodEntryWithSelections) => void) | undefined;
   featured?: boolean;
+  /** Pulse this card (Settings' activity links land here). */
+  highlighted?: boolean;
 }
 
 interface SwipeState {
@@ -42,7 +45,7 @@ interface SwipeState {
   dragged: boolean;
 }
 
-const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntryProps) => {
+const HistoryEntry = ({ entry, onDelete, onEdit, featured = false, highlighted = false }: HistoryEntryProps) => {
   const { t } = useI18n();
   const { icon: IconComponent, color } = getMoodIcon(entry.mood);
   const displayDate = formatEntryDate(entry.date);
@@ -67,39 +70,8 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
     dragged: false,
   });
 
-  // helpers to split title/body and strip markdown for previews
-  const stripMd = (s = '') => s
-    .replace(/`{1,3}[^`]*`{1,3}/g, ' ')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-    .replace(/\[(.*?)\]\([^)]*\)/g, '$1')
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^[>\-+*]\s+/gm, '')
-    .replace(/[*_~`>#[\]()]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const splitTitleBody = (content = ''): { title: string; body: string } => {
-    const text = (content || '').replace(/\r\n/g, '\n').trim();
-    if (!text) return { title: '', body: '' };
-    const lines = text.split('\n');
-    const first = (lines[0] || '').trim();
-    const heading = first.match(/^#{1,6}\s+(.+?)\s*$/);
-    if (heading) {
-      return { title: (heading[1] ?? '').trim(), body: lines.slice(1).join('\n').trim() };
-    }
-    if (lines.length > 1) {
-      return { title: first, body: lines.slice(1).join('\n').trim() };
-    }
-    const idx = first.indexOf(' ');
-    if (idx > 0) {
-      return { title: first.slice(0, idx).trim(), body: first.slice(idx + 1).trim() };
-    }
-    return { title: first, body: '' };
-  };
-
-  const { title: rawTitle, body: rawBody } = splitTitleBody(entry.content || '');
-  const title = stripMd(rawTitle).slice(0, 80);
-  const excerpt = stripMd(rawBody).slice(0, 420);
+  const title = entryTitle(entry.content || '');
+  const excerpt = stripMd(splitTitleBody(entry.content || '').body).slice(0, 420);
 
   const { show } = useToast();
   const handleDelete = async (): Promise<boolean> => {
@@ -201,7 +173,10 @@ const HistoryEntry = ({ entry, onDelete, onEdit, featured = false }: HistoryEntr
   };
 
   return (
-    <div className="entry-card-row">
+    <div
+      className={`entry-card-row${highlighted ? ' entry-card-row--highlight' : ''}`}
+      data-entry-id={entry.id}
+    >
       <div
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}

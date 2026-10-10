@@ -73,8 +73,13 @@ helper functions) on a fresh database.
 
 ## The expand–contract policy
 
-Deployments upgrade by pulling an image; users roll back by pulling the
-previous one. Migrations must keep both directions survivable:
+Deployments upgrade by pulling an image. Rolling back is **not** pulling the
+previous image: once a release has recorded a migration the previous build
+doesn't ship, that build refuses to start against the database (the
+downgrade check above). Rolling back means restoring the backup taken before
+the upgrade. Migrations still keep the previous release's code working
+against the new schema, because it may still be serving while an upgrade
+rolls out:
 
 1. **Additive-only DDL in the introducing release.** A release that
    introduces a schema change may only *add* things: new tables, new
@@ -105,6 +110,20 @@ previous one. Migrations must keep both directions survivable:
    in every deployed database.
 6. `cd api && cargo test migrate` — the manifest-parity and runner tests
    grade the rest.
+
+## Shipped migrations
+
+| Version | Name | Release | What it does |
+| --- | --- | --- | --- |
+| 0001 | `baseline` | v0.6.0 | The baseline schema. A no-op on SQLite (adopted; `bootstrap()` owns it); creates the entire schema on Postgres. |
+| 0002 | `consolidate_entry_activity` | v0.7.0 | Data only, irreversible. Folds the historical one-row-per-autosave `entry_created`/`entry_edited` activity rows into one row per editing session: same user and entry, at most 30 minutes between rows, and an `entry_created` always opens a session. The lowest id in each session is kept and gets `metadata.last_saved_at` (the session's last save); the other rows are deleted. Single-row sessions are untouched. |
+
+`migrate-to-postgres` and 0002: the import runs the Postgres migrations
+first, so an empty target records 0002 before any rows exist, then copies
+the SQLite rows verbatim. A SQLite file that never ran v0.7.0 therefore
+arrives with its activity rows unconsolidated. This is cosmetic only (the
+activity feed shows one row per old autosave); start v0.7.0 once against
+the SQLite file before importing to avoid it.
 
 ## See also
 

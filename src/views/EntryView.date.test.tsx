@@ -49,6 +49,7 @@ const renderEntryView = async () => {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.mocked(apiService.createMoodEntry).mockClear();
+  vi.mocked(apiService.updateMoodEntry).mockClear();
 });
 
 afterEach(() => {
@@ -102,5 +103,23 @@ describe('EntryView entry date', () => {
     const future = '2999-01-01';
     fireEvent.change(input, { target: { value: future } });
     expect(input.value).toBe(todayISO());
+  });
+});
+
+describe('EntryView edit session', () => {
+  it('sends one edit_session id on the create and the later updates', async () => {
+    await renderEntryView();
+    const editor = screen.getByTestId('editor');
+    fireEvent.change(editor, { target: { value: 'First save.' } });
+    await flushAutosave();
+    fireEvent.change(editor, { target: { value: 'First save. Second save.' } });
+    await flushAutosave();
+
+    const session = vi.mocked(apiService.createMoodEntry).mock.calls[0]?.[0].edit_session;
+    expect(session).toBeTruthy();
+    expect(apiService.updateMoodEntry).toHaveBeenCalledWith(
+      101,
+      expect.objectContaining({ edit_session: session }),
+    );
   });
 });

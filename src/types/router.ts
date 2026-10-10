@@ -22,3 +22,13 @@ export interface EntryLocationState {
 export interface GoalsLocationState {
   openForm?: boolean;
 }
+
+/**
+ * location.state contract for the /dashboard/history route. Producer:
+ * SettingsView's activity-row entry links. Consumer: HistoryPageView, which
+ * copies the id into local state (scroll + brief highlight) and clears it
+ * with a replace navigation (state: null).
+ */
+export interface HistoryLocationState {
+  highlightEntryId?: number;
+}
